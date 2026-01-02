@@ -58,7 +58,56 @@ if "user_role" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = "admin"
 
+# -----------------------------
+def inject_white_pastel_sidebar():
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f7f9ff 0%, #ffffff 55%, #f7f9ff 100%);
+        border-right: 1px solid rgba(15, 23, 42, 0.06);
+    }
+    [data-testid="stSidebarContent"] { padding: 16px 14px; }
+    [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 16px;
+        padding: 10px 12px 8px 12px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        backdrop-filter: blur(10px);
+    }
+    [data-testid="stSidebar"] button {
+        border-radius: 14px !important;
+        padding: 0.6rem 0.9rem !important;
+        border: 1px solid rgba(15, 23, 42, 0.08) !important;
+        background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08) !important;
+        font-weight: 700;
+    }
+    .sidebar-title { font-size: 18px; font-weight: 800; color: #020617; margin-bottom: 6px; }
+    .live-pill {
+        display:inline-flex; align-items:center; gap:6px;
+        padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
+        background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; margin-bottom: 10px;
+    }
+    .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
+    </style>
+    """, unsafe_allow_html=True)
+
+inject_white_pastel_sidebar()
+
 # ================= ASSISTANTS ATTENDANCE TAB =================
+
+ATTENDANCE_SHEET = "Assistants_Attendance"
+ATTENDANCE_COLUMNS = ["DATE", "ASSISTANT", "PUNCH IN", "PUNCH OUT"]
+
+def _attendance_excel_path(path_override: str | None = None) -> str:
+    """Return a safe attendance Excel path (defaults to local workbook)."""
+    if path_override:
+        return path_override
+    try:
+        return file_path
+    except NameError:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "Putt Allotment.xlsx")
 
 # Use only one definition for safe_str_to_time_obj, and ensure it is robust
 def safe_str_to_time_obj(s):
@@ -80,6 +129,10 @@ def safe_time_to_minutes(t):
     if t is None:
         return None
     return t.hour * 60 + t.minute
+
+def ist_today_and_time():
+    now = datetime.now(IST)
+    return now.date().isoformat(), now.strftime("%H:%M:%S")
 
 
 # Fix None handling in calc_worked_minutes
@@ -117,50 +170,181 @@ def get_assistants_list(schedule_df):
         names.update([x.strip() for x in schedule_df[c].dropna().astype(str).tolist() if x.strip()])
     return sorted(names)
 
-def load_attendance_sheet(excel_path):
+def ensure_attendance_sheet_exists(excel_path: str | None = None):
+    """Create/align the attendance sheet with expected columns."""
+    path = Path(_attendance_excel_path(excel_path))
     try:
-        wb = openpyxl.load_workbook(excel_path)
-        if "Assistants_Attendance" not in wb.sheetnames:
-            ws = wb.create_sheet("Assistants_Attendance")
-            ws.append(["DATE", "ASSISTANT", "PUNCH IN", "PUNCH OUT", "WORKED MINS", "STATUS"])
-            wb.save(excel_path)
-        ws = wb["Assistants_Attendance"]
-        data = list(ws.values)
-        df = pd.DataFrame(data[1:], columns=data[0]) if len(data) > 1 else pd.DataFrame(columns=data[0])
-        return df
-    except Exception as e:
-        st.error(f"Error loading attendance sheet: {e}")
-        return pd.DataFrame(columns=["DATE", "ASSISTANT", "PUNCH IN", "PUNCH OUT", "WORKED MINS", "STATUS"])
+        if not path.exists():
+            with pd.ExcelWriter(path, engine="openpyxl") as writer:
+                pd.DataFrame(columns=ATTENDANCE_COLUMNS).to_excel(writer, sheet_name=ATTENDANCE_SHEET, index=False)
+            return
 
-def save_attendance_sheet(excel_path, att_df):
+        xls = pd.ExcelFile(path, engine="openpyxl")
+        if ATTENDANCE_SHEET not in xls.sheet_names:
+            with pd.ExcelWriter(path, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+                pd.DataFrame(columns=ATTENDANCE_COLUMNS).to_excel(writer, sheet_name=ATTENDANCE_SHEET, index=False)
+            return
+
+        current = pd.read_excel(xls, sheet_name=ATTENDANCE_SHEET)
+        if list(current.columns) != ATTENDANCE_COLUMNS:
+            aligned = pd.DataFrame(columns=ATTENDANCE_COLUMNS)
+            if not current.empty:
+                for col in ATTENDANCE_COLUMNS:
+                    if col in current.columns:
+                        aligned[col] = current[col]
+            with pd.ExcelWriter(path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+                aligned.to_excel(writer, sheet_name=ATTENDANCE_SHEET, index=False)
+    except Exception:
+        # Non-fatal alignment failure; callers will handle empty frame
+        pass
+
+def load_attendance_sheet(excel_path: str | None = None):
+    ensure_attendance_sheet_exists(excel_path)
+    path = _attendance_excel_path(excel_path)
     try:
-        wb = openpyxl.load_workbook(excel_path)
-        if "Assistants_Attendance" not in wb.sheetnames:
-            ws = wb.create_sheet("Assistants_Attendance")
-        ws = wb["Assistants_Attendance"]
-        ws.delete_rows(2, ws.max_row)
-        for _, row in att_df.iterrows():
-            ws.append([row.get("DATE", ""), row.get("ASSISTANT", ""), row.get("PUNCH IN", ""), row.get("PUNCH OUT", ""), row.get("WORKED MINS", ""), row.get("STATUS", "")])
-        wb.save(excel_path)
+        df = pd.read_excel(path, sheet_name=ATTENDANCE_SHEET, engine="openpyxl")
+        if df.empty:
+            df = pd.DataFrame(columns=ATTENDANCE_COLUMNS)
+    except Exception:
+        return pd.DataFrame(columns=ATTENDANCE_COLUMNS)
+
+    for col in ATTENDANCE_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
+        df[col] = df[col].astype(str).replace("nan", "").fillna("")
+    return df[ATTENDANCE_COLUMNS]
+
+def save_attendance_sheet(excel_path: str | None, att_df: pd.DataFrame):
+    ensure_attendance_sheet_exists(excel_path)
+    path = _attendance_excel_path(excel_path)
+    try:
+        clean_df = att_df.copy()
+        for col in ATTENDANCE_COLUMNS:
+            if col not in clean_df.columns:
+                clean_df[col] = ""
+        clean_df = clean_df[ATTENDANCE_COLUMNS]
+        with pd.ExcelWriter(path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+            clean_df.to_excel(writer, sheet_name=ATTENDANCE_SHEET, index=False)
     except Exception as e:
-        st.error(f"Error saving attendance sheet: {e}")
+        st.error(f"Attendance save failed: {e}")
+
+def db_get_one_attendance(supabase, date_str: str, assistant: str):
+    try:
+        res = (
+            supabase.table("assistant_attendance")
+            .select("date,assistant,punch_in,punch_out")
+            .eq("date", date_str)
+            .eq("assistant", assistant)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception as e:
+        st.warning(f"Attendance fetch failed: {e}")
+        return None
+
+def db_punch_in(supabase, date_str: str, assistant: str, now_time: str):
+    try:
+        payload = {"date": date_str, "assistant": assistant, "punch_in": now_time}
+        supabase.table("assistant_attendance").upsert(payload, on_conflict="date,assistant").execute()
+    except Exception as e:
+        st.error(f"Punch in failed: {e}")
+
+def db_punch_out(supabase, date_str: str, assistant: str, now_time: str):
+    try:
+        supabase.table("assistant_attendance").update({"punch_out": now_time}).eq("date", date_str).eq("assistant", assistant).execute()
+    except Exception as e:
+        st.error(f"Punch out failed: {e}")
+
+def sidebar_punch_widget(schedule_df: pd.DataFrame, excel_path: str | None = None):
+    today = datetime.now(IST).date().isoformat()
+    now_hhmm = datetime.now(IST).strftime("%H:%M")
+
+    att = load_attendance_sheet(excel_path)
+    assistants = get_assistants_list(schedule_df)
+
+    st.markdown("### 👇 Punch System")
+    if not assistants:
+        st.caption("No assistants found in FIRST/SECOND/Third.")
+        return
+
+    assistant = st.selectbox("Select Assistant", assistants, key="sb_assistant")
+
+    mask = (att["DATE"] == today) & (att["ASSISTANT"] == assistant)
+    row = att[mask].head(1)
+
+    punch_in = row["PUNCH IN"].iloc[0] if not row.empty else ""
+    punch_out = row["PUNCH OUT"].iloc[0] if not row.empty else ""
+
+    if punch_in and not punch_out:
+        st.success(f"Status: PUNCHED IN at {punch_in}")
+    elif punch_in and punch_out:
+        st.info(f"Status: COMPLETED • In {punch_in} • Out {punch_out}")
+    else:
+        st.warning("Status: Not punched in")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        disabled_in = bool(punch_in)
+        if st.button("✅ Punch In", use_container_width=True, disabled=disabled_in):
+            if row.empty:
+                new_row = pd.DataFrame([{
+                    "DATE": today,
+                    "ASSISTANT": assistant,
+                    "PUNCH IN": now_hhmm,
+                    "PUNCH OUT": "",
+                }])
+                att = pd.concat([att, new_row], ignore_index=True)
+            else:
+                att.loc[mask, "PUNCH IN"] = now_hhmm
+            save_attendance_sheet(excel_path, att)
+            st.toast(f"{assistant} punched in at {now_hhmm}", icon="✅")
+            st.rerun()
+
+    with c2:
+        disabled_out = (not punch_in) or bool(punch_out)
+        if st.button("⏹ Punch Out", use_container_width=True, disabled=disabled_out):
+            att.loc[mask, "PUNCH OUT"] = now_hhmm
+            save_attendance_sheet(excel_path, att)
+            st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
+            st.rerun()
+
+    with st.expander("Admin actions"):
+        if st.button("♻️ Reset today for this assistant", use_container_width=True):
+            att = att[~mask].copy()
+            save_attendance_sheet(excel_path, att)
+            st.toast("Reset done", icon="♻️")
+            st.rerun()
 
 def render_assistant_attendance_tab(schedule_df, excel_path):
     st.header("Assistants Attendance")
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_str = datetime.now(IST).date().isoformat()
     assistants = get_assistants_list(schedule_df)
     att_df = load_attendance_sheet(excel_path)
-    # Filter for today or add missing assistants for today
-    today_att = att_df[att_df["DATE"] == today_str].copy() if not att_df.empty else pd.DataFrame()
+
+    today_att = att_df[att_df["DATE"] == today_str].copy() if not att_df.empty else pd.DataFrame(columns=ATTENDANCE_COLUMNS)
     for name in assistants:
         if today_att.empty or name not in today_att["ASSISTANT"].values:
-            # Add missing assistant row for today
-            new_row = {"DATE": today_str, "ASSISTANT": name, "PUNCH IN": "", "PUNCH OUT": "", "WORKED MINS": "", "STATUS": "ABSENT"}
+            new_row = {"DATE": today_str, "ASSISTANT": name, "PUNCH IN": "", "PUNCH OUT": ""}
             today_att = pd.concat([today_att, pd.DataFrame([new_row])], ignore_index=True)
-    # UI for editing punch in/out
-    now = datetime.now().time()
+
+    now_time = datetime.now(IST).time()
+
+    def _decorate(row):
+        in_str = str(row.get("PUNCH IN", "")).strip()
+        out_str = str(row.get("PUNCH OUT", "")).strip()
+        in_t = safe_str_to_time_obj(in_str) if in_str else None
+        out_t = safe_str_to_time_obj(out_str) if out_str else None
+        worked_mins, status = calc_worked_minutes(in_t, out_t, now_time)
+        row["WORKED MINS"] = mins_to_hhmm(worked_mins)
+        row["STATUS"] = status
+        return row
+
+    display_df = pd.DataFrame([_decorate(row.copy()) for _, row in today_att.iterrows()]) if not today_att.empty else pd.DataFrame(columns=ATTENDANCE_COLUMNS + ["WORKED MINS", "STATUS"])
+
     edited = st.data_editor(
-        today_att,
+        display_df,
         use_container_width=True,
         num_rows="fixed",
         column_config={
@@ -172,23 +356,22 @@ def render_assistant_attendance_tab(schedule_df, excel_path):
         },
         key="assistants_attendance_editor"
     )
-    # Calculate worked/status
+
     out_rows = []
     for _, row in edited.iterrows():
         in_str = str(row.get("PUNCH IN", "")).strip()
         out_str = str(row.get("PUNCH OUT", "")).strip()
         in_t = safe_str_to_time_obj(in_str) if in_str else None
         out_t = safe_str_to_time_obj(out_str) if out_str else None
-        worked_mins, status = calc_worked_minutes(in_t, out_t, now)
+        worked_mins, status = calc_worked_minutes(in_t, out_t, now_time)
         row["WORKED MINS"] = mins_to_hhmm(worked_mins)
         row["STATUS"] = status
         out_rows.append(row)
     edited_final = pd.DataFrame(out_rows)
-    # Save back to Excel
+
     if st.button("💾 Save Attendance"):
-        # Update att_df for today
         att_df = att_df[att_df["DATE"] != today_str]
-        att_df = pd.concat([att_df, edited_final], ignore_index=True)
+        att_df = pd.concat([att_df, edited_final[ATTENDANCE_COLUMNS]], ignore_index=True)
         save_attendance_sheet(excel_path, att_df)
         st.success("Attendance saved!")
         st.rerun()
@@ -4186,6 +4369,18 @@ for patient in new_arrived:
 st.session_state.prev_ongoing = current_ongoing
 st.session_state.prev_upcoming = current_upcoming
 st.session_state.prev_raw = df_raw.copy()
+
+# Sidebar header + attendance punch widget
+with st.sidebar:
+    st.markdown('<div class="sidebar-title">🦷 TDB Dashboard</div>', unsafe_allow_html=True)
+    st.markdown('<div class="live-pill"><span class="live-dot"></span> Live • Auto refresh</div>', unsafe_allow_html=True)
+    st.divider()
+    try:
+        schedule_for_punch = df if "df" in locals() else df_raw if "df_raw" in locals() else pd.DataFrame()
+        sidebar_punch_widget(schedule_for_punch, file_path)
+    except Exception as e:
+        st.caption(f"Punch widget unavailable: {e}")
+    st.divider()
 
 # ================ MAIN DASHBOARD NAVIGATION ================
 category = st.sidebar.radio(
