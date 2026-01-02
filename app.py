@@ -2318,7 +2318,14 @@ def load_profiles(sheet_name: str) -> pd.DataFrame:
             wb.remove(wb.active)
             wb.create_sheet(sheet_name)
             wb.save(file_path)
-        wb = openpyxl.load_workbook(file_path)
+        try:
+            wb = openpyxl.load_workbook(file_path)
+        except zipfile.BadZipFile:
+            # Repair a corrupted workbook by recreating it
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            wb.create_sheet(sheet_name)
+            wb.save(file_path)
         if sheet_name not in wb.sheetnames:
             ws = wb.create_sheet(sheet_name)
             ws.append(PROFILE_COLUMNS)
@@ -2338,6 +2345,8 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
         clean_df = _ensure_profile_df(df)
         try:
             wb = openpyxl.load_workbook(file_path)
+        except zipfile.BadZipFile:
+            wb = openpyxl.Workbook()
         except Exception:
             wb = openpyxl.Workbook()
         if sheet_name in wb.sheetnames:
