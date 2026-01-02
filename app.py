@@ -3007,6 +3007,7 @@ file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Putt Allot
 supabase_client = None
 supabase_table_name = "tdb_allotment_state"
 supabase_row_id = "main"
+FORCE_SUPABASE = False
 
 gsheet_client = None
 gsheet_worksheet = None
@@ -3018,6 +3019,19 @@ def _safe_secret_get(key: str, default=None):
         return st.secrets.get(key, default)
     except Exception:
         return default
+
+
+def _as_bool(val) -> bool:
+    try:
+        return str(val).strip().lower() in {"1", "true", "yes", "on"}
+    except Exception:
+        return False
+
+# Allow forcing Supabase mode via env or secrets
+try:
+    FORCE_SUPABASE = _as_bool(_safe_secret_get("force_supabase", False)) or _as_bool(os.environ.get("FORCE_SUPABASE", ""))
+except Exception:
+    FORCE_SUPABASE = False
 
 PROFILE_ASSISTANT_SHEET = "Assistants"
 PROFILE_DOCTOR_SHEET = "Doctors"
@@ -3049,6 +3063,8 @@ def _now_iso():
 
 def load_profiles(sheet_name: str) -> pd.DataFrame:
     """Load assistant/doctor profiles from Excel, creating the sheet if needed."""
+    if USE_SUPABASE:
+        return _ensure_profile_df(pd.DataFrame())
     try:
         if not os.path.exists(file_path):
             wb = openpyxl.Workbook()
@@ -3078,6 +3094,9 @@ def load_profiles(sheet_name: str) -> pd.DataFrame:
 
 def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
     """Persist assistant/doctor profiles to Excel, preserving other sheets."""
+    if USE_SUPABASE:
+        st.info("Profiles saving skipped (Supabase mode).")
+        return
     try:
         clean_df = _ensure_profile_df(df)
         try:
@@ -3748,6 +3767,19 @@ if SUPABASE_AVAILABLE:
         )
         USE_SUPABASE = False
 
+# Force Supabase if configured (skips Excel fallback)
+if FORCE_SUPABASE and not USE_SUPABASE:
+    try:
+        sup_url, sup_key, sup_table, sup_row = _get_supabase_config_from_secrets_or_env()
+        if sup_url and sup_key:
+            supabase_client = create_client(sup_url, sup_key)
+            supabase_table_name = sup_table
+            supabase_row_id = sup_row
+            USE_SUPABASE = True
+            st.sidebar.info("Supabase forced via config.")
+    except Exception:
+        pass
+
 # Try to connect to Google Sheets if credentials are available (fallback)
 if (not USE_SUPABASE) and GSHEETS_AVAILABLE:
     try:
@@ -4105,7 +4137,10 @@ elif USE_GOOGLE_SHEETS:
         st.error("⚠️ Failed to load data from Google Sheets.")
         st.stop()
 else:
-    # Fallback to local Excel file
+    # Fallback to local Excel file (blocked if Supabase is forced)
+    if FORCE_SUPABASE:
+        st.error("Excel backend disabled. Configure Supabase (url/key) or Google Sheets.")
+        st.stop()
     if not os.path.exists(file_path):
         st.error("⚠️ 'Putt Allotment.xlsx' not found. For cloud deployment, configure Supabase (recommended) or Google Sheets in Streamlit secrets.")
         st.info("💡 See README for Supabase setup instructions.")
