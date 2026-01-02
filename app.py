@@ -6,6 +6,7 @@ from typing import Any
 import os
 import time as time_module  # for retry delays
 import zipfile  # for BadZipFile exception handling
+from pathlib import Path
 # Add missing import
 import hashlib
 import re  # for creating safe keys for buttons
@@ -58,6 +59,8 @@ if "user_role" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = "admin"
 
+# -----------------------------
+# Premium sidebar CSS (white pastel)
 # -----------------------------
 def inject_white_pastel_sidebar():
     st.markdown("""
@@ -315,6 +318,44 @@ def sidebar_punch_widget(schedule_df: pd.DataFrame, excel_path: str | None = Non
             att = att[~mask].copy()
             save_attendance_sheet(excel_path, att)
             st.toast("Reset done", icon="♻️")
+            st.rerun()
+
+def sidebar_punch_widget_supabase(schedule_df: pd.DataFrame, supabase):
+    date_str, now_time = ist_today_and_time()
+    now_hhmm = now_time[:5]
+
+    st.markdown("### 👇 Punch System")
+
+    assistants = extract_assistants(schedule_df)
+    if not assistants:
+        st.caption("No assistants found in FIRST/SECOND/Third.")
+        return
+
+    assistant = st.selectbox("Select Assistant", assistants, key="sb_assistant")
+
+    rec = db_get_one_attendance(supabase, date_str, assistant)
+    punch_in = (rec.get("punch_in") if rec else None) or ""
+    punch_out = (rec.get("punch_out") if rec else None) or ""
+
+    if punch_in and not punch_out:
+        st.success(f"Status: PUNCHED IN at {str(punch_in)[:5]}")
+    elif punch_in and punch_out:
+        st.info(f"Status: COMPLETED • In {str(punch_in)[:5]} • Out {str(punch_out)[:5]}")
+    else:
+        st.warning("Status: Not punched in")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        if st.button("✅ Punch In", use_container_width=True, disabled=bool(punch_in)):
+            db_punch_in(supabase, date_str, assistant, now_time)
+            st.toast(f"{assistant} punched in at {now_hhmm}", icon="✅")
+            st.rerun()
+
+    with c2:
+        if st.button("⏹ Punch Out", use_container_width=True, disabled=(not punch_in) or bool(punch_out)):
+            db_punch_out(supabase, date_str, assistant, now_time)
+            st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
             st.rerun()
 
 def render_assistant_attendance_tab(schedule_df, excel_path):
