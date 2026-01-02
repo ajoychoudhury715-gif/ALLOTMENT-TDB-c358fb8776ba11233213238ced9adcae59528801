@@ -118,6 +118,101 @@ WEEKLY_OFF: dict[int, list[str]] = {
 }
 
 # Custom CSS with customizable colors
+
+# ================= PROFILE INTEGRATION WITH SCHEDULE =================
+# Load assistant and doctor names for dropdowns
+assistant_names = load_profiles(ASSISTANT_SHEET)["Name"].dropna().tolist()
+doctor_names = load_profiles(DOCTOR_SHEET)["Name"].dropna().tolist()
+
+# Example: When building st.data_editor for the main schedule, use these lists for assignment columns
+# (This is a template; you may need to adapt to your actual schedule DataFrame and editor logic)
+#
+# st.data_editor(
+#     schedule_df,
+#     column_config={
+#         "DR.": st.column_config.SelectboxColumn("Doctor", options=doctor_names),
+#         "FIRST": st.column_config.SelectboxColumn("First Assistant", options=assistant_names),
+#         "SECOND": st.column_config.SelectboxColumn("Second Assistant", options=assistant_names),
+#         "Third": st.column_config.SelectboxColumn("Third Assistant", options=assistant_names),
+#         # ...other columns...
+#     },
+#     # ...other st.data_editor args...
+# )
+
+# ================= PROFILE MANAGEMENT UI =================
+st.markdown("## Profile Management")
+tab1, tab2 = st.tabs(["Assistants", "Doctors"])
+
+with tab1:
+    st.markdown("### Assistant Profiles")
+    assistants_df = load_profiles(ASSISTANT_SHEET)
+    edited_assistants = st.data_editor(
+        assistants_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="assistants_editor",
+            display_all, 
+            width="stretch", 
+            key="full_schedule_editor", 
+            hide_index=True,
+            disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
+            column_config={
+                "_orig_idx": None,  # Hide the original index column
+                "Patient Name": st.column_config.TextColumn(label="Patient Name"),
+                "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
+                "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
+                "Procedure": st.column_config.TextColumn(label="Procedure"),
+                "DR.": st.column_config.SelectboxColumn(
+                    label="DR.",
+                    options=doctor_names,
+                    required=False
+                ),
+                "OP": st.column_config.SelectboxColumn(
+                    label="OP",
+                    options=["OP 1", "OP 2", "OP 3", "OP 4"],
+                    required=False
+                ),
+                "FIRST": st.column_config.SelectboxColumn(
+                    label="FIRST",
+                    options=assistant_names,
+                    required=False
+                ),
+                "SECOND": st.column_config.SelectboxColumn(
+                    label="SECOND",
+                    options=assistant_names,
+                    required=False
+                ),
+                "Third": st.column_config.SelectboxColumn(
+                    label="Third",
+                    options=assistant_names,
+                    required=False
+                ),
+                "CASE PAPER": st.column_config.SelectboxColumn(
+                    label="CASE PAPER",
+                    options=assistant_names,
+                    required=False
+                ),
+                "SUCTION": st.column_config.CheckboxColumn(label="✨ SUCTION"),
+                "CLEANING": st.column_config.CheckboxColumn(label="🧹 CLEANING"),
+                "STATUS_CHANGED_AT": None,
+                "ACTUAL_START_AT": None,
+                "ACTUAL_END_AT": None,
+                "Overtime (min)": None,
+                "STATUS": st.column_config.SelectboxColumn(
+                    label="STATUS",
+                    options=STATUS_OPTIONS,
+                    required=False
+                )
+            }
+        )
+    with pd.ExcelWriter(PROFILE_FILE, engine="openpyxl", mode="a" if PROFILE_FILE in book.sheetnames else "w") as writer:
+        writer.book = book
+        if sheet_name in book.sheetnames:
+            idx = book.sheetnames.index(sheet_name)
+            std = book.worksheets[idx]
+            book.remove(std)
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        writer.save()
 st.markdown(
     f"""
     <style>
