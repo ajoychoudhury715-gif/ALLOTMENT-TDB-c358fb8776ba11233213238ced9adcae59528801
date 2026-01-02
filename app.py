@@ -694,6 +694,132 @@ def render_duty_reminder_widget(schedule_df: pd.DataFrame, supabase):
         with tab2:
             _pick_ui(monthly_fit, "monthly")
 
+
+# ================ DUTY ADMIN (SUPABASE) ================
+def render_duties_master_admin(supabase):
+    if not supabase:
+        st.info("Supabase not configured. Add Supabase secrets to manage duties.")
+        return
+
+    st.subheader("🗂 Duties Master (Weekly / Monthly)")
+
+    with st.form("add_duty_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            title = st.text_input("Duty Name *", key="duty_title_input")
+            frequency = st.selectbox("Frequency *", ["WEEKLY", "MONTHLY"], key="duty_freq_select")
+            op = st.selectbox("OP", ["ANY", "OP1", "OP2", "OP3"], key="duty_op_select")
+        with col2:
+            default_minutes = st.number_input("Estimated Time (minutes) *", min_value=5, step=5, value=15, key="duty_minutes_input")
+            active = st.checkbox("Active", value=True, key="duty_active_check")
+
+        submitted = st.form_submit_button("➕ Add Duty")
+        if submitted:
+            if not title:
+                st.error("Duty name required")
+            else:
+                try:
+                    supabase.table("duties_master").insert(
+                        {
+                            "title": title,
+                            "frequency": frequency,
+                            "default_minutes": int(default_minutes),
+                            "op": op,
+                            "active": active,
+                        }
+                    ).execute()
+                    st.success("Duty added successfully ✅")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to add duty: {e}")
+
+    try:
+        duties_resp = supabase.table("duties_master").select("*").order("created_at").execute()
+        duties = duties_resp.data or []
+    except Exception as e:
+        st.error(f"Failed to load duties: {e}")
+        duties = []
+
+    if duties:
+        st.data_editor(
+            duties,
+            use_container_width=True,
+            disabled=["id", "created_at"],
+            num_rows="dynamic",
+            key="duties_master_editor",
+        )
+
+
+def render_duty_assignment_admin(supabase, assistants: list[str]):
+    if not supabase:
+        st.info("Supabase not configured. Add Supabase secrets to manage duties.")
+        return
+
+    st.subheader("👥 Assign Duties to Assistants")
+
+    try:
+        duty_res = (
+            supabase.table("duties_master")
+            .select("id,title")
+            .eq("active", True)
+            .execute()
+        )
+        duties = duty_res.data or []
+    except Exception as e:
+        st.error(f"Failed to load duties: {e}")
+        duties = []
+
+    if not duties:
+        st.warning("No active duties found.")
+        return
+
+    duty_map = {d["title"]: d["id"] for d in duties if d.get("title")}
+
+    with st.form("assign_duty_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            duty_title = st.selectbox("Duty *", list(duty_map.keys()), key="assign_duty_select")
+            assistant = st.selectbox("Assistant *", assistants, key="assign_assistant_select")
+        with col2:
+            est_minutes = st.number_input("Time for this Assistant (minutes)", min_value=5, step=5, value=15, key="assign_minutes_input")
+            op = st.selectbox("OP (optional)", ["", "OP1", "OP2", "OP3"], key="assign_op_select")
+            active = st.checkbox("Active", value=True, key="assign_active_check")
+
+        submitted = st.form_submit_button("📌 Assign Duty")
+        if submitted:
+            try:
+                supabase.table("duty_assignments").upsert(
+                    {
+                        "duty_id": duty_map.get(duty_title),
+                        "assistant": assistant,
+                        "est_minutes": int(est_minutes),
+                        "op": op or None,
+                        "active": active,
+                    },
+                    on_conflict="duty_id,assistant",
+                ).execute()
+                st.success("Duty assigned successfully ✅")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to assign duty: {e}")
+
+    try:
+        assigns_resp = supabase.table("duty_assignments").select("*").execute()
+        assigns = assigns_resp.data or []
+    except Exception as e:
+        st.error(f"Failed to load assignments: {e}")
+        assigns = []
+
+    if assigns:
+        st.data_editor(
+            assigns,
+            use_container_width=True,
+            disabled=["id", "created_at"],
+            num_rows="dynamic",
+            key="duty_assign_editor",
+        )
+
+
 def render_assistant_attendance_tab(schedule_df, excel_path):
     st.header("Assistants Attendance")
     today_str = datetime.now(IST).date().isoformat()
@@ -4858,7 +4984,7 @@ elif category == "Doctors":
 else:
     admin_view = st.sidebar.radio(
         "Admin/Settings",
-        ["Storage/Backup", "Notifications"],
+        ["Storage/Backup", "Notifications", "Duties Manager"],
         index=0,
         key="nav_admin",
     )
@@ -5984,6 +6110,15 @@ if category == "Assistants" and assist_view == "Attendance":
 # ================ ADMIN / SETTINGS ================
 if category == "Admin/Settings":
     st.markdown("### 🔧 Admin / Settings")
-    st.write(f"Using Supabase: {USE_SUPABASE}")
-    st.write(f"Using Google Sheets: {USE_GOOGLE_SHEETS}")
-    st.write(f"Excel path: {file_path}")
+    if admin_view == "Duties Manager":
+        if USE_SUPABASE and supabase_client is not None:
+            assistants_for_admin = extract_assistants(df if 'df' in locals() else df_raw if 'df_raw' in locals() else pd.DataFrame())
+            render_duties_master_admin(supabase_client)
+            st.divider()
+            render_duty_assignment_admin(supabase_client, assistants_for_admin)
+        else:
+            st.warning("Configure Supabase (url/key) to manage duties.")
+    else:
+        st.write(f"Using Supabase: {USE_SUPABASE}")
+        st.write(f"Using Google Sheets: {USE_GOOGLE_SHEETS}")
+        st.write(f"Excel path: {file_path}")
