@@ -52,6 +52,12 @@ GSHEETS_AVAILABLE = _gsheets_available
 # Page config
 st.set_page_config(page_title="ALLOTMENT", layout="wide", initial_sidebar_state="collapsed")
 
+# Session defaults for role/user (replace with real auth later)
+if "user_role" not in st.session_state:
+    st.session_state.user_role = "admin"
+if "current_user" not in st.session_state:
+    st.session_state.current_user = "admin"
+
 # ================= ASSISTANTS ATTENDANCE TAB =================
 
 # Use only one definition for safe_str_to_time_obj, and ensure it is robust
@@ -2276,6 +2282,175 @@ def _safe_secret_get(key: str, default=None):
     except Exception:
         return default
 
+PROFILE_ASSISTANT_SHEET = "Assistants"
+PROFILE_DOCTOR_SHEET = "Doctors"
+PROFILE_COLUMNS = [
+    "id",
+    "name",
+    "department",
+    "contact_email",
+    "contact_phone",
+    "status",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by",
+]
+
+
+def _ensure_profile_df(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for col in PROFILE_COLUMNS:
+        if col not in out.columns:
+            out[col] = ""
+    return out[PROFILE_COLUMNS]
+
+
+def _now_iso():
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def load_profiles(sheet_name: str) -> pd.DataFrame:
+    """Load assistant/doctor profiles from Excel, creating the sheet if needed."""
+    try:
+        if not os.path.exists(file_path):
+            wb = openpyxl.Workbook()
+            wb.remove(wb.active)
+            wb.create_sheet(sheet_name)
+            wb.save(file_path)
+        wb = openpyxl.load_workbook(file_path)
+        if sheet_name not in wb.sheetnames:
+            ws = wb.create_sheet(sheet_name)
+            ws.append(PROFILE_COLUMNS)
+            wb.save(file_path)
+        ws = wb[sheet_name]
+        data = list(ws.values)
+        df = pd.DataFrame(data[1:], columns=data[0]) if len(data) > 1 else pd.DataFrame(columns=data[0])
+        return _ensure_profile_df(df)
+    except Exception as e:
+        st.error(f"Error loading profiles '{sheet_name}': {e}")
+        return _ensure_profile_df(pd.DataFrame())
+
+
+def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
+    """Persist assistant/doctor profiles to Excel, preserving other sheets."""
+    try:
+        clean_df = _ensure_profile_df(df)
+        try:
+            wb = openpyxl.load_workbook(file_path)
+        except Exception:
+            wb = openpyxl.Workbook()
+        if sheet_name in wb.sheetnames:
+            std = wb[sheet_name]
+            wb.remove(std)
+        # Use ExcelWriter with the existing workbook to keep other sheets intact
+        with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+            writer.book = wb
+            writer.sheets = {ws.title: ws for ws in wb.worksheets}
+            clean_df.to_excel(writer, sheet_name=sheet_name, index=False)
+            writer.save()
+    except Exception as e:
+        st.error(f"Error saving profiles '{sheet_name}': {e}")
+
+
+def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) -> None:
+    """UI to add/edit assistant/doctor profiles with simple role guard."""
+    user_role = st.session_state.get("user_role", "viewer")
+    user_name = st.session_state.get("current_user", "user")
+    df_profiles = load_profiles(sheet_name)
+    status_options = ["ACTIVE", "INACTIVE"]
+    dept_options = [""] + sorted(DEPARTMENTS.keys())
+
+    st.markdown(f"### {entity_label} Profiles")
+
+    # Filters (applied to the read-only view)
+    f1, f2, f3 = st.columns([0.2, 0.2, 0.6])
+    with f1:
+        status_filter = st.multiselect(
+            "Status",
+            options=status_options,
+            default=["ACTIVE"],
+            key=f"{sheet_name}_status_filter",
+        )
+    with f2:
+        dept_filter = st.selectbox(
+            dept_label,
+            options=["All"] + dept_options[1:],
+            key=f"{sheet_name}_dept_filter",
+        )
+    with f3:
+        search_term = st.text_input("Search name", key=f"{sheet_name}_search")
+
+    filtered = df_profiles.copy()
+    if status_filter:
+        filtered = filtered[filtered["status"].isin(status_filter)]
+    if dept_filter and dept_filter != "All":
+        filtered = filtered[filtered["department"].str.upper() == dept_filter.upper()]
+    if search_term:
+        filtered = filtered[filtered["name"].str.contains(search_term, case=False, na=False)]
+
+    st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+    is_editor = user_role in ("admin", "editor")
+    if not is_editor:
+        st.info("You are in read-only mode. Switch to admin/editor to add or edit profiles.")
+        return
+
+    st.markdown(f"#### Add {entity_label}")
+    with st.form(f"add_{sheet_name}_form", clear_on_submit=True):
+        name = st.text_input(f"{entity_label} Name")
+        dept = st.selectbox(dept_label, options=dept_options, key=f"{sheet_name}_dept_new")
+        contact_email = st.text_input("Contact Email", key=f"{sheet_name}_email_new")
+        contact_phone = st.text_input("Contact Phone", key=f"{sheet_name}_phone_new")
+        status_val = st.selectbox("Status", options=status_options, key=f"{sheet_name}_status_new")
+        submitted = st.form_submit_button(f"Add {entity_label}")
+        if submitted:
+            if not name.strip():
+                st.warning("Name is required.")
+            else:
+                new_row = {
+                    "id": str(uuid.uuid4()),
+                    "name": name.strip(),
+                    "department": dept.strip(),
+                    "contact_email": contact_email.strip(),
+                    "contact_phone": contact_phone.strip(),
+                    "status": status_val,
+                    "created_at": _now_iso(),
+                    "updated_at": _now_iso(),
+                    "created_by": user_name,
+                    "updated_by": user_name,
+                }
+                df_profiles = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
+                save_profiles(df_profiles, sheet_name)
+                st.success(f"{entity_label} added.")
+                st.rerun()
+
+    st.markdown("#### Edit All Profiles")
+    edited_df = st.data_editor(
+        df_profiles,
+        hide_index=True,
+        use_container_width=True,
+        key=f"{sheet_name}_editor",
+        column_config={
+            "id": st.column_config.TextColumn("ID", disabled=True),
+            "name": st.column_config.TextColumn(f"{entity_label} Name", required=True),
+            "department": st.column_config.SelectboxColumn(dept_label, options=dept_options),
+            "contact_email": st.column_config.TextColumn("Contact Email"),
+            "contact_phone": st.column_config.TextColumn("Contact Phone"),
+            "status": st.column_config.SelectboxColumn("Status", options=status_options, required=True),
+            "created_at": st.column_config.TextColumn("Created At", disabled=True),
+            "updated_at": st.column_config.TextColumn("Updated At", disabled=True),
+            "created_by": st.column_config.TextColumn("Created By", disabled=True),
+            "updated_by": st.column_config.TextColumn("Updated By", disabled=True),
+        },
+    )
+    if st.button("Save profile changes", key=f"{sheet_name}_save_btn"):
+        edited_df["updated_at"] = _now_iso()
+        edited_df["updated_by"] = user_name
+        save_profiles(edited_df, sheet_name)
+        st.success("Profiles updated.")
+        st.rerun()
+
 
 # Auto-select backend for Streamlit Cloud:
 # Prefer Supabase when configured, else Google Sheets, else local Excel.
@@ -4010,6 +4185,14 @@ category = st.sidebar.radio(
     index=0,
     key="nav_category",
 )
+s_sidebar_role_options = ["admin", "editor", "viewer"]
+st.session_state.user_role = st.sidebar.selectbox(
+    "Role",
+    s_sidebar_role_options,
+    index=s_sidebar_role_options.index(st.session_state.get("user_role", "admin")),
+    key="user_role_select",
+)
+st.session_state.current_user = st.sidebar.text_input("Current user", value=st.session_state.get("current_user", "admin"))
 sched_view = assist_view = doctor_view = admin_view = None
 if category == "Scheduling":
     sched_view = st.sidebar.radio(
@@ -4021,14 +4204,14 @@ if category == "Scheduling":
 elif category == "Assistants":
     assist_view = st.sidebar.radio(
         "Assistants",
-        ["Availability", "Auto Allocation", "Workload", "Attendance"],
+        ["Manage Profiles", "Availability", "Auto Allocation", "Workload", "Attendance"],
         index=0,
         key="nav_assist",
     )
 elif category == "Doctors":
     doctor_view = st.sidebar.radio(
         "Doctors",
-        ["Summary", "Per-Doctor Schedule"],
+        ["Manage Profiles", "Summary", "Per-Doctor Schedule"],
         index=0,
         key="nav_doc",
     )
@@ -4039,6 +4222,12 @@ else:
         index=0,
         key="nav_admin",
     )
+
+if category == "Assistants" and assist_view == "Manage Profiles":
+    render_profile_manager(PROFILE_ASSISTANT_SHEET, "Assistant", "Department")
+
+if category == "Doctors" and doctor_view == "Manage Profiles":
+    render_profile_manager(PROFILE_DOCTOR_SHEET, "Doctor", "Department")
 
 if category == "Scheduling":
     # ================ Status Colors ================
