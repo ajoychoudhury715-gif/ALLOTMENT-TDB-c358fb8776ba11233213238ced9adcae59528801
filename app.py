@@ -1,3 +1,71 @@
+if "doctor_profiles" not in st.session_state:
+    st.session_state.doctor_profiles = []
+
+def add_doctor_profile(name, department, contact, notes):
+    profile = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "department": department,
+        "contact": contact,
+        "notes": notes,
+    }
+    st.session_state.doctor_profiles.append(profile)
+
+with st.expander("➕ Add Doctor Profile", expanded=False):
+    with st.form("add_doctor_form"):
+        name = st.text_input("Doctor Name")
+        department = st.selectbox("Department", list(DEPARTMENTS.keys()))
+        contact = st.text_input("Contact Info (optional)")
+        notes = st.text_area("Notes (optional)")
+        submitted = st.form_submit_button("Add Doctor")
+        if submitted and name:
+            add_doctor_profile(name, department, contact, notes)
+            st.success(f"Doctor '{name}' added!")
+
+if st.session_state.doctor_profiles:
+    st.markdown("### Doctor Profiles")
+    df_doctors = pd.DataFrame(st.session_state.doctor_profiles)
+    st.dataframe(df_doctors, use_container_width=True)
+
+    # Management: Delete and Edit
+    st.markdown("#### Manage Doctor Profiles")
+    for idx, profile in enumerate(st.session_state.doctor_profiles):
+        col1, col2, col3 = st.columns([2,2,1])
+        with col1:
+            st.write(f"**{profile['name']}** ({profile['department']})")
+            st.caption(profile.get('contact', ''))
+            st.caption(profile.get('notes', ''))
+        with col2:
+            edit_key = f"edit_doc_{profile['id']}"
+            if st.button("Edit", key=edit_key):
+                st.session_state['edit_doctor_profile'] = profile['id']
+        with col3:
+            del_key = f"del_doc_{profile['id']}"
+            if st.button("Delete", key=del_key):
+                st.session_state.doctor_profiles.pop(idx)
+                st.success(f"Deleted doctor '{profile['name']}'")
+                st.experimental_rerun()
+
+    # Edit form
+    if 'edit_doctor_profile' in st.session_state:
+        edit_id = st.session_state['edit_doctor_profile']
+        profile = next((p for p in st.session_state.doctor_profiles if p['id'] == edit_id), None)
+        if profile:
+            st.markdown(f"#### Edit Doctor: {profile['name']}")
+            with st.form(f"edit_doc_form_{edit_id}"):
+                new_name = st.text_input("Doctor Name", value=profile['name'])
+                new_department = st.selectbox("Department", list(DEPARTMENTS.keys()), index=list(DEPARTMENTS.keys()).index(profile['department']))
+                new_contact = st.text_input("Contact Info (optional)", value=profile.get('contact', ''))
+                new_notes = st.text_area("Notes (optional)", value=profile.get('notes', ''))
+                save_edit = st.form_submit_button("Save Changes")
+                if save_edit:
+                    profile['name'] = new_name
+                    profile['department'] = new_department
+                    profile['contact'] = new_contact
+                    profile['notes'] = new_notes
+                    st.success(f"Doctor '{new_name}' updated!")
+                    del st.session_state['edit_doctor_profile']
+                    st.experimental_rerun()
 # pyright: reportMissingImports=false, reportMissingModuleSource=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false, reportUnknownMemberType=false, reportGeneralTypeIssues=false
 import streamlit as st  # pyright: ignore[reportUndefinedVariable]
 import pandas as pd # pyright: ignore[reportMissingModuleSource]
@@ -59,6 +127,155 @@ if "pending_changes_reason" not in st.session_state:
     st.session_state.pending_changes_reason = ""
 if "unsaved_df" not in st.session_state:
     st.session_state.unsaved_df = None
+
+# ================= ASSISTANT PROFILE MANAGEMENT =================
+if "assistant_profiles" not in st.session_state:
+    st.session_state.assistant_profiles = []
+
+def add_assistant_profile(name, department, contact, notes):
+    profile = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "department": department,
+        "contact": contact,
+        "notes": notes,
+    }
+    st.session_state.assistant_profiles.append(profile)
+
+with st.expander("➕ Add Assistant Profile", expanded=False):
+    with st.form("add_assistant_form"):
+        name = st.text_input("Assistant Name")
+        department = st.selectbox("Department", list(DEPARTMENTS.keys()))
+        contact = st.text_input("Contact Info (optional)")
+        notes = st.text_area("Notes (optional)")
+        submitted = st.form_submit_button("Add Assistant")
+        if submitted and name:
+            add_assistant_profile(name, department, contact, notes)
+            st.success(f"Assistant '{name}' added!")
+
+if st.session_state.assistant_profiles:
+    st.markdown("### Assistant Profiles")
+    df_assistants = pd.DataFrame(st.session_state.assistant_profiles)
+    st.dataframe(df_assistants, use_container_width=True)
+
+    # Management: Delete and Edit
+    st.markdown("#### Manage Assistant Profiles")
+    for idx, profile in enumerate(st.session_state.assistant_profiles):
+        col1, col2, col3 = st.columns([2,2,1])
+        with col1:
+            st.write(f"**{profile['name']}** ({profile['department']})")
+            st.caption(profile.get('contact', ''))
+            st.caption(profile.get('notes', ''))
+        with col2:
+            edit_key = f"edit_{profile['id']}"
+            if st.button("Edit", key=edit_key):
+                st.session_state['edit_profile'] = profile['id']
+        with col3:
+            del_key = f"del_{profile['id']}"
+            if st.button("Delete", key=del_key):
+                st.session_state.assistant_profiles.pop(idx)
+                st.success(f"Deleted assistant '{profile['name']}'")
+                st.experimental_rerun()
+
+    # Edit form
+    if 'edit_profile' in st.session_state:
+        edit_id = st.session_state['edit_profile']
+        profile = next((p for p in st.session_state.assistant_profiles if p['id'] == edit_id), None)
+        if profile:
+            st.markdown(f"#### Edit Assistant: {profile['name']}")
+            with st.form(f"edit_form_{edit_id}"):
+                new_name = st.text_input("Assistant Name", value=profile['name'])
+                new_department = st.selectbox("Department", list(DEPARTMENTS.keys()), index=list(DEPARTMENTS.keys()).index(profile['department']))
+                new_contact = st.text_input("Contact Info (optional)", value=profile.get('contact', ''))
+                new_notes = st.text_area("Notes (optional)", value=profile.get('notes', ''))
+                save_edit = st.form_submit_button("Save Changes")
+                if save_edit:
+                    profile['name'] = new_name
+                    profile['department'] = new_department
+                    profile['contact'] = new_contact
+                    profile['notes'] = new_notes
+                    st.success(f"Assistant '{new_name}' updated!")
+                    del st.session_state['edit_profile']
+                    st.experimental_rerun()
+
+    # ================= ASSISTANT ATTENDANCE FEATURE =================
+    st.markdown("---")
+    st.header("Assistant Attendance")
+
+    # Initialize attendance state if not present
+    if "assistant_attendance" not in st.session_state:
+        st.session_state.assistant_attendance = {}
+
+    def punch_in(assistant_id):
+        now = datetime.now().isoformat()
+        att = st.session_state.assistant_attendance.setdefault(assistant_id, {})
+        if "punch_in" not in att or att.get("punch_out"):
+            att["punch_in"] = now
+            att["punch_out"] = None
+
+    def punch_out(assistant_id):
+        now = datetime.now().isoformat()
+        att = st.session_state.assistant_attendance.setdefault(assistant_id, {})
+        if att.get("punch_in") and not att.get("punch_out"):
+            att["punch_out"] = now
+
+    def calculate_hours(punch_in, punch_out):
+        if punch_in and punch_out:
+            t1 = datetime.fromisoformat(punch_in)
+            t2 = datetime.fromisoformat(punch_out)
+            return round((t2 - t1).total_seconds() / 3600, 2)
+        return 0
+
+    if st.session_state.assistant_profiles:
+        st.markdown("#### Punch In/Out Table")
+        for profile in st.session_state.assistant_profiles:
+            att = st.session_state.assistant_attendance.get(profile["id"], {})
+            punch_in_time = att.get("punch_in")
+            punch_out_time = att.get("punch_out")
+            col1, col2, col3, col4 = st.columns([2,2,2,2])
+            with col1:
+                st.write(f"**{profile['name']}**")
+            with col2:
+                st.write(f"Punch In: {punch_in_time.split('T')[1][:8] if punch_in_time else '-'}")
+            with col3:
+                st.write(f"Punch Out: {punch_out_time.split('T')[1][:8] if punch_out_time else '-'}")
+            with col4:
+                if not punch_in_time or punch_out_time:
+                    if st.button(f"Punch In", key=f"punchin_{profile['id']}"):
+                        punch_in(profile["id"])
+                        st.experimental_rerun()
+                elif punch_in_time and not punch_out_time:
+                    if st.button(f"Punch Out", key=f"punchout_{profile['id']}"):
+                        punch_out(profile["id"])
+                        st.experimental_rerun()
+
+        # Display working hours for each assistant
+        st.markdown("#### Working Hours Today")
+
+        for profile in st.session_state.assistant_profiles:
+            att = st.session_state.assistant_attendance.get(profile["id"], {})
+            punch_in_time = att.get("punch_in")
+            punch_out_time = att.get("punch_out")
+            hours = calculate_hours(punch_in_time, punch_out_time)
+            st.write(f"{profile['name']}: {hours} hours")
+
+        # Attendance records table
+        st.markdown("#### Attendance Records (Today)")
+        attendance_data = []
+        for profile in st.session_state.assistant_profiles:
+            att = st.session_state.assistant_attendance.get(profile["id"], {})
+            punch_in_time = att.get("punch_in")
+            punch_out_time = att.get("punch_out")
+            hours = calculate_hours(punch_in_time, punch_out_time)
+            attendance_data.append({
+                "Name": profile["name"],
+                "Department": profile["department"],
+                "Punch In": punch_in_time.split('T')[1][:8] if punch_in_time else '-',
+                "Punch Out": punch_out_time.split('T')[1][:8] if punch_out_time else '-',
+                "Hours Worked": hours
+            })
+        if attendance_data:
+            st.dataframe(pd.DataFrame(attendance_data))
 
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
@@ -4590,8 +4807,21 @@ if unique_ops:
             display_op["In Time"] = display_op["In Time"].apply(lambda v: v if isinstance(v, time_type) else None)
             display_op["Out Time"] = display_op["Out Time"].apply(lambda v: v if isinstance(v, time_type) else None)
 
+            # Force correct dtypes for Streamlit compatibility
+            # Text columns
+            for col in ["Patient ID", "Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
+                if col in display_op.columns:
+                    display_op[col] = display_op[col].astype("string").replace('nan', '')
+            # Number column
+            if "Overtime (min)" in display_op.columns:
+                display_op["Overtime (min)"] = pd.to_numeric(display_op["Overtime (min)"], errors="coerce")
+            # Checkbox columns
+            for col in ["SUCTION", "CLEANING"]:
+                if col in display_op.columns:
+                    display_op[col] = display_op[col].astype("boolean")
+
             display_op["Overtime (min)"] = op_df.apply(_compute_overtime_min, axis=1)
-            
+
             edited_op = st.data_editor(
                 display_op, 
                 width="stretch", 
