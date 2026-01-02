@@ -205,6 +205,13 @@ with tab1:
                 )
             }
         )
+
+# ================= PROFILE MANAGEMENT HELPERS =================
+def save_profiles(df: pd.DataFrame, sheet_name: str):
+    try:
+        book = openpyxl.load_workbook(PROFILE_FILE)
+    except Exception:
+        book = openpyxl.Workbook()
     with pd.ExcelWriter(PROFILE_FILE, engine="openpyxl", mode="a" if PROFILE_FILE in book.sheetnames else "w") as writer:
         writer.book = book
         if sheet_name in book.sheetnames:
