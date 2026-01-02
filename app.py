@@ -173,6 +173,9 @@ def get_assistants_list(schedule_df):
         names.update([x.strip() for x in schedule_df[c].dropna().astype(str).tolist() if x.strip()])
     return sorted(names)
 
+def extract_assistants(schedule_df):
+    return get_assistants_list(schedule_df)
+
 def ensure_attendance_sheet_exists(excel_path: str | None = None):
     """Create/align the attendance sheet with expected columns."""
     path = Path(_attendance_excel_path(excel_path))
@@ -4418,7 +4421,10 @@ with st.sidebar:
     st.divider()
     try:
         schedule_for_punch = df if "df" in locals() else df_raw if "df_raw" in locals() else pd.DataFrame()
-        sidebar_punch_widget(schedule_for_punch, file_path)
+        if USE_SUPABASE and supabase_client is not None:
+            sidebar_punch_widget_supabase(schedule_for_punch, supabase_client)
+        else:
+            sidebar_punch_widget(schedule_for_punch, file_path)
     except Exception as e:
         st.caption(f"Punch widget unavailable: {e}")
     st.divider()
