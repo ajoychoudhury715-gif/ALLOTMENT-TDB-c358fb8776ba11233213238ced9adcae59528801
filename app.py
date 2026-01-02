@@ -361,6 +361,339 @@ def sidebar_punch_widget_supabase(schedule_df: pd.DataFrame, supabase):
             st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
             st.rerun()
 
+
+# ================= DUTY REMINDER (SUPABASE) =================
+def fetch_active_duty_assignments(supabase, assistant: str) -> list[dict[str, Any]]:
+    if not supabase or not assistant:
+        return []
+    try:
+        res = (
+            supabase.table("duty_assignments")
+            .select("id,duty_id,assistant,op,est_minutes,active")
+            .eq("assistant", assistant)
+            .eq("active", True)
+            .execute()
+        )
+        assignments = res.data or []
+        duty_ids = [a.get("duty_id") for a in assignments if a.get("duty_id")]
+        if not duty_ids:
+            return []
+        duty_res = (
+            supabase.table("duties_master")
+            .select("id,title,frequency,default_minutes,op,active")
+            .in_("id", duty_ids)
+            .eq("active", True)
+            .execute()
+        )
+        duties = {d["id"]: d for d in (duty_res.data or []) if d.get("id")}
+        out: list[dict[str, Any]] = []
+        for a in assignments:
+            duty = duties.get(a.get("duty_id"))
+            if not duty:
+                continue
+            est = a.get("est_minutes") if a.get("est_minutes") is not None else duty.get("default_minutes", 15)
+            out.append(
+                {
+                    "assignment_id": a.get("id"),
+                    "duty_id": duty.get("id"),
+                    "title": duty.get("title", ""),
+                    "frequency": str(duty.get("frequency", "")).upper(),
+                    "est_minutes": _safe_int(est, 15),
+                    "op": a.get("op") or duty.get("op", ""),
+                }
+            )
+        return out
+    except Exception as e:
+        st.warning(f"Unable to load duty assignments: {e}")
+        return []
+
+
+def fetch_duty_runs_since(supabase, assistant: str, start_date_iso: str):
+    if not supabase or not assistant:
+        return []
+    try:
+        res = (
+            supabase.table("duty_runs")
+            .select("id,date,assistant,duty_id,status,started_at,due_at,ended_at,est_minutes,op")
+            .eq("assistant", assistant)
+            .gte("date", start_date_iso)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        st.warning(f"Unable to load duty runs: {e}")
+        return []
+
+
+def fetch_active_duty_run(supabase, assistant: str):
+    if not supabase or not assistant:
+        return None
+    try:
+        res = (
+            supabase.table("duty_runs")
+            .select("id,date,assistant,duty_id,status,started_at,due_at,est_minutes,op")
+            .eq("assistant", assistant)
+            .eq("status", "IN_PROGRESS")
+            .order("started_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return res.data[0] if res.data else None
+    except Exception:
+        return None
+
+
+def compute_pending_duties(assignments: list[dict[str, Any]], runs: list[dict[str, Any]], today_date) -> dict[str, list[dict[str, Any]]]:
+    week_start = today_date - timedelta(days=today_date.weekday())
+    month_start = today_date.replace(day=1)
+    done_week: set = set()
+    done_month: set = set()
+    for r in runs:
+        if str(r.get("status", "")).upper() != "DONE":
+            continue
+        r_date = _date_from_any(r.get("date"))
+        if r_date is None:
+            continue
+        if r_date >= week_start:
+            done_week.add(r.get("duty_id"))
+        if r_date >= month_start:
+            done_month.add(r.get("duty_id"))
+    pending = {"WEEKLY": [], "MONTHLY": []}
+    for a in assignments:
+        freq = str(a.get("frequency", "")).upper()
+        if freq == "WEEKLY" and a.get("duty_id") not in done_week:
+            pending["WEEKLY"].append(a)
+        elif freq == "MONTHLY" and a.get("duty_id") not in done_month:
+            pending["MONTHLY"].append(a)
+    return pending
+
+
+def start_duty_run_supabase(supabase, assistant: str, duty: dict[str, Any]):
+    now_dt = now_ist()
+    est = _safe_int(duty.get("est_minutes"), 15)
+    due_dt = now_dt + timedelta(minutes=est)
+    payload = {
+        "date": now_dt.date().isoformat(),
+        "assistant": assistant,
+        "duty_id": duty.get("duty_id"),
+        "status": "IN_PROGRESS",
+        "started_at": now_dt.isoformat(),
+        "due_at": due_dt.isoformat(),
+        "op": duty.get("op"),
+        "est_minutes": est,
+    }
+    try:
+        res = supabase.table("duty_runs").insert(payload).execute()
+        run_id = res.data[0]["id"] if res.data else None
+        return run_id, payload
+    except Exception as e:
+        st.error(f"Failed to start duty: {e}")
+        return None, payload
+
+
+def mark_duty_done_supabase(supabase, run_id: str):
+    if not supabase or not run_id:
+        return False
+    try:
+        supabase.table("duty_runs").update({"status": "DONE", "ended_at": now_ist().isoformat()}).eq("id", run_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"Failed to close duty: {e}")
+        return False
+
+
+def compute_free_minutes_for_assistant(schedule_df: pd.DataFrame, assistant: str) -> int | None:
+    if schedule_df is None or schedule_df.empty or not assistant:
+        return None
+    assistant_upper = str(assistant).strip().upper()
+    now_dt = now_ist()
+    now_min = now_dt.hour * 60 + now_dt.minute
+
+    def _assigned(row) -> bool:
+        for col in ["FIRST", "SECOND", "Third"]:
+            if col in row and str(row.get(col, "")).strip().upper() == assistant_upper:
+                return True
+        return False
+
+    def _minutes(val):
+        try:
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return None
+            return int(val)
+        except Exception:
+            try:
+                return time_to_minutes(val)
+            except Exception:
+                return None
+
+    next_in = None
+    for _, row in schedule_df.iterrows():
+        if not _assigned(row):
+            continue
+        status = str(row.get("STATUS", "")).strip().upper()
+        if any(s in status for s in ["CANCELLED", "DONE", "COMPLETED", "SHIFTED"]):
+            continue
+        in_min = _minutes(row.get("In_min"))
+        out_min = _minutes(row.get("Out_min"))
+        if in_min is None:
+            in_min = _minutes(row.get("In Time")) or _minutes(row.get("In Time Str"))
+        if out_min is None:
+            out_min = _minutes(row.get("Out Time")) or _minutes(row.get("Out Time Str"))
+        if in_min is None:
+            continue
+        if out_min is None:
+            out_min = in_min
+        if out_min < in_min:
+            out_min += 1440
+        if in_min <= now_min <= out_min:
+            return 0
+        if in_min > now_min:
+            if next_in is None or in_min < next_in:
+                next_in = in_min
+
+    if next_in is None:
+        return 999
+    return max(0, next_in - now_min)
+
+
+def render_duty_reminder_widget(schedule_df: pd.DataFrame, supabase):
+    st.markdown("### 🧭 Duties")
+    if not supabase:
+        st.caption("Configure Supabase to enable duties.")
+        return
+
+    assistants = extract_assistants(schedule_df)
+    if not assistants:
+        st.caption("No assistants found in FIRST/SECOND/Third.")
+        return
+
+    default_idx = 0
+    try:
+        if st.session_state.get("duty_current_assistant") in assistants:
+            default_idx = assistants.index(st.session_state.get("duty_current_assistant"))
+    except Exception:
+        default_idx = 0
+
+    selected_assistant = st.selectbox(
+        "Assistant (for this device)",
+        options=assistants,
+        index=default_idx if default_idx < len(assistants) else 0,
+        key="duty_assistant_select",
+    )
+    st.session_state.duty_current_assistant = selected_assistant
+
+    if not selected_assistant:
+        st.caption("Select an assistant to view duties.")
+        return
+
+    # Sync active run from Supabase (server truth)
+    active_run = fetch_active_duty_run(supabase, selected_assistant)
+    if active_run and st.session_state.get("active_duty_run_id") != active_run.get("id"):
+        st.session_state.active_duty_run_id = active_run.get("id")
+        st.session_state.active_duty_due_at = active_run.get("due_at")
+        st.session_state.active_duty_started_at = active_run.get("started_at")
+        st.session_state.active_duty_est_minutes = active_run.get("est_minutes")
+    if not active_run and st.session_state.get("duty_current_assistant") == selected_assistant and st.session_state.get("active_duty_run_id"):
+        # Clear stale local state if server shows none
+        for k in ["active_duty_run_id", "active_duty_due_at", "active_duty_started_at", "active_duty_est_minutes"]:
+            st.session_state[k] = None
+
+    active_run_id = st.session_state.get("active_duty_run_id")
+    if active_run_id:
+        due_dt = _parse_iso_ts(st.session_state.get("active_duty_due_at"))
+        started_dt = _parse_iso_ts(st.session_state.get("active_duty_started_at"))
+        remaining_msg = ""
+        if due_dt:
+            delta = due_dt - now_ist()
+            if delta.total_seconds() > 0:
+                mins = int(delta.total_seconds() // 60)
+                secs = int(delta.total_seconds() % 60)
+                remaining_msg = f"{mins:02d}:{secs:02d} remaining"
+                st.info(f"⏱ Duty timer running • {remaining_msg}")
+            else:
+                st.error("⚠️ Time over! Please finish and mark Done.")
+        if started_dt:
+            st.caption(f"Started at {started_dt.strftime('%H:%M')} IST")
+
+        if st.button("✅ Mark Done", use_container_width=True, key="duty_mark_done_btn"):
+            ok = mark_duty_done_supabase(supabase, active_run_id)
+            if ok:
+                for k in ["active_duty_run_id", "active_duty_due_at", "active_duty_started_at", "active_duty_est_minutes"]:
+                    st.session_state[k] = None
+                st.toast("Duty marked DONE ✅", icon="✅")
+                st.rerun()
+        return
+
+    today = now_ist().date()
+    assignments = fetch_active_duty_assignments(supabase, selected_assistant)
+    week_start = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+    runs = fetch_duty_runs_since(
+        supabase,
+        selected_assistant,
+        (week_start if week_start < month_start else month_start).isoformat(),
+    )
+    pending = compute_pending_duties(assignments, runs, today)
+    total_pending = len(pending["WEEKLY"]) + len(pending["MONTHLY"])
+
+    free_minutes = compute_free_minutes_for_assistant(schedule_df, selected_assistant)
+    if free_minutes is None:
+        st.caption("Free window unknown from schedule; showing pending duties.")
+    elif free_minutes <= 0:
+        if total_pending > 0:
+            st.warning("Currently busy with a case. Duties will appear when free.")
+        else:
+            st.caption("No pending duties right now.")
+        return
+
+    if total_pending == 0:
+        st.success("No pending duties 🎉")
+        return
+
+    st.warning(f"✅ You are free for ~{free_minutes} min. Pending duties: {total_pending}")
+
+    def _fits(duty):
+        if free_minutes is None:
+            return True
+        try:
+            return int(duty.get("est_minutes", 0)) <= int(free_minutes or 0)
+        except Exception:
+            return False
+
+    weekly_fit = [d for d in pending["WEEKLY"] if _fits(d)]
+    monthly_fit = [d for d in pending["MONTHLY"] if _fits(d)]
+
+    with st.expander("Pick a duty"):
+        tab1, tab2 = st.tabs([f"Weekly ({len(weekly_fit)})", f"Monthly ({len(monthly_fit)})"])
+
+        def _pick_ui(duties: list[dict[str, Any]], tab_key: str):
+            if not duties:
+                st.info("No duties fit in the current free window.")
+                return
+            labels = [f"{d['title']} • {d['est_minutes']} min" for d in duties]
+            idx = st.selectbox(
+                "Select duty",
+                options=list(range(len(labels))),
+                format_func=lambda i: labels[i],
+                key=f"duty_select_{tab_key}",
+            )
+            if st.button("▶ Start", use_container_width=True, key=f"duty_start_{tab_key}"):
+                run_id, payload = start_duty_run_supabase(supabase, selected_assistant, duties[idx])
+                if run_id:
+                    st.session_state.active_duty_run_id = run_id
+                    st.session_state.active_duty_due_at = payload.get("due_at")
+                    st.session_state.active_duty_started_at = payload.get("started_at")
+                    st.session_state.active_duty_est_minutes = payload.get("est_minutes")
+                    st.toast("Duty timer started ✅", icon="✅")
+                    st.rerun()
+                else:
+                    st.error("Failed to start duty. Please try again.")
+
+        with tab1:
+            _pick_ui(weekly_fit, "weekly")
+        with tab2:
+            _pick_ui(monthly_fit, "monthly")
+
 def render_assistant_attendance_tab(schedule_df, excel_path):
     st.header("Assistants Attendance")
     today_str = datetime.now(IST).date().isoformat()
@@ -429,6 +762,16 @@ if "pending_changes_reason" not in st.session_state:
     st.session_state.pending_changes_reason = ""
 if "unsaved_df" not in st.session_state:
     st.session_state.unsaved_df = None
+if "active_duty_run_id" not in st.session_state:
+    st.session_state.active_duty_run_id = None
+if "active_duty_due_at" not in st.session_state:
+    st.session_state.active_duty_due_at = None
+if "active_duty_started_at" not in st.session_state:
+    st.session_state.active_duty_started_at = None
+if "active_duty_est_minutes" not in st.session_state:
+    st.session_state.active_duty_est_minutes = None
+if "duty_current_assistant" not in st.session_state:
+    st.session_state.duty_current_assistant = ""
 
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
@@ -1396,6 +1739,47 @@ with col_title:
 # Indian Standard Time (IST = UTC+5:30)
 
 IST = timezone(timedelta(hours=5, minutes=30))
+
+def ist_today_and_time():
+    now = datetime.now(IST)
+    return now.date().isoformat(), now.strftime("%H:%M:%S")
+
+
+def now_ist():
+    return datetime.now(IST)
+
+
+def _parse_iso_ts(val):
+    try:
+        if isinstance(val, datetime):
+            return val
+        if isinstance(val, str):
+            return datetime.fromisoformat(val.replace("Z", "+00:00"))
+    except Exception:
+        return None
+    return None
+
+
+def _safe_int(val, default: int) -> int:
+    try:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return default
+        return int(float(val))
+    except Exception:
+        return default
+
+
+def _date_from_any(val):
+    try:
+        if isinstance(val, datetime):
+            return val.date()
+        if hasattr(val, "date"):
+            return val.date()
+        if isinstance(val, str) and val:
+            return datetime.fromisoformat(val.replace("Z", "+00:00")).date()
+    except Exception:
+        return None
+    return None
 
 # Always update 'now' at the top of the main script body for correct time blocking
 now = datetime.now(IST)
@@ -4419,14 +4803,19 @@ with st.sidebar:
     st.markdown('<div class="sidebar-title">🦷 TDB Dashboard</div>', unsafe_allow_html=True)
     st.markdown('<div class="live-pill"><span class="live-dot"></span> Live • Auto refresh</div>', unsafe_allow_html=True)
     st.divider()
+    schedule_for_punch = df if "df" in locals() else df_raw if "df_raw" in locals() else pd.DataFrame()
     try:
-        schedule_for_punch = df if "df" in locals() else df_raw if "df_raw" in locals() else pd.DataFrame()
         if USE_SUPABASE and supabase_client is not None:
             sidebar_punch_widget_supabase(schedule_for_punch, supabase_client)
         else:
             sidebar_punch_widget(schedule_for_punch, file_path)
     except Exception as e:
         st.caption(f"Punch widget unavailable: {e}")
+    st.divider()
+    try:
+        render_duty_reminder_widget(schedule_for_punch, supabase_client if (USE_SUPABASE and supabase_client is not None) else None)
+    except Exception as e:
+        st.caption(f"Duty reminder unavailable: {e}")
     st.divider()
 
 # ================ MAIN DASHBOARD NAVIGATION ================
