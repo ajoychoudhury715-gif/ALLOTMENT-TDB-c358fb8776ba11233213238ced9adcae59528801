@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  trigger-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Streamlit Cloud deploy webhook
+        env:
+          DEPLOY_WEBHOOK: ${{ secrets.STREAMLIT_DEPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$DEPLOY_WEBHOOK" ]; then
+            echo "STREAMLIT_DEPLOY_WEBHOOK secret is not set" >&2
+            exit 1
+          fi
+          curl -fsSL -X POST "$DEPLOY_WEBHOOK"
