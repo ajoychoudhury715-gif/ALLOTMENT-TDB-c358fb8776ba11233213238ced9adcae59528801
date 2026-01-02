@@ -4003,789 +4003,552 @@ st.session_state.prev_ongoing = current_ongoing
 st.session_state.prev_upcoming = current_upcoming
 st.session_state.prev_raw = df_raw.copy()
 
-# ================ Status Colors ================
-def get_status_background(status):
-    # Return subtle styling without bright backgrounds
-    s = str(status).strip().upper()
-    if "ON GOING" in s or "ONGOING" in s:
-        return f"border-left: 4px solid {COLORS['success']}"
-    elif "DONE" in s or "COMPLETED" in s:
-        return f"border-left: 4px solid {COLORS['info']}"
-    elif "CANCELLED" in s:
-        return f"border-left: 4px solid {COLORS['danger']}"
-    elif "ARRIVED" in s:
-        return f"border-left: 4px solid {COLORS['warning']}"
-    elif "LATE" in s:
-        return f"border-left: 4px solid {COLORS['warning']}"
-    elif "SHIFTED" in s:
-        return f"border-left: 4px solid {COLORS['button_bg']}"
-    return ""
-
-def highlight_row(row):
-    color = get_status_background(row["STATUS"])
-    return [color for _ in row]
-
-all_sorted = df
-
-# Manual save button and patient controls for schedule editor
-st.markdown("### 📋 Full Schedule")
-
-if not st.session_state.get("auto_save_enabled", False):
-    st.caption("Auto-save is OFF. Use 'Save Changes' to persist updates.")
-if st.session_state.get("pending_changes"):
-    st.warning("You have pending changes that are not saved yet.")
-
-# Add new patient button and save button
-
-# Automatically add a new empty patient row if the last row is not empty
-def is_row_empty(row):
-    # Consider a row empty if Patient Name, In Time, Out Time, Procedure, DR. are all blank/None
-    return all(
-        not str(row.get(col, '')).strip()
-        for col in ["Patient Name", "In Time", "Out Time", "Procedure", "DR."]
+# ================ MAIN DASHBOARD NAVIGATION ================
+category = st.sidebar.radio(
+    "Categories",
+    ["Scheduling", "Assistants", "Doctors", "Admin/Settings"],
+    index=0,
+    key="nav_category",
+)
+sched_view = assist_view = doctor_view = admin_view = None
+if category == "Scheduling":
+    sched_view = st.sidebar.radio(
+        "Scheduling",
+        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming"],
+        index=0,
+        key="nav_sched",
+    )
+elif category == "Assistants":
+    assist_view = st.sidebar.radio(
+        "Assistants",
+        ["Availability", "Auto Allocation", "Workload", "Attendance"],
+        index=0,
+        key="nav_assist",
+    )
+elif category == "Doctors":
+    doctor_view = st.sidebar.radio(
+        "Doctors",
+        ["Summary", "Per-Doctor Schedule"],
+        index=0,
+        key="nav_doc",
+    )
+else:
+    admin_view = st.sidebar.radio(
+        "Admin/Settings",
+        ["Storage/Backup", "Notifications"],
+        index=0,
+        key="nav_admin",
     )
 
-if not df_raw.empty:
-    last_row = df_raw.iloc[-1]
-    if not is_row_empty(last_row):
-        # Add a new empty row
-        new_row = {
-            "Patient ID": "",
-            "Patient Name": "",
-            "In Time": None,
-            "Out Time": None,
-            "Procedure": "",
-            "DR.": "",
-            "FIRST": "",
-            "SECOND": "",
-            "Third": "",
-            "CASE PAPER": "",
-            "OP": "",
-            "SUCTION": False,
-            "CLEANING": False,
-            "STATUS": "WAITING",
-            "REMINDER_ROW_ID": str(uuid.uuid4()),
-            "REMINDER_SNOOZE_UNTIL": pd.NA,
-            "REMINDER_DISMISSED": False
-        }
-        df_raw = pd.concat([df_raw, pd.DataFrame([new_row])], ignore_index=True)
-
-col_add, col_save, col_del_pick, col_del_btn, col_search = st.columns([0.20, 0.16, 0.18, 0.07, 0.39])
-
-# Selected patient from external patient DB (optional)
-if "selected_patient_id" not in st.session_state:
-    st.session_state.selected_patient_id = ""
-if "selected_patient_name" not in st.session_state:
-    st.session_state.selected_patient_name = ""
-
-with col_add:
-    if st.button(
-        "➕ Add Patient",
-        key="add_patient_btn",
-        help="Add a new patient row (uses selected patient if chosen)",
-        use_container_width=True,
-    ):
-        # Create a new empty row
-        new_row = {
-            "Patient ID": str(st.session_state.selected_patient_id or "").strip(),
-            "Patient Name": str(st.session_state.selected_patient_name or "").strip(),
-            "In Time": None,
-            "Out Time": None,
-            "Procedure": "",
-            "DR.": "",
-            "FIRST": "",
-            "SECOND": "",
-            "Third": "",
-            "CASE PAPER": "",
-            "OP": "",
-            "SUCTION": False,
-            "CLEANING": False,
-            "STATUS": "WAITING",
-            "REMINDER_ROW_ID": str(uuid.uuid4()),
-            "REMINDER_SNOOZE_UNTIL": pd.NA,
-            "REMINDER_DISMISSED": False
-        }
-        # Append to the original dataframe
-        new_row_df = pd.DataFrame([new_row])
-        df_raw_with_new = pd.concat([df_raw, new_row_df], ignore_index=True)
-        # Always save immediately when adding a new patient
-        save_data(df_raw_with_new, message="New patient row added!")
-        st.success("New patient row added!")
-
-with col_save:
-    # Save button for the data editor
-    if st.button("💾 Save Changes", key="manual_save_full", use_container_width=True, type="primary"):
-        st.session_state.manual_save_triggered = True
-
-with col_del_pick:
-    # Compact delete row control (uses stable REMINDER_ROW_ID)
-    try:
-        candidates = df_raw.copy()
-        if "Patient Name" in candidates.columns:
-            candidates["Patient Name"] = candidates["Patient Name"].astype(str).replace("nan", "").fillna("")
-        if "REMINDER_ROW_ID" in candidates.columns:
-            candidates["REMINDER_ROW_ID"] = candidates["REMINDER_ROW_ID"].astype(str).replace("nan", "").fillna("")
-
-        candidates = candidates[
-            (candidates.get("REMINDER_ROW_ID", "").astype(str).str.strip() != "")
-        ]
-
-        option_map: dict[str, str] = {}
-        if not candidates.empty:
-            for row_ix, r in candidates.iterrows():
-                rid = str(r.get("REMINDER_ROW_ID", "")).strip()
-                if not rid:
-                    continue
-                pname_raw = str(r.get("Patient Name", "")).strip()
-                pname = pname_raw if pname_raw else "(blank row)"
-                in_t = str(r.get("In Time", "")).strip()
-                op = str(r.get("OP", "")).strip()
-                row_no = f"#{int(row_ix) + 1}" if str(row_ix).isdigit() else str(row_ix)
-                label = " · ".join([p for p in [row_no, pname, in_t, op] if p])
-                # Make option text unique even if labels repeat.
-                opt = f"{label} — {rid[:8]}" if label else rid[:8]
-                option_map[opt] = rid
-
-        if "delete_row_id" not in st.session_state:
-            st.session_state.delete_row_id = ""
-
-        if option_map:
-            # Use a visible sentinel option instead of `placeholder` for wider Streamlit compatibility.
-            # Also: guard against Streamlit selectbox failing when the previously selected value
-            # is no longer present in the new options list (common after edits/deletes).
-            sentinel = "Select row to delete…"
-            options = [sentinel] + sorted(option_map.keys())
-
-            # IMPORTANT: Do not mutate st.session_state["delete_row_select"] here.
-            # Streamlit raises if you modify a widget key after it has been instantiated.
-            prev_choice = st.session_state.get("delete_row_select", sentinel)
-            default_index = options.index(prev_choice) if prev_choice in options else 0
-
-            chosen = st.selectbox(
-                "Delete row",
-                options=options,
-                key="delete_row_select",
-                label_visibility="collapsed",
-                index=default_index,
-            )
-            if chosen and chosen != sentinel:
-                st.session_state.delete_row_id = option_map.get(chosen, "")
-            else:
-                st.session_state.delete_row_id = ""
-        else:
-            st.session_state.delete_row_id = ""
-            st.caption("Delete row")
-    except Exception:
-        # Keep dashboard usable even if data is incomplete
-        st.caption("Delete row")
-
-with col_del_btn:
-    if st.button("⌫", key="delete_row_btn", help="Delete selected row"):
-        rid = str(st.session_state.get("delete_row_id", "") or "").strip()
-        if not rid:
-            st.warning("Select a row to delete")
-        else:
-            try:
-                if "REMINDER_ROW_ID" not in df_raw.columns:
-                    raise ValueError("Missing REMINDER_ROW_ID column")
-                df_updated = df_raw[df_raw["REMINDER_ROW_ID"].astype(str) != rid].copy()
-
-                # Clear local reminder state for this row id.
-                try:
-                    if "snoozed" in st.session_state and rid in st.session_state.snoozed:
-                        del st.session_state.snoozed[rid]
-                    if "reminder_sent" in st.session_state:
-                        st.session_state.reminder_sent.discard(rid)
-                except Exception:
-                    pass
-
-                _maybe_save(df_updated, message="Row deleted")
-                st.session_state.delete_row_id = ""
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error deleting row: {e}")
-
-with col_search:
-    # Patient search
-    if USE_SUPABASE and SUPABASE_AVAILABLE:
-        sup_url, sup_key, _, _ = _get_supabase_config_from_secrets_or_env()
-        patients_table, id_col, name_col = _get_patients_config_from_secrets_or_env()
-
-        patient_query = st.text_input(
-            "Patient search",
-            value="",
-            key="patient_search",
-            placeholder="Search patient…",
-            label_visibility="collapsed",
+if category == "Scheduling":
+    # ================ Status Colors ================
+    def get_status_background(status):
+        # Return subtle styling without bright backgrounds
+        s = str(status).strip().upper()
+        if "ON GOING" in s or "ONGOING" in s:
+            return f"border-left: 4px solid {COLORS['success']}"
+        elif "DONE" in s or "COMPLETED" in s:
+            return f"border-left: 4px solid {COLORS['info']}"
+        elif "CANCELLED" in s:
+            return f"border-left: 4px solid {COLORS['danger']}"
+        elif "ARRIVED" in s:
+            return f"border-left: 4px solid {COLORS['warning']}"
+        elif "LATE" in s:
+            return f"border-left: 4px solid {COLORS['warning']}"
+        elif "SHIFTED" in s:
+            return f"border-left: 4px solid {COLORS['button_bg']}"
+        return ""
+    
+    def highlight_row(row):
+        color = get_status_background(row["STATUS"])
+        return [color for _ in row]
+    
+    all_sorted = df
+    
+    # Manual save button and patient controls for schedule editor
+    st.markdown("### 📋 Full Schedule")
+    
+    if not st.session_state.get("auto_save_enabled", False):
+        st.caption("Auto-save is OFF. Use 'Save Changes' to persist updates.")
+    if st.session_state.get("pending_changes"):
+        st.warning("You have pending changes that are not saved yet.")
+    
+    # Add new patient button and save button
+    
+    # Automatically add a new empty patient row if the last row is not empty
+    def is_row_empty(row):
+        # Consider a row empty if Patient Name, In Time, Out Time, Procedure, DR. are all blank/None
+        return all(
+            not str(row.get(col, '')).strip()
+            for col in ["Patient Name", "In Time", "Out Time", "Procedure", "DR."]
         )
-
-        q = str(patient_query or "").strip()
+    
+    if not df_raw.empty:
+        last_row = df_raw.iloc[-1]
+        if not is_row_empty(last_row):
+            # Add a new empty row
+            new_row = {
+                "Patient ID": "",
+                "Patient Name": "",
+                "In Time": None,
+                "Out Time": None,
+                "Procedure": "",
+                "DR.": "",
+                "FIRST": "",
+                "SECOND": "",
+                "Third": "",
+                "CASE PAPER": "",
+                "OP": "",
+                "SUCTION": False,
+                "CLEANING": False,
+                "STATUS": "WAITING",
+                "REMINDER_ROW_ID": str(uuid.uuid4()),
+                "REMINDER_SNOOZE_UNTIL": pd.NA,
+                "REMINDER_DISMISSED": False
+            }
+            df_raw = pd.concat([df_raw, pd.DataFrame([new_row])], ignore_index=True)
+    
+    col_add, col_save, col_del_pick, col_del_btn, col_search = st.columns([0.20, 0.16, 0.18, 0.07, 0.39])
+    
+    # Selected patient from external patient DB (optional)
+    if "selected_patient_id" not in st.session_state:
+        st.session_state.selected_patient_id = ""
+    if "selected_patient_name" not in st.session_state:
+        st.session_state.selected_patient_name = ""
+    
+    with col_add:
+        if st.button(
+            "➕ Add Patient",
+            key="add_patient_btn",
+            help="Add a new patient row (uses selected patient if chosen)",
+            use_container_width=True,
+        ):
+            # Create a new empty row
+            new_row = {
+                "Patient ID": str(st.session_state.selected_patient_id or "").strip(),
+                "Patient Name": str(st.session_state.selected_patient_name or "").strip(),
+                "In Time": None,
+                "Out Time": None,
+                "Procedure": "",
+                "DR.": "",
+                "FIRST": "",
+                "SECOND": "",
+                "Third": "",
+                "CASE PAPER": "",
+                "OP": "",
+                "SUCTION": False,
+                "CLEANING": False,
+                "STATUS": "WAITING",
+                "REMINDER_ROW_ID": str(uuid.uuid4()),
+                "REMINDER_SNOOZE_UNTIL": pd.NA,
+                "REMINDER_DISMISSED": False
+            }
+            # Append to the original dataframe
+            new_row_df = pd.DataFrame([new_row])
+            df_raw_with_new = pd.concat([df_raw, new_row_df], ignore_index=True)
+            # Always save immediately when adding a new patient
+            save_data(df_raw_with_new, message="New patient row added!")
+            st.success("New patient row added!")
+    
+    with col_save:
+        # Save button for the data editor
+        if st.button("💾 Save Changes", key="manual_save_full", use_container_width=True, type="primary"):
+            st.session_state.manual_save_triggered = True
+    
+    with col_del_pick:
+        # Compact delete row control (uses stable REMINDER_ROW_ID)
         try:
-            results = search_patients_from_supabase(
-                sup_url, sup_key, patients_table, id_col, name_col, q, 20
-            )
-        except Exception as e:
-            err_text = str(e)
-            st.error("Patient search is not connected.")
-            st.caption(f"Error: {err_text}")
-
-            # Common case: table doesn't exist yet.
-            if "PGRST205" in err_text or "Could not find the table" in err_text:
-                with st.expander("✅ Fix: Create the patients table", expanded=True):
-                    st.markdown(
-                        "Your Supabase project does not have the patient master table yet. "
-                        "Create it in Supabase → SQL Editor, then reload the app."
-                    )
-                    st.code(
-                        "create table if not exists patients (\n"
-                        "  id text primary key,\n"
-                        "  name text not null\n"
-                        ");\n\n"
-                        "create index if not exists patients_name_idx on patients (name);\n",
-                        language="sql",
-                    )
-                    st.markdown(
-                        "If your patient table/columns have different names, set these in Streamlit Secrets:"
-                    )
-                    st.code(
-                        "supabase_patients_table = \"patients\"\n"
-                        "supabase_patients_id_col = \"id\"\n"
-                        "supabase_patients_name_col = \"name\"\n",
-                        language="toml",
-                    )
-            else:
-                st.warning(
-                    f"Check Supabase table/columns: {patients_table}({id_col}, {name_col}). "
-                    "If you are using an anon key, RLS may block reads; add `supabase_service_role_key` in Secrets "
-                    "or create an RLS policy for the patients table."
+            candidates = df_raw.copy()
+            if "Patient Name" in candidates.columns:
+                candidates["Patient Name"] = candidates["Patient Name"].astype(str).replace("nan", "").fillna("")
+            if "REMINDER_ROW_ID" in candidates.columns:
+                candidates["REMINDER_ROW_ID"] = candidates["REMINDER_ROW_ID"].astype(str).replace("nan", "").fillna("")
+    
+            candidates = candidates[
+                (candidates.get("REMINDER_ROW_ID", "").astype(str).str.strip() != "")
+            ]
+    
+            option_map: dict[str, str] = {}
+            if not candidates.empty:
+                for row_ix, r in candidates.iterrows():
+                    rid = str(r.get("REMINDER_ROW_ID", "")).strip()
+                    if not rid:
+                        continue
+                    pname_raw = str(r.get("Patient Name", "")).strip()
+                    pname = pname_raw if pname_raw else "(blank row)"
+                    in_t = str(r.get("In Time", "")).strip()
+                    op = str(r.get("OP", "")).strip()
+                    row_no = f"#{int(row_ix) + 1}" if str(row_ix).isdigit() else str(row_ix)
+                    label = " · ".join([p for p in [row_no, pname, in_t, op] if p])
+                    # Make option text unique even if labels repeat.
+                    opt = f"{label} — {rid[:8]}" if label else rid[:8]
+                    option_map[opt] = rid
+    
+            if "delete_row_id" not in st.session_state:
+                st.session_state.delete_row_id = ""
+    
+            if option_map:
+                # Use a visible sentinel option instead of `placeholder` for wider Streamlit compatibility.
+                # Also: guard against Streamlit selectbox failing when the previously selected value
+                # is no longer present in the new options list (common after edits/deletes).
+                sentinel = "Select row to delete…"
+                options = [sentinel] + sorted(option_map.keys())
+    
+                # IMPORTANT: Do not mutate st.session_state["delete_row_select"] here.
+                # Streamlit raises if you modify a widget key after it has been instantiated.
+                prev_choice = st.session_state.get("delete_row_select", sentinel)
+                default_index = options.index(prev_choice) if prev_choice in options else 0
+    
+                chosen = st.selectbox(
+                    "Delete row",
+                    options=options,
+                    key="delete_row_select",
+                    label_visibility="collapsed",
+                    index=default_index,
                 )
-            results = []
-
-        if results:
-            option_map = {f"{p['name']} · {p['id']}": (p["id"], p["name"]) for p in results}
-            option_strings = ["Select patient..."] + list(option_map.keys())
-
-            chosen_str = st.selectbox(
-                "Patient",
-                options=option_strings,
-                key="patient_select",
+                if chosen and chosen != sentinel:
+                    st.session_state.delete_row_id = option_map.get(chosen, "")
+                else:
+                    st.session_state.delete_row_id = ""
+            else:
+                st.session_state.delete_row_id = ""
+                st.caption("Delete row")
+        except Exception:
+            # Keep dashboard usable even if data is incomplete
+            st.caption("Delete row")
+    
+    with col_del_btn:
+        if st.button("⌫", key="delete_row_btn", help="Delete selected row"):
+            rid = str(st.session_state.get("delete_row_id", "") or "").strip()
+            if not rid:
+                st.warning("Select a row to delete")
+            else:
+                try:
+                    if "REMINDER_ROW_ID" not in df_raw.columns:
+                        raise ValueError("Missing REMINDER_ROW_ID column")
+                    df_updated = df_raw[df_raw["REMINDER_ROW_ID"].astype(str) != rid].copy()
+    
+                    # Clear local reminder state for this row id.
+                    try:
+                        if "snoozed" in st.session_state and rid in st.session_state.snoozed:
+                            del st.session_state.snoozed[rid]
+                        if "reminder_sent" in st.session_state:
+                            st.session_state.reminder_sent.discard(rid)
+                    except Exception:
+                        pass
+    
+                    _maybe_save(df_updated, message="Row deleted")
+                    st.session_state.delete_row_id = ""
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error deleting row: {e}")
+    
+    with col_search:
+        # Patient search
+        if USE_SUPABASE and SUPABASE_AVAILABLE:
+            sup_url, sup_key, _, _ = _get_supabase_config_from_secrets_or_env()
+            patients_table, id_col, name_col = _get_patients_config_from_secrets_or_env()
+    
+            patient_query = st.text_input(
+                "Patient search",
+                value="",
+                key="patient_search",
+                placeholder="Search patient…",
                 label_visibility="collapsed",
             )
-            if chosen_str and chosen_str != "Select patient..." and chosen_str in option_map:
-                pid, pname = option_map[chosen_str]
-                st.session_state.selected_patient_id = str(pid)
-                st.session_state.selected_patient_name = str(pname)
-        else:
-            if q:
-                st.caption("❌ No matches found")
-            else:
-                st.caption("🔍 Type to search patients")
-
-        if st.session_state.selected_patient_id or st.session_state.selected_patient_name:
-            st.caption(
-                f"Selected: {st.session_state.selected_patient_id} - {st.session_state.selected_patient_name}"
-            )
-    else:
-        st.caption("🔍 Patient search (Supabase only)")
-
-display_all = all_sorted[[
-    "Patient Name",
-    "In Time Obj",
-    "Out Time Obj",
-    "Procedure",
-    "DR.",
-    "FIRST",
-    "SECOND",
-    "Third",
-    "CASE PAPER",
-    "OP",
-    "SUCTION",
-    "CLEANING",
-    "STATUS",
-    "STATUS_CHANGED_AT",
-    "ACTUAL_START_AT",
-    "ACTUAL_END_AT",
-]].copy()
-display_all = display_all.rename(columns={"In Time Obj": "In Time", "Out Time Obj": "Out Time"})
-# Preserve original index for mapping edits back to df_raw
-display_all["_orig_idx"] = display_all.index
-display_all = display_all.reset_index(drop=True)
-
-# Convert text columns to string to avoid type compatibility issues (BUT NOT TIME/BOOL COLUMNS)
-for col in ["Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
-    if col in display_all.columns:
-        display_all[col] = display_all[col].astype(str).replace('nan', '')
-
-# Keep In Time and Out Time as time objects for proper display
-display_all["In Time"] = display_all["In Time"].apply(lambda v: v if isinstance(v, time_type) else None)
-display_all["Out Time"] = display_all["Out Time"].apply(lambda v: v if isinstance(v, time_type) else None)
-
-# Computed overtime indicator (uses scheduled Out Time vs current time)
-def _compute_overtime_min(_row) -> int | None:
-    try:
-        s = str(_row.get("STATUS", "")).strip().upper()
-        if ("ON GOING" not in s) and ("ONGOING" not in s):
-            return None
-        out_min = _row.get("Out_min")
-        if pd.isna(out_min):
-            return None
-        diff = int(current_min) - int(out_min)
-        return diff if diff > 0 else None
-    except Exception:
-        return None
-
-display_all["Overtime (min)"] = all_sorted.apply(_compute_overtime_min, axis=1)
-
-edited_all = st.data_editor(
-    display_all, 
-    width="stretch", 
-    key="full_schedule_editor", 
-    hide_index=True,
-    disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
-    column_config={
-        "_orig_idx": None,  # Hide the original index column
-        "Patient Name": st.column_config.TextColumn(label="Patient Name"),
-        "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
-        "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
-        "Procedure": st.column_config.TextColumn(label="Procedure"),
-        "DR.": st.column_config.SelectboxColumn(
-            label="DR.",
-            options=DOCTOR_OPTIONS,
-            required=False
-        ),
-        "OP": st.column_config.SelectboxColumn(
-            label="OP",
-            options=["OP 1", "OP 2", "OP 3", "OP 4"],
-            required=False
-        ),
-        "FIRST": st.column_config.SelectboxColumn(
-            label="FIRST",
-            options=ASSISTANT_OPTIONS,
-            required=False
-        ),
-        "SECOND": st.column_config.SelectboxColumn(
-            label="SECOND",
-            options=ASSISTANT_OPTIONS,
-            required=False
-        ),
-        "Third": st.column_config.SelectboxColumn(
-            label="Third",
-            options=ASSISTANT_OPTIONS,
-            required=False
-        ),
-        "CASE PAPER": st.column_config.SelectboxColumn(
-            label="CASE PAPER",
-            options=ASSISTANT_OPTIONS,
-            required=False
-        ),
-        "SUCTION": st.column_config.CheckboxColumn(label="✨ SUCTION"),
-        "CLEANING": st.column_config.CheckboxColumn(label="🧹 CLEANING"),
-        "STATUS_CHANGED_AT": None,
-        "ACTUAL_START_AT": None,
-        "ACTUAL_END_AT": None,
-        "Overtime (min)": None,
-        "STATUS": st.column_config.SelectboxColumn(
-            label="STATUS",
-            options=STATUS_OPTIONS,
-            required=False
-        )
-    }
-)
-
-# ================ Manual save: process edits only when user clicks save button ================
-if st.session_state.get("manual_save_triggered"):
-    # If auto-save is off and we already queued a dataframe, persist it immediately
-    pending_df = st.session_state.get("unsaved_df")
-    if pending_df is not None:
-        pending_msg = st.session_state.get("pending_changes_reason") or "Pending changes saved!"
-        if save_data(pending_df, message=pending_msg):
-            st.session_state.unsaved_df = None
-            st.session_state.pending_changes = False
-            st.session_state.pending_changes_reason = ""
-        st.session_state.manual_save_triggered = False
-        st.rerun()
-
-    if edited_all is not None:
-        # Compare non-time columns to detect changes (time columns need special handling due to object type)
-        has_changes = False
-        if not edited_all.equals(display_all):
-            # Check actual value differences (skip _orig_idx which is for internal tracking)
-            for col in edited_all.columns:
-                if col not in ["In Time", "Out Time", "_orig_idx"]:
-                    if not (edited_all[col] == display_all[col]).all():
-                        has_changes = True
-                        break
-            # For time columns, compare the string representation
-            if not has_changes:
-                for col in ["In Time", "Out Time"]:
-                    if col in edited_all.columns:
-                        edited_times = edited_all[col].astype(str)
-                        display_times = display_all[col].astype(str)
-                        if not (edited_times == display_times).all():
-                            has_changes = True
-                            break
-        
-        if has_changes:
+    
+            q = str(patient_query or "").strip()
             try:
-                # Create a copy of the raw data to update
-                df_updated = df_raw.copy()
-
-                # Track which rows are worth attempting auto-allocation for
-                allocation_candidates: set[int] = set()
-                
-                # Process edited data and convert back to original format
-                for idx, row in edited_all.iterrows():
-                    # Use the preserved original index to map back to df_raw; append when new
-                    orig_idx_raw = row.get("_orig_idx", idx)
-                    if pd.isna(orig_idx_raw):
-                        orig_idx_raw = idx
-                    orig_idx = int(orig_idx_raw)
-
-                    is_new_row = orig_idx >= len(df_updated)
-                    if is_new_row:
-                        # Append a blank base row with stable reminder fields
-                        base_row = {col: "" for col in df_updated.columns}
-                        if "REMINDER_ROW_ID" in base_row:
-                            base_row["REMINDER_ROW_ID"] = str(uuid.uuid4())
-                        if "REMINDER_SNOOZE_UNTIL" in base_row:
-                            base_row["REMINDER_SNOOZE_UNTIL"] = pd.NA
-                        if "REMINDER_DISMISSED" in base_row:
-                            base_row["REMINDER_DISMISSED"] = False
-                        if "STATUS" in base_row and not base_row.get("STATUS"):
-                            base_row["STATUS"] = "WAITING"
-                        df_updated = pd.concat([df_updated, pd.DataFrame([base_row])], ignore_index=True)
-                        orig_idx = len(df_updated) - 1
-
-                    try:
-                        old_status_norm = ""
-                        try:
-                            if (not is_new_row) and ("STATUS" in df_raw.columns) and (orig_idx < len(df_raw)):
-                                old_status_norm = str(df_raw.iloc[orig_idx, df_raw.columns.get_loc("STATUS")]).strip().upper()
-                        except Exception:
-                            old_status_norm = ""
-
-                        # Handle Patient ID (optional)
-                        if "Patient ID" in row.index and "Patient ID" in df_updated.columns:
-                            pid = str(row.get("Patient ID", "")).strip()
-                            if pid.lower() in {"nan", "none"}:
-                                pid = ""
-                            df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient ID")] = pid
-
-                        # Handle Patient Name
-                        patient_name_raw = row.get("Patient Name", "")
-                        patient_name = "" if pd.isna(patient_name_raw) else str(patient_name_raw).strip()
-                        if patient_name == "":
-                            # Clear row if patient name is empty, but preserve stable row id
-                            # so users can still delete the blank row from the dropdown.
-                            for col in df_updated.columns:
-                                if col == "REMINDER_ROW_ID":
-                                    continue
-                                if col == "REMINDER_SNOOZE_UNTIL":
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = pd.NA
-                                    continue
-                                if col == "REMINDER_DISMISSED":
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = False
-                                    continue
-                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = ""
-                            continue
-                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient Name")] = patient_name
-                        
-                        # Handle In Time - properly convert time object to HH:MM string for Excel
-                        if "In Time" in row.index:
-                            in_time_val = row["In Time"]
-                            t = _coerce_to_time_obj(in_time_val)
-                            time_str = f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
-                            df_updated.iloc[orig_idx, df_updated.columns.get_loc("In Time")] = time_str
-                        
-                        # Handle Out Time - properly convert time object to HH:MM string for Excel
-                        if "Out Time" in row.index:
-                            out_time_val = row["Out Time"]
-                            t = _coerce_to_time_obj(out_time_val)
-                            time_str = f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
-                            df_updated.iloc[orig_idx, df_updated.columns.get_loc("Out Time")] = time_str
-                        
-                        # Handle other columns
-                        for col in ["Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
-                            if col in row.index and col in df_updated.columns:
-                                val = row[col]
-                                clean_val = str(val).strip() if val and str(val) != "nan" else ""
-                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = clean_val
-
-                        # Time tracking: update timestamps + log on STATUS changes
-                        try:
-                            if "STATUS" in df_updated.columns:
-                                new_status_norm = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS")]).strip().upper()
-                                if new_status_norm and new_status_norm != old_status_norm:
-                                    ts = _now_ist_str()
-                                    if "STATUS_CHANGED_AT" in df_updated.columns:
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS_CHANGED_AT")] = ts
-
-                                    # Actual start/end stamps (only fill first time)
-                                    if ("ON GOING" in new_status_norm or "ONGOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
-                                        cur = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_START_AT")]).strip()
-                                        if not cur or cur.lower() in {"nan", "none"}:
-                                            df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_START_AT")] = ts
-                                    if ("DONE" in new_status_norm or "COMPLETED" in new_status_norm) and "ACTUAL_END_AT" in df_updated.columns:
-                                        cur = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_END_AT")]).strip()
-                                        if not cur or cur.lower() in {"nan", "none"}:
-                                            df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_END_AT")] = ts
-
-                                    if "STATUS_LOG" in df_updated.columns:
-                                        existing_log = ""
-                                        try:
-                                            if (not is_new_row) and (orig_idx < len(df_raw)) and ("STATUS_LOG" in df_raw.columns):
-                                                existing_log = str(df_raw.iloc[orig_idx, df_raw.columns.get_loc("STATUS_LOG")])
-                                        except Exception:
-                                            existing_log = ""
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS_LOG")] = _append_status_log(
-                                            existing_log,
-                                            {
-                                                "at": ts,
-                                                "from": old_status_norm,
-                                                "to": new_status_norm,
-                                            },
-                                        )
-                        except Exception:
-                            pass
-
-                        # Candidate for allocation if doctor+times exist (helper will decide)
-                        allocation_candidates.add(orig_idx)
-                        
-                        # Handle checkbox columns (SUCTION, CLEANING) - convert boolean to check mark or empty
-                        for col in ["SUCTION", "CLEANING"]:
-                            if col in row.index and col in df_updated.columns:
-                                val = row[col]
-                                # Store True as "✓" checkmark, False/None as empty string
-                                if pd.isna(val) or val is None or val == False:
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = ""
-                                elif val == True:
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = "✓"
-                                else:
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = ""
-                    except Exception as col_error:
-                        st.warning(f"Warning updating row {orig_idx}: {str(col_error)}")
-                        continue
-
-                # Auto-allocate assistants after applying all row edits
-                if bool(st.session_state.get("auto_assign_assistants", True)):
-                    only_empty = bool(st.session_state.get("auto_assign_only_empty", True))
-                    for ix in sorted(allocation_candidates):
-                        _auto_fill_assistants_for_row(df_updated, ix, only_fill_empty=only_empty)
-                
-                # Write back to storage (manual save always persists)
-                save_data(df_updated, message="Schedule updated!")
-                st.session_state.manual_save_triggered = False
+                results = search_patients_from_supabase(
+                    sup_url, sup_key, patients_table, id_col, name_col, q, 20
+                )
+            except Exception as e:
+                err_text = str(e)
+                st.error("Patient search is not connected.")
+                st.caption(f"Error: {err_text}")
+    
+                # Common case: table doesn't exist yet.
+                if "PGRST205" in err_text or "Could not find the table" in err_text:
+                    with st.expander("✅ Fix: Create the patients table", expanded=True):
+                        st.markdown(
+                            "Your Supabase project does not have the patient master table yet. "
+                            "Create it in Supabase → SQL Editor, then reload the app."
+                        )
+                        st.code(
+                            "create table if not exists patients (\n"
+                            "  id text primary key,\n"
+                            "  name text not null\n"
+                            ");\n\n"
+                            "create index if not exists patients_name_idx on patients (name);\n",
+                            language="sql",
+                        )
+                        st.markdown(
+                            "If your patient table/columns have different names, set these in Streamlit Secrets:"
+                        )
+                        st.code(
+                            "supabase_patients_table = \"patients\"\n"
+                            "supabase_patients_id_col = \"id\"\n"
+                            "supabase_patients_name_col = \"name\"\n",
+                            language="toml",
+                        )
+                else:
+                    st.warning(
+                        f"Check Supabase table/columns: {patients_table}({id_col}, {name_col}). "
+                        "If you are using an anon key, RLS may block reads; add `supabase_service_role_key` in Secrets "
+                        "or create an RLS policy for the patients table."
+                    )
+                results = []
+    
+            if results:
+                option_map = {f"{p['name']} · {p['id']}": (p["id"], p["name"]) for p in results}
+                option_strings = ["Select patient..."] + list(option_map.keys())
+    
+                chosen_str = st.selectbox(
+                    "Patient",
+                    options=option_strings,
+                    key="patient_select",
+                    label_visibility="collapsed",
+                )
+                if chosen_str and chosen_str != "Select patient..." and chosen_str in option_map:
+                    pid, pname = option_map[chosen_str]
+                    st.session_state.selected_patient_id = str(pid)
+                    st.session_state.selected_patient_name = str(pname)
+            else:
+                if q:
+                    st.caption("❌ No matches found")
+                else:
+                    st.caption("🔍 Type to search patients")
+    
+            if st.session_state.selected_patient_id or st.session_state.selected_patient_name:
+                st.caption(
+                    f"Selected: {st.session_state.selected_patient_id} - {st.session_state.selected_patient_name}"
+                )
+        else:
+            st.caption("🔍 Patient search (Supabase only)")
+    
+    display_all = all_sorted[[
+        "Patient Name",
+        "In Time Obj",
+        "Out Time Obj",
+        "Procedure",
+        "DR.",
+        "FIRST",
+        "SECOND",
+        "Third",
+        "CASE PAPER",
+        "OP",
+        "SUCTION",
+        "CLEANING",
+        "STATUS",
+        "STATUS_CHANGED_AT",
+        "ACTUAL_START_AT",
+        "ACTUAL_END_AT",
+    ]].copy()
+    display_all = display_all.rename(columns={"In Time Obj": "In Time", "Out Time Obj": "Out Time"})
+    # Preserve original index for mapping edits back to df_raw
+    display_all["_orig_idx"] = display_all.index
+    display_all = display_all.reset_index(drop=True)
+    
+    # Convert text columns to string to avoid type compatibility issues (BUT NOT TIME/BOOL COLUMNS)
+    for col in ["Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
+        if col in display_all.columns:
+            display_all[col] = display_all[col].astype(str).replace('nan', '')
+    
+    # Keep In Time and Out Time as time objects for proper display
+    display_all["In Time"] = display_all["In Time"].apply(lambda v: v if isinstance(v, time_type) else None)
+    display_all["Out Time"] = display_all["Out Time"].apply(lambda v: v if isinstance(v, time_type) else None)
+    
+    # Computed overtime indicator (uses scheduled Out Time vs current time)
+    def _compute_overtime_min(_row) -> int | None:
+        try:
+            s = str(_row.get("STATUS", "")).strip().upper()
+            if ("ON GOING" not in s) and ("ONGOING" not in s):
+                return None
+            out_min = _row.get("Out_min")
+            if pd.isna(out_min):
+                return None
+            diff = int(current_min) - int(out_min)
+            return diff if diff > 0 else None
+        except Exception:
+            return None
+    
+    display_all["Overtime (min)"] = all_sorted.apply(_compute_overtime_min, axis=1)
+    
+    edited_all = st.data_editor(
+        display_all, 
+        width="stretch", 
+        key="full_schedule_editor", 
+        hide_index=True,
+        disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
+        column_config={
+            "_orig_idx": None,  # Hide the original index column
+            "Patient Name": st.column_config.TextColumn(label="Patient Name"),
+            "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
+            "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
+            "Procedure": st.column_config.TextColumn(label="Procedure"),
+            "DR.": st.column_config.SelectboxColumn(
+                label="DR.",
+                options=DOCTOR_OPTIONS,
+                required=False
+            ),
+            "OP": st.column_config.SelectboxColumn(
+                label="OP",
+                options=["OP 1", "OP 2", "OP 3", "OP 4"],
+                required=False
+            ),
+            "FIRST": st.column_config.SelectboxColumn(
+                label="FIRST",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "SECOND": st.column_config.SelectboxColumn(
+                label="SECOND",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "Third": st.column_config.SelectboxColumn(
+                label="Third",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "CASE PAPER": st.column_config.SelectboxColumn(
+                label="CASE PAPER",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "SUCTION": st.column_config.CheckboxColumn(label="✨ SUCTION"),
+            "CLEANING": st.column_config.CheckboxColumn(label="🧹 CLEANING"),
+            "STATUS_CHANGED_AT": None,
+            "ACTUAL_START_AT": None,
+            "ACTUAL_END_AT": None,
+            "Overtime (min)": None,
+            "STATUS": st.column_config.SelectboxColumn(
+                label="STATUS",
+                options=STATUS_OPTIONS,
+                required=False
+            )
+        }
+    )
+    
+    # ================ Manual save: process edits only when user clicks save button ================
+    if st.session_state.get("manual_save_triggered"):
+        # If auto-save is off and we already queued a dataframe, persist it immediately
+        pending_df = st.session_state.get("unsaved_df")
+        if pending_df is not None:
+            pending_msg = st.session_state.get("pending_changes_reason") or "Pending changes saved!"
+            if save_data(pending_df, message=pending_msg):
                 st.session_state.unsaved_df = None
                 st.session_state.pending_changes = False
                 st.session_state.pending_changes_reason = ""
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error saving: {e}")
-                st.session_state.manual_save_triggered = False
-        else:
-            # Nothing changed; clear the trigger so it doesn't keep firing on rerun
             st.session_state.manual_save_triggered = False
-    else:
-        st.session_state.manual_save_triggered = False
-
-# ================ Per Chair Tabs ================
-st.markdown("###  Schedule by OP")
-
-unique_ops = sorted(df["OP"].dropna().unique())
-
-if unique_ops:
-    tabs = st.tabs([str(op) for op in unique_ops])
-    for tab, op in zip(tabs, unique_ops):
-        with tab:
-            op_df = df[
-                (df["OP"] == op)
-                & ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED", na=True)
-            ]
-            display_op = op_df[[
-                "Patient ID",
-                "Patient Name",
-                "In Time Obj",
-                "Out Time Obj",
-                "Procedure",
-                "DR.",
-                "OP",
-                "FIRST",
-                "SECOND",
-                "Third",
-                "CASE PAPER",
-                "SUCTION",
-                "CLEANING",
-                "STATUS",
-                "STATUS_CHANGED_AT",
-                "ACTUAL_START_AT",
-                "ACTUAL_END_AT",
-            ]].copy()
-            display_op = display_op.rename(columns={"In Time Obj": "In Time", "Out Time Obj": "Out Time"})
-            # Preserve original index for mapping edits back to df_raw
-            display_op["_orig_idx"] = display_op.index
-            display_op = display_op.reset_index(drop=True)
-            # Ensure time objects are preserved; Streamlit TimeColumn edits best with None for missing
-            display_op["In Time"] = display_op["In Time"].apply(lambda v: v if isinstance(v, time_type) else None)
-            display_op["Out Time"] = display_op["Out Time"].apply(lambda v: v if isinstance(v, time_type) else None)
-
-            # Force correct dtypes for Streamlit compatibility
-            # Text columns
-            for col in ["Patient ID", "Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
-                if col in display_op.columns:
-                    display_op[col] = display_op[col].astype("string").replace('nan', '')
-            # Number column
-            if "Overtime (min)" in display_op.columns:
-                display_op["Overtime (min)"] = pd.to_numeric(display_op["Overtime (min)"], errors="coerce")
-            # Checkbox columns
-            for col in ["SUCTION", "CLEANING"]:
-                if col in display_op.columns:
-                    display_op[col] = display_op[col].astype("boolean")
-
-            display_op["Overtime (min)"] = op_df.apply(_compute_overtime_min, axis=1)
-
-            edited_op = st.data_editor(
-                display_op, 
-                width="stretch", 
-                key=f"op_{str(op).replace(' ', '_')}_editor", 
-                hide_index=True,
-                disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
-                column_config={
-                    "_orig_idx": None,
-                    "Patient ID": st.column_config.TextColumn(label="Patient ID", required=False),
-                    "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
-                    "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
-                    "DR.": st.column_config.SelectboxColumn(
-                        label="DR.",
-                        options=DOCTOR_OPTIONS,
-                        required=False
-                    ),
-                    "OP": st.column_config.SelectboxColumn(
-                        label="OP",
-                        options=["OP 1", "OP 2", "OP 3", "OP 4"],
-                        required=False
-                    ),
-                    "FIRST": st.column_config.SelectboxColumn(
-                        label="FIRST",
-                        options=ASSISTANT_OPTIONS,
-                        required=False
-                    ),
-                    "SECOND": st.column_config.SelectboxColumn(
-                        label="SECOND",
-                        options=ASSISTANT_OPTIONS,
-                        required=False
-                    ),
-                    "Third": st.column_config.SelectboxColumn(
-                        label="Third",
-                        options=ASSISTANT_OPTIONS,
-                        required=False
-                    ),
-                    "CASE PAPER": st.column_config.SelectboxColumn(
-                        label="CASE PAPER",
-                        options=ASSISTANT_OPTIONS,
-                        required=False
-                    ),
-                    "STATUS_CHANGED_AT": st.column_config.TextColumn(label="Status Changed At"),
-                    "ACTUAL_START_AT": st.column_config.TextColumn(label="Actual Start"),
-                    "ACTUAL_END_AT": st.column_config.TextColumn(label="Actual End"),
-                    "Overtime (min)": st.column_config.NumberColumn(label="Overtime (min)"),
-                    "STATUS": st.column_config.SelectboxColumn(
-                        label="STATUS",
-                        options=STATUS_OPTIONS,
-                        required=False
-                    )
-                }
-            )
-
-            # Persist edits from OP tabs
-            if edited_op is not None:
-                op_has_changes = False
-                if not edited_op.equals(display_op):
-                    for col in edited_op.columns:
-                        if col not in ["In Time", "Out Time", "_orig_idx"]:
-                            if not (edited_op[col] == display_op[col]).all():
-                                op_has_changes = True
+            st.rerun()
+    
+        if edited_all is not None:
+            # Compare non-time columns to detect changes (time columns need special handling due to object type)
+            has_changes = False
+            if not edited_all.equals(display_all):
+                # Check actual value differences (skip _orig_idx which is for internal tracking)
+                for col in edited_all.columns:
+                    if col not in ["In Time", "Out Time", "_orig_idx"]:
+                        if not (edited_all[col] == display_all[col]).all():
+                            has_changes = True
+                            break
+                # For time columns, compare the string representation
+                if not has_changes:
+                    for col in ["In Time", "Out Time"]:
+                        if col in edited_all.columns:
+                            edited_times = edited_all[col].astype(str)
+                            display_times = display_all[col].astype(str)
+                            if not (edited_times == display_times).all():
+                                has_changes = True
                                 break
-                    if not op_has_changes:
-                        for col in ["In Time", "Out Time"]:
-                            if col in edited_op.columns:
-                                edited_times = edited_op[col].astype(str)
-                                display_times = display_op[col].astype(str)
-                                if not (edited_times == display_times).all():
-                                    op_has_changes = True
-                                    break
-
-                if op_has_changes:
-                    try:
-                        df_updated = df_raw.copy()
-                        allocation_candidates: set[int] = set()
-                        for _, row in edited_op.iterrows():
-                            orig_idx_raw = row.get("_orig_idx")
-                            if pd.isna(orig_idx_raw):
-                                orig_idx_raw = len(df_updated)
-                            orig_idx = int(orig_idx_raw)
-
-                            is_new_row = (orig_idx < 0) or (orig_idx >= len(df_updated))
-                            if is_new_row:
-                                base_row = {col: "" for col in df_updated.columns}
-                                if "REMINDER_ROW_ID" in base_row:
-                                    base_row["REMINDER_ROW_ID"] = str(uuid.uuid4())
-                                if "REMINDER_SNOOZE_UNTIL" in base_row:
-                                    base_row["REMINDER_SNOOZE_UNTIL"] = pd.NA
-                                if "REMINDER_DISMISSED" in base_row:
-                                    base_row["REMINDER_DISMISSED"] = False
-                                if "STATUS" in base_row and not base_row.get("STATUS"):
-                                    base_row["STATUS"] = "WAITING"
-                                df_updated = pd.concat([df_updated, pd.DataFrame([base_row])], ignore_index=True)
-                                orig_idx = len(df_updated) - 1
-
+            
+            if has_changes:
+                try:
+                    # Create a copy of the raw data to update
+                    df_updated = df_raw.copy()
+    
+                    # Track which rows are worth attempting auto-allocation for
+                    allocation_candidates: set[int] = set()
+                    
+                    # Process edited data and convert back to original format
+                    for idx, row in edited_all.iterrows():
+                        # Use the preserved original index to map back to df_raw; append when new
+                        orig_idx_raw = row.get("_orig_idx", idx)
+                        if pd.isna(orig_idx_raw):
+                            orig_idx_raw = idx
+                        orig_idx = int(orig_idx_raw)
+    
+                        is_new_row = orig_idx >= len(df_updated)
+                        if is_new_row:
+                            # Append a blank base row with stable reminder fields
+                            base_row = {col: "" for col in df_updated.columns}
+                            if "REMINDER_ROW_ID" in base_row:
+                                base_row["REMINDER_ROW_ID"] = str(uuid.uuid4())
+                            if "REMINDER_SNOOZE_UNTIL" in base_row:
+                                base_row["REMINDER_SNOOZE_UNTIL"] = pd.NA
+                            if "REMINDER_DISMISSED" in base_row:
+                                base_row["REMINDER_DISMISSED"] = False
+                            if "STATUS" in base_row and not base_row.get("STATUS"):
+                                base_row["STATUS"] = "WAITING"
+                            df_updated = pd.concat([df_updated, pd.DataFrame([base_row])], ignore_index=True)
+                            orig_idx = len(df_updated) - 1
+    
+                        try:
                             old_status_norm = ""
                             try:
                                 if (not is_new_row) and ("STATUS" in df_raw.columns) and (orig_idx < len(df_raw)):
                                     old_status_norm = str(df_raw.iloc[orig_idx, df_raw.columns.get_loc("STATUS")]).strip().upper()
                             except Exception:
                                 old_status_norm = ""
-
-                            # Patient ID
-                            patient_id = str(row.get("Patient ID", "")).strip()
-                            if "Patient ID" in df_updated.columns:
-                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient ID")] = patient_id
-
-                            # Patient Name
+    
+                            # Handle Patient ID (optional)
+                            if "Patient ID" in row.index and "Patient ID" in df_updated.columns:
+                                pid = str(row.get("Patient ID", "")).strip()
+                                if pid.lower() in {"nan", "none"}:
+                                    pid = ""
+                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient ID")] = pid
+    
+                            # Handle Patient Name
                             patient_name_raw = row.get("Patient Name", "")
                             patient_name = "" if pd.isna(patient_name_raw) else str(patient_name_raw).strip()
                             if patient_name == "":
-                                for c in df_updated.columns:
-                                    if c == "REMINDER_ROW_ID":
+                                # Clear row if patient name is empty, but preserve stable row id
+                                # so users can still delete the blank row from the dropdown.
+                                for col in df_updated.columns:
+                                    if col == "REMINDER_ROW_ID":
                                         continue
-                                    if c == "REMINDER_SNOOZE_UNTIL":
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = pd.NA
+                                    if col == "REMINDER_SNOOZE_UNTIL":
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = pd.NA
                                         continue
-                                    if c == "REMINDER_DISMISSED":
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = False
+                                    if col == "REMINDER_DISMISSED":
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = False
                                         continue
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = ""
+                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = ""
                                 continue
-                            if "Patient Name" in df_updated.columns:
-                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient Name")] = patient_name
-
-                            # Times -> canonical HH:MM strings
-                            if "In Time" in df_updated.columns:
-                                t = _coerce_to_time_obj(row.get("In Time"))
-                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("In Time")] = (
-                                    f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
-                                )
-                            if "Out Time" in df_updated.columns:
-                                t = _coerce_to_time_obj(row.get("Out Time"))
-                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("Out Time")] = (
-                                    f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
-                                )
-
-                            for c in ["Procedure", "DR.", "OP", "FIRST", "SECOND", "Third", "CASE PAPER", "STATUS"]:
-                                if c in row.index and c in df_updated.columns:
-                                    val = row.get(c)
+                            df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient Name")] = patient_name
+                            
+                            # Handle In Time - properly convert time object to HH:MM string for Excel
+                            if "In Time" in row.index:
+                                in_time_val = row["In Time"]
+                                t = _coerce_to_time_obj(in_time_val)
+                                time_str = f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
+                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("In Time")] = time_str
+                            
+                            # Handle Out Time - properly convert time object to HH:MM string for Excel
+                            if "Out Time" in row.index:
+                                out_time_val = row["Out Time"]
+                                t = _coerce_to_time_obj(out_time_val)
+                                time_str = f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
+                                df_updated.iloc[orig_idx, df_updated.columns.get_loc("Out Time")] = time_str
+                            
+                            # Handle other columns
+                            for col in ["Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
+                                if col in row.index and col in df_updated.columns:
+                                    val = row[col]
                                     clean_val = str(val).strip() if val and str(val) != "nan" else ""
-                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = clean_val
-
+                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = clean_val
+    
                             # Time tracking: update timestamps + log on STATUS changes
                             try:
                                 if "STATUS" in df_updated.columns:
@@ -4794,7 +4557,8 @@ if unique_ops:
                                         ts = _now_ist_str()
                                         if "STATUS_CHANGED_AT" in df_updated.columns:
                                             df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS_CHANGED_AT")] = ts
-
+    
+                                        # Actual start/end stamps (only fill first time)
                                         if ("ON GOING" in new_status_norm or "ONGOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
                                             cur = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_START_AT")]).strip()
                                             if not cur or cur.lower() in {"nan", "none"}:
@@ -4803,7 +4567,7 @@ if unique_ops:
                                             cur = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_END_AT")]).strip()
                                             if not cur or cur.lower() in {"nan", "none"}:
                                                 df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_END_AT")] = ts
-
+    
                                         if "STATUS_LOG" in df_updated.columns:
                                             existing_log = ""
                                             try:
@@ -4813,296 +4577,584 @@ if unique_ops:
                                                 existing_log = ""
                                             df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS_LOG")] = _append_status_log(
                                                 existing_log,
-                                                {"at": ts, "from": old_status_norm, "to": new_status_norm},
+                                                {
+                                                    "at": ts,
+                                                    "from": old_status_norm,
+                                                    "to": new_status_norm,
+                                                },
                                             )
                             except Exception:
                                 pass
-
+    
+                            # Candidate for allocation if doctor+times exist (helper will decide)
                             allocation_candidates.add(orig_idx)
-
-                            for c in ["SUCTION", "CLEANING"]:
-                                if c in row.index and c in df_updated.columns:
-                                    val = row.get(c)
-                                    if pd.isna(val) or val is None or val is False:
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = ""
-                                    elif val is True:
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = "✓"
+                            
+                            # Handle checkbox columns (SUCTION, CLEANING) - convert boolean to check mark or empty
+                            for col in ["SUCTION", "CLEANING"]:
+                                if col in row.index and col in df_updated.columns:
+                                    val = row[col]
+                                    # Store True as "✓" checkmark, False/None as empty string
+                                    if pd.isna(val) or val is None or val == False:
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = ""
+                                    elif val == True:
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = "✓"
                                     else:
-                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = ""
-
-                        if bool(st.session_state.get("auto_assign_assistants", True)):
-                            only_empty = bool(st.session_state.get("auto_assign_only_empty", True))
-                            for ix in sorted(allocation_candidates):
-                                _auto_fill_assistants_for_row(df_updated, ix, only_fill_empty=only_empty)
-
-                        _maybe_save(df_updated, message=f"Schedule updated for {op}!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error saving {op} edits: {e}")
-else:
-    st.info("No chair data available.")
-
-
-# ================ Doctor Statistics ================
-st.markdown("### 👨‍⚕️ Schedule Summary by Doctor")
-groupby_column = "DR."
-if groupby_column in df.columns and not df[groupby_column].isnull().all():
-    try:
-        doctor_procedures = df[df["DR."].notna()].groupby("DR.").size().reset_index(name="Total Procedures")
-        doctor_procedures = doctor_procedures.reset_index(drop=True)
-        if not doctor_procedures.empty:
-            edited_doctor = st.data_editor(doctor_procedures, width="stretch", key="doctor_editor", hide_index=True)
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc(col)] = ""
+                        except Exception as col_error:
+                            st.warning(f"Warning updating row {orig_idx}: {str(col_error)}")
+                            continue
+    
+                    # Auto-allocate assistants after applying all row edits
+                    if bool(st.session_state.get("auto_assign_assistants", True)):
+                        only_empty = bool(st.session_state.get("auto_assign_only_empty", True))
+                        for ix in sorted(allocation_candidates):
+                            _auto_fill_assistants_for_row(df_updated, ix, only_fill_empty=only_empty)
+                    
+                    # Write back to storage (manual save always persists)
+                    save_data(df_updated, message="Schedule updated!")
+                    st.session_state.manual_save_triggered = False
+                    st.session_state.unsaved_df = None
+                    st.session_state.pending_changes = False
+                    st.session_state.pending_changes_reason = ""
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving: {e}")
+                    st.session_state.manual_save_triggered = False
+            else:
+                # Nothing changed; clear the trigger so it doesn't keep firing on rerun
+                st.session_state.manual_save_triggered = False
         else:
-            st.info(f"No data available for '{groupby_column}'.")
-    except Exception as e:
-        st.error(f"Error processing doctor data: {e}")
-else:
-    st.info(f"Column '{groupby_column}' not found or contains only empty values.")
+            st.session_state.manual_save_triggered = False
+    
+    if sched_view == "Schedule by OP":
+        # ================ Per Chair Tabs ================
+        st.markdown("###  Schedule by OP")
+        
+        unique_ops = sorted(df["OP"].dropna().unique())
+        
+        if unique_ops:
+            tabs = st.tabs([str(op) for op in unique_ops])
+            for tab, op in zip(tabs, unique_ops):
+                with tab:
+                    op_df = df[
+                        (df["OP"] == op)
+                        & ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED", na=True)
+                    ]
+                    display_op = op_df[[
+                        "Patient ID",
+                        "Patient Name",
+                        "In Time Obj",
+                        "Out Time Obj",
+                        "Procedure",
+                        "DR.",
+                        "OP",
+                        "FIRST",
+                        "SECOND",
+                        "Third",
+                        "CASE PAPER",
+                        "SUCTION",
+                        "CLEANING",
+                        "STATUS",
+                        "STATUS_CHANGED_AT",
+                        "ACTUAL_START_AT",
+                        "ACTUAL_END_AT",
+                    ]].copy()
+                    display_op = display_op.rename(columns={"In Time Obj": "In Time", "Out Time Obj": "Out Time"})
+                    # Preserve original index for mapping edits back to df_raw
+                    display_op["_orig_idx"] = display_op.index
+                    display_op = display_op.reset_index(drop=True)
+                    # Ensure time objects are preserved; Streamlit TimeColumn edits best with None for missing
+                    display_op["In Time"] = display_op["In Time"].apply(lambda v: v if isinstance(v, time_type) else None)
+                    display_op["Out Time"] = display_op["Out Time"].apply(lambda v: v if isinstance(v, time_type) else None)
+        
+                    # Force correct dtypes for Streamlit compatibility
+                    # Text columns
+                    for col in ["Patient ID", "Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "OP", "STATUS"]:
+                        if col in display_op.columns:
+                            display_op[col] = display_op[col].astype("string").replace('nan', '')
+                    # Number column
+                    if "Overtime (min)" in display_op.columns:
+                        display_op["Overtime (min)"] = pd.to_numeric(display_op["Overtime (min)"], errors="coerce")
+                    # Checkbox columns
+                    for col in ["SUCTION", "CLEANING"]:
+                        if col in display_op.columns:
+                            display_op[col] = display_op[col].astype("boolean")
+        
+                    display_op["Overtime (min)"] = op_df.apply(_compute_overtime_min, axis=1)
+        
+                    edited_op = st.data_editor(
+                        display_op, 
+                        width="stretch", 
+                        key=f"op_{str(op).replace(' ', '_')}_editor", 
+                        hide_index=True,
+                        disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
+                        column_config={
+                            "_orig_idx": None,
+                            "Patient ID": st.column_config.TextColumn(label="Patient ID", required=False),
+                            "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
+                            "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
+                            "DR.": st.column_config.SelectboxColumn(
+                                label="DR.",
+                                options=DOCTOR_OPTIONS,
+                                required=False
+                            ),
+                            "OP": st.column_config.SelectboxColumn(
+                                label="OP",
+                                options=["OP 1", "OP 2", "OP 3", "OP 4"],
+                                required=False
+                            ),
+                            "FIRST": st.column_config.SelectboxColumn(
+                                label="FIRST",
+                                options=ASSISTANT_OPTIONS,
+                                required=False
+                            ),
+                            "SECOND": st.column_config.SelectboxColumn(
+                                label="SECOND",
+                                options=ASSISTANT_OPTIONS,
+                                required=False
+                            ),
+                            "Third": st.column_config.SelectboxColumn(
+                                label="Third",
+                                options=ASSISTANT_OPTIONS,
+                                required=False
+                            ),
+                            "CASE PAPER": st.column_config.SelectboxColumn(
+                                label="CASE PAPER",
+                                options=ASSISTANT_OPTIONS,
+                                required=False
+                            ),
+                            "STATUS_CHANGED_AT": st.column_config.TextColumn(label="Status Changed At"),
+                            "ACTUAL_START_AT": st.column_config.TextColumn(label="Actual Start"),
+                            "ACTUAL_END_AT": st.column_config.TextColumn(label="Actual End"),
+                            "Overtime (min)": st.column_config.NumberColumn(label="Overtime (min)"),
+                            "STATUS": st.column_config.SelectboxColumn(
+                                label="STATUS",
+                                options=STATUS_OPTIONS,
+                                required=False
+                            )
+                        }
+                    )
+        
+                    # Persist edits from OP tabs
+                    if edited_op is not None:
+                        op_has_changes = False
+                        if not edited_op.equals(display_op):
+                            for col in edited_op.columns:
+                                if col not in ["In Time", "Out Time", "_orig_idx"]:
+                                    if not (edited_op[col] == display_op[col]).all():
+                                        op_has_changes = True
+                                        break
+                            if not op_has_changes:
+                                for col in ["In Time", "Out Time"]:
+                                    if col in edited_op.columns:
+                                        edited_times = edited_op[col].astype(str)
+                                        display_times = display_op[col].astype(str)
+                                        if not (edited_times == display_times).all():
+                                            op_has_changes = True
+                                            break
+        
+                        if op_has_changes:
+                            try:
+                                df_updated = df_raw.copy()
+                                allocation_candidates: set[int] = set()
+                                for _, row in edited_op.iterrows():
+                                    orig_idx_raw = row.get("_orig_idx")
+                                    if pd.isna(orig_idx_raw):
+                                        orig_idx_raw = len(df_updated)
+                                    orig_idx = int(orig_idx_raw)
+        
+                                    is_new_row = (orig_idx < 0) or (orig_idx >= len(df_updated))
+                                    if is_new_row:
+                                        base_row = {col: "" for col in df_updated.columns}
+                                        if "REMINDER_ROW_ID" in base_row:
+                                            base_row["REMINDER_ROW_ID"] = str(uuid.uuid4())
+                                        if "REMINDER_SNOOZE_UNTIL" in base_row:
+                                            base_row["REMINDER_SNOOZE_UNTIL"] = pd.NA
+                                        if "REMINDER_DISMISSED" in base_row:
+                                            base_row["REMINDER_DISMISSED"] = False
+                                        if "STATUS" in base_row and not base_row.get("STATUS"):
+                                            base_row["STATUS"] = "WAITING"
+                                        df_updated = pd.concat([df_updated, pd.DataFrame([base_row])], ignore_index=True)
+                                        orig_idx = len(df_updated) - 1
+        
+                                    old_status_norm = ""
+                                    try:
+                                        if (not is_new_row) and ("STATUS" in df_raw.columns) and (orig_idx < len(df_raw)):
+                                            old_status_norm = str(df_raw.iloc[orig_idx, df_raw.columns.get_loc("STATUS")]).strip().upper()
+                                    except Exception:
+                                        old_status_norm = ""
+        
+                                    # Patient ID
+                                    patient_id = str(row.get("Patient ID", "")).strip()
+                                    if "Patient ID" in df_updated.columns:
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient ID")] = patient_id
+        
+                                    # Patient Name
+                                    patient_name_raw = row.get("Patient Name", "")
+                                    patient_name = "" if pd.isna(patient_name_raw) else str(patient_name_raw).strip()
+                                    if patient_name == "":
+                                        for c in df_updated.columns:
+                                            if c == "REMINDER_ROW_ID":
+                                                continue
+                                            if c == "REMINDER_SNOOZE_UNTIL":
+                                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = pd.NA
+                                                continue
+                                            if c == "REMINDER_DISMISSED":
+                                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = False
+                                                continue
+                                            df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = ""
+                                        continue
+                                    if "Patient Name" in df_updated.columns:
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("Patient Name")] = patient_name
+        
+                                    # Times -> canonical HH:MM strings
+                                    if "In Time" in df_updated.columns:
+                                        t = _coerce_to_time_obj(row.get("In Time"))
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("In Time")] = (
+                                            f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
+                                        )
+                                    if "Out Time" in df_updated.columns:
+                                        t = _coerce_to_time_obj(row.get("Out Time"))
+                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("Out Time")] = (
+                                            f"{t.hour:02d}:{t.minute:02d}" if t is not None else ""
+                                        )
+        
+                                    for c in ["Procedure", "DR.", "OP", "FIRST", "SECOND", "Third", "CASE PAPER", "STATUS"]:
+                                        if c in row.index and c in df_updated.columns:
+                                            val = row.get(c)
+                                            clean_val = str(val).strip() if val and str(val) != "nan" else ""
+                                            df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = clean_val
+        
+                                    # Time tracking: update timestamps + log on STATUS changes
+                                    try:
+                                        if "STATUS" in df_updated.columns:
+                                            new_status_norm = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS")]).strip().upper()
+                                            if new_status_norm and new_status_norm != old_status_norm:
+                                                ts = _now_ist_str()
+                                                if "STATUS_CHANGED_AT" in df_updated.columns:
+                                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS_CHANGED_AT")] = ts
+        
+                                                if ("ON GOING" in new_status_norm or "ONGOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
+                                                    cur = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_START_AT")]).strip()
+                                                    if not cur or cur.lower() in {"nan", "none"}:
+                                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_START_AT")] = ts
+                                                if ("DONE" in new_status_norm or "COMPLETED" in new_status_norm) and "ACTUAL_END_AT" in df_updated.columns:
+                                                    cur = str(df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_END_AT")]).strip()
+                                                    if not cur or cur.lower() in {"nan", "none"}:
+                                                        df_updated.iloc[orig_idx, df_updated.columns.get_loc("ACTUAL_END_AT")] = ts
+        
+                                                if "STATUS_LOG" in df_updated.columns:
+                                                    existing_log = ""
+                                                    try:
+                                                        if (not is_new_row) and (orig_idx < len(df_raw)) and ("STATUS_LOG" in df_raw.columns):
+                                                            existing_log = str(df_raw.iloc[orig_idx, df_raw.columns.get_loc("STATUS_LOG")])
+                                                    except Exception:
+                                                        existing_log = ""
+                                                    df_updated.iloc[orig_idx, df_updated.columns.get_loc("STATUS_LOG")] = _append_status_log(
+                                                        existing_log,
+                                                        {"at": ts, "from": old_status_norm, "to": new_status_norm},
+                                                    )
+                                    except Exception:
+                                        pass
+        
+                                    allocation_candidates.add(orig_idx)
+        
+                                    for c in ["SUCTION", "CLEANING"]:
+                                        if c in row.index and c in df_updated.columns:
+                                            val = row.get(c)
+                                            if pd.isna(val) or val is None or val is False:
+                                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = ""
+                                            elif val is True:
+                                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = "✓"
+                                            else:
+                                                df_updated.iloc[orig_idx, df_updated.columns.get_loc(c)] = ""
+        
+                                if bool(st.session_state.get("auto_assign_assistants", True)):
+                                    only_empty = bool(st.session_state.get("auto_assign_only_empty", True))
+                                    for ix in sorted(allocation_candidates):
+                                        _auto_fill_assistants_for_row(df_updated, ix, only_fill_empty=only_empty)
+        
+                                _maybe_save(df_updated, message=f"Schedule updated for {op}!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving {op} edits: {e}")
+        else:
+            st.info("No chair data available.")
+        
+        
+    if category in ("Scheduling", "Doctors") and (doctor_view in (None, "Summary", "Per-Doctor Schedule") or category == "Scheduling"):
 
+        # ================ Doctor Statistics ================
+        st.markdown("### 👨‍⚕️ Schedule Summary by Doctor")
+        groupby_column = "DR."
+        if groupby_column in df.columns and not df[groupby_column].isnull().all():
+            try:
+                doctor_procedures = df[df["DR."].notna()].groupby("DR.").size().reset_index(name="Total Procedures")
+                doctor_procedures = doctor_procedures.reset_index(drop=True)
+                if not doctor_procedures.empty:
+                    edited_doctor = st.data_editor(doctor_procedures, width="stretch", key="doctor_editor", hide_index=True)
+                else:
+                    st.info(f"No data available for '{groupby_column}'.")
+            except Exception as e:
+                st.error(f"Error processing doctor data: {e}")
+        else:
+            st.info(f"Column '{groupby_column}' not found or contains only empty values.")
+        
 # ================ ASSISTANT AVAILABILITY DASHBOARD ================
-st.markdown("### 👥 Assistant Availability Dashboard")
-st.markdown("---")
-
-# Get current status of all assistants
-assistant_status = get_current_assistant_status(df)
-
-def _norm_status_value(value: Any) -> str:
-    try:
-        s = str(value or "").strip().upper()
-    except Exception:
-        s = ""
-    return s if s else "UNKNOWN"
-
-assistant_entries: list[dict] = []
-for assistant in ALL_ASSISTANTS:
-    raw_name = assistant.strip().upper()
-    info = dict(assistant_status.get(raw_name, {}))
-    if not info:
-        info = {"status": "UNKNOWN", "reason": "No schedule"}
-    if not info.get("department"):
-        info["department"] = get_department_for_assistant(raw_name)
-    if not info.get("status"):
-        info["status"] = "UNKNOWN"
-    assistant_entries.append({
-        "name": assistant.title(),
-        "raw_name": raw_name,
-        "info": info,
-    })
-
-assistant_lookup = {entry["raw_name"]: entry for entry in assistant_entries}
-
-# Create tabs for each department
-dept_tabs = st.tabs(["📊 All Assistants", "🦷 PROSTHO Department", "🔬 ENDO Department"])
-
-with dept_tabs[0]:
-
-    # Calculate numbers before rendering HTML
-    total_count = len(assistant_entries)
-    # Normalize status and include alternate status values for busy and blocked
-    def is_free(status):
-        return status in ["FREE"]
-    def is_busy(status):
-        return status in ["BUSY", "ON GOING", "ARRIVED"]
-    def is_blocked(status):
-        return status in ["BLOCKED", "CANCELLED", "SHIFTED"]
-
-    free_count = sum(1 for entry in assistant_entries if is_free(_norm_status_value(entry["info"].get("status"))))
-    busy_count = sum(1 for entry in assistant_entries if is_busy(_norm_status_value(entry["info"].get("status"))))
-    blocked_count = sum(1 for entry in assistant_entries if is_blocked(_norm_status_value(entry["info"].get("status"))))
-
-    st.markdown(f"""
-    <div style='display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.2rem;'>
-        <div style='background: var(--glass-bg, #f5f5f5); border: 1.5px solid var(--glass-border, #c9bbb0); border-radius: 1.2rem; padding: 1.2rem 2.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); min-width: 220px;'>
-            <div style='font-size: 2.2rem; font-weight: 700; color: var(--text-primary, #111b26); margin-bottom: 0.2rem;'>Overview</div>
-            <div style='font-size: 1.1rem; color: var(--text-secondary, #99582f);'>Current Assistant Status</div>
+if category == "Assistants" and assist_view == "Availability":
+    st.markdown("### 👥 Assistant Availability Dashboard")
+    st.markdown("---")
+    
+    # Get current status of all assistants
+    assistant_status = get_current_assistant_status(df)
+    
+    def _norm_status_value(value: Any) -> str:
+        try:
+            s = str(value or "").strip().upper()
+        except Exception:
+            s = ""
+        return s if s else "UNKNOWN"
+    
+    assistant_entries: list[dict] = []
+    for assistant in ALL_ASSISTANTS:
+        raw_name = assistant.strip().upper()
+        info = dict(assistant_status.get(raw_name, {}))
+        if not info:
+            info = {"status": "UNKNOWN", "reason": "No schedule"}
+        if not info.get("department"):
+            info["department"] = get_department_for_assistant(raw_name)
+        if not info.get("status"):
+            info["status"] = "UNKNOWN"
+        assistant_entries.append({
+            "name": assistant.title(),
+            "raw_name": raw_name,
+            "info": info,
+        })
+    
+    assistant_lookup = {entry["raw_name"]: entry for entry in assistant_entries}
+    
+    # Create tabs for each department
+    dept_tabs = st.tabs(["📊 All Assistants", "🦷 PROSTHO Department", "🔬 ENDO Department"])
+    
+    with dept_tabs[0]:
+    
+        # Calculate numbers before rendering HTML
+        total_count = len(assistant_entries)
+        # Normalize status and include alternate status values for busy and blocked
+        def is_free(status):
+            return status in ["FREE"]
+        def is_busy(status):
+            return status in ["BUSY", "ON GOING", "ARRIVED"]
+        def is_blocked(status):
+            return status in ["BLOCKED", "CANCELLED", "SHIFTED"]
+    
+        free_count = sum(1 for entry in assistant_entries if is_free(_norm_status_value(entry["info"].get("status"))))
+        busy_count = sum(1 for entry in assistant_entries if is_busy(_norm_status_value(entry["info"].get("status"))))
+        blocked_count = sum(1 for entry in assistant_entries if is_blocked(_norm_status_value(entry["info"].get("status"))))
+    
+        st.markdown(f"""
+        <div style='display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.2rem;'>
+            <div style='background: var(--glass-bg, #f5f5f5); border: 1.5px solid var(--glass-border, #c9bbb0); border-radius: 1.2rem; padding: 1.2rem 2.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); min-width: 220px;'>
+                <div style='font-size: 2.2rem; font-weight: 700; color: var(--text-primary, #111b26); margin-bottom: 0.2rem;'>Overview</div>
+                <div style='font-size: 1.1rem; color: var(--text-secondary, #99582f);'>Current Assistant Status</div>
+            </div>
+            <div style='display: flex; gap: 1.2rem;'>
+                <div style='background: #10b98122; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #10b981;'>{free_count}</div>
+                    <div style='font-size: 1rem; color: #10b981;'>🟢 Free</div>
+                </div>
+                <div style='background: #ef444422; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #ef4444;'>{busy_count}</div>
+                    <div style='font-size: 1rem; color: #ef4444;'>🔴 Busy</div>
+                </div>
+                <div style='background: #f59e0b22; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #f59e0b;'>{blocked_count}</div>
+                    <div style='font-size: 1rem; color: #f59e0b;'>🚫 Blocked</div>
+                </div>
+                <div style='background: #c9bbb022; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #99582f;'>{total_count}</div>
+                    <div style='font-size: 1rem; color: #99582f;'>Total</div>
+                </div>
+            </div>
         </div>
-        <div style='display: flex; gap: 1.2rem;'>
-            <div style='background: #10b98122; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                <div style='font-size: 1.6rem; font-weight: 600; color: #10b981;'>{free_count}</div>
-                <div style='font-size: 1rem; color: #10b981;'>🟢 Free</div>
-            </div>
-            <div style='background: #ef444422; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                <div style='font-size: 1.6rem; font-weight: 600; color: #ef4444;'>{busy_count}</div>
-                <div style='font-size: 1rem; color: #ef4444;'>🔴 Busy</div>
-            </div>
-            <div style='background: #f59e0b22; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                <div style='font-size: 1.6rem; font-weight: 600; color: #f59e0b;'>{blocked_count}</div>
-                <div style='font-size: 1rem; color: #f59e0b;'>🚫 Blocked</div>
-            </div>
-            <div style='background: #c9bbb022; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                <div style='font-size: 1.6rem; font-weight: 600; color: #99582f;'>{total_count}</div>
-                <div style='font-size: 1rem; color: #99582f;'>Total</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("#### Filter Assistants")
-    status_label_map = {
-        "FREE": "🟢 Free",
-        "BUSY": "🔴 Busy",
-        "BLOCKED": "🚫 Blocked",
-        "UNKNOWN": "❔ Unknown",
-    }
-    filter_options = list(status_label_map.keys())
-    default_filter = [opt for opt in filter_options if opt != "UNKNOWN"]
+        """, unsafe_allow_html=True)
     
-    # Initialize session state for filter if not set
-    if "assistant_status_filter" not in st.session_state:
-        st.session_state.assistant_status_filter = default_filter
-    
-    selected_statuses = st.multiselect(
-        "Show statuses",
-        options=filter_options,
-        default=None,  # Use session state instead
-        format_func=lambda x: status_label_map.get(x, x.title()),
-        key="assistant_status_filter",
-    )
-    st.caption("💡 Use the filter to focus on assistants who are free, busy, or currently blocked.")
-
-    if selected_statuses:
-        filtered_entries = [entry for entry in assistant_entries if _norm_status_value(entry["info"].get("status")) in selected_statuses]
-    else:
-        filtered_entries = assistant_entries
-
-    if filtered_entries:
-        st.markdown(f"#### Showing {len(filtered_entries)} Assistant{'s' if len(filtered_entries) != 1 else ''}")
-        _render_assistant_cards(filtered_entries)
-    else:
-        st.info("No assistants match the selected filters.")
-
-with dept_tabs[1]:
-    st.markdown("#### PROSTHO Department Assistants")
-    prostho_entries: list[dict] = []
-    for assistant in DEPARTMENTS["PROSTHO"]["assistants"]:
-        entry = assistant_lookup.get(assistant.upper())
-        if entry is None:
-            fallback_info = {
-                "status": "UNKNOWN",
-                "reason": "No schedule",
-                "department": "PROSTHO",
-            }
-            entry = {"name": assistant.title(), "raw_name": assistant.upper(), "info": fallback_info}
-        prostho_entries.append(entry)
-
-    prostho_counts: dict[str, int] = {}
-    for entry in prostho_entries:
-        status_key = _norm_status_value(entry["info"].get("status"))
-        prostho_counts[status_key] = prostho_counts.get(status_key, 0) + 1
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("🟢 Free", prostho_counts.get('FREE', 0))
-    with col2:
-        st.metric("🔴 Busy", prostho_counts.get('BUSY', 0))
-    with col3:
-        st.metric("🚫 Blocked", prostho_counts.get('BLOCKED', 0))
-    
-    _render_assistant_cards(prostho_entries)
-
-with dept_tabs[2]:
-    st.markdown("#### ENDO Department Assistants")
-    endo_entries: list[dict] = []
-    for assistant in DEPARTMENTS["ENDO"]["assistants"]:
-        entry = assistant_lookup.get(assistant.upper())
-        if entry is None:
-            fallback_info = {
-                "status": "UNKNOWN",
-                "reason": "No schedule",
-                "department": "ENDO",
-            }
-            entry = {"name": assistant.title(), "raw_name": assistant.upper(), "info": fallback_info}
-        endo_entries.append(entry)
-
-    endo_counts: dict[str, int] = {}
-    for entry in endo_entries:
-        status_key = _norm_status_value(entry["info"].get("status"))
-        endo_counts[status_key] = endo_counts.get(status_key, 0) + 1
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("🟢 Free", endo_counts.get('FREE', 0))
-    with col2:
-        st.metric("🔴 Busy", endo_counts.get('BUSY', 0))
-    with col3:
-        st.metric("🚫 Blocked", endo_counts.get('BLOCKED', 0))
-    
-    _render_assistant_cards(endo_entries)
-# ================ AUTOMATIC ASSISTANT ALLOCATION ================
-with st.expander("🔄 Automatic Assistant Allocation", expanded=False):
-    st.caption("Automatically assign assistants based on department, doctor, and availability")
-    
-    col_doc, col_in, col_out = st.columns(3)
-    
-    with col_doc:
-        alloc_doctor = st.selectbox(
-            "Select Doctor",
-            options=[""] + ALL_DOCTORS,
-            key="alloc_doctor_select"
+        st.markdown("#### Filter Assistants")
+        status_label_map = {
+            "FREE": "🟢 Free",
+            "BUSY": "🔴 Busy",
+            "BLOCKED": "🚫 Blocked",
+            "UNKNOWN": "❔ Unknown",
+        }
+        filter_options = list(status_label_map.keys())
+        default_filter = [opt for opt in filter_options if opt != "UNKNOWN"]
+        
+        # Initialize session state for filter if not set
+        if "assistant_status_filter" not in st.session_state:
+            st.session_state.assistant_status_filter = default_filter
+        
+        selected_statuses = st.multiselect(
+            "Show statuses",
+            options=filter_options,
+            default=None,  # Use session state instead
+            format_func=lambda x: status_label_map.get(x, x.title()),
+            key="assistant_status_filter",
         )
+        st.caption("💡 Use the filter to focus on assistants who are free, busy, or currently blocked.")
     
-    with col_in:
-        alloc_in_time = st.time_input("Appointment Start", value=time_type(9, 0), key="alloc_in_time")
+        if selected_statuses:
+            filtered_entries = [entry for entry in assistant_entries if _norm_status_value(entry["info"].get("status")) in selected_statuses]
+        else:
+            filtered_entries = assistant_entries
     
-    with col_out:
-        alloc_out_time = st.time_input("Appointment End", value=time_type(10, 0), key="alloc_out_time")
+        if filtered_entries:
+            st.markdown(f"#### Showing {len(filtered_entries)} Assistant{'s' if len(filtered_entries) != 1 else ''}")
+            _render_assistant_cards(filtered_entries)
+        else:
+            st.info("No assistants match the selected filters.")
     
-    if alloc_doctor:
-        dept = get_department_for_doctor(alloc_doctor)
-        st.info(f"Department: **{dept}**")
+    with dept_tabs[1]:
+        st.markdown("#### PROSTHO Department Assistants")
+        prostho_entries: list[dict] = []
+        for assistant in DEPARTMENTS["PROSTHO"]["assistants"]:
+            entry = assistant_lookup.get(assistant.upper())
+            if entry is None:
+                fallback_info = {
+                    "status": "UNKNOWN",
+                    "reason": "No schedule",
+                    "department": "PROSTHO",
+                }
+                entry = {"name": assistant.title(), "raw_name": assistant.upper(), "info": fallback_info}
+            prostho_entries.append(entry)
+    
+        prostho_counts: dict[str, int] = {}
+        for entry in prostho_entries:
+            status_key = _norm_status_value(entry["info"].get("status"))
+            prostho_counts[status_key] = prostho_counts.get(status_key, 0) + 1
         
-        # Get available assistants
-        available = get_available_assistants(dept, alloc_in_time, alloc_out_time, df)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("🟢 Free", prostho_counts.get('FREE', 0))
+        with col2:
+            st.metric("🔴 Busy", prostho_counts.get('BUSY', 0))
+        with col3:
+            st.metric("🚫 Blocked", prostho_counts.get('BLOCKED', 0))
         
-        st.markdown("**Assistant Availability:**")
-        for a in available:
-            if a["available"]:
-                st.success(f"✅ {a['name']} - Available")
-            else:
-                st.error(f"❌ {a['name']} - {a['reason']}")
+        _render_assistant_cards(prostho_entries)
+    
+    with dept_tabs[2]:
+        st.markdown("#### ENDO Department Assistants")
+        endo_entries: list[dict] = []
+        for assistant in DEPARTMENTS["ENDO"]["assistants"]:
+            entry = assistant_lookup.get(assistant.upper())
+            if entry is None:
+                fallback_info = {
+                    "status": "UNKNOWN",
+                    "reason": "No schedule",
+                    "department": "ENDO",
+                }
+                entry = {"name": assistant.title(), "raw_name": assistant.upper(), "info": fallback_info}
+            endo_entries.append(entry)
+    
+        endo_counts: dict[str, int] = {}
+        for entry in endo_entries:
+            status_key = _norm_status_value(entry["info"].get("status"))
+            endo_counts[status_key] = endo_counts.get(status_key, 0) + 1
         
-        # Auto-allocate button
-        if st.button("🎯 Get Recommended Allocation", key="auto_alloc_btn"):
-            allocation = auto_allocate_assistants(alloc_doctor, alloc_in_time, alloc_out_time, df)
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("🟢 Free", endo_counts.get('FREE', 0))
+        with col2:
+            st.metric("🔴 Busy", endo_counts.get('BUSY', 0))
+        with col3:
+            st.metric("🚫 Blocked", endo_counts.get('BLOCKED', 0))
+        
+        _render_assistant_cards(endo_entries)
+if category == "Assistants" and assist_view == "Auto Allocation":
+    # ================ AUTOMATIC ASSISTANT ALLOCATION ================
+    with st.expander("🔄 Automatic Assistant Allocation", expanded=False):
+        st.caption("Automatically assign assistants based on department, doctor, and availability")
+        
+        col_doc, col_in, col_out = st.columns(3)
+        
+        with col_doc:
+            alloc_doctor = st.selectbox(
+                "Select Doctor",
+                options=[""] + ALL_DOCTORS,
+                key="alloc_doctor_select"
+            )
+        
+        with col_in:
+            alloc_in_time = st.time_input("Appointment Start", value=time_type(9, 0), key="alloc_in_time")
+        
+        with col_out:
+            alloc_out_time = st.time_input("Appointment End", value=time_type(10, 0), key="alloc_out_time")
+        
+        if alloc_doctor:
+            dept = get_department_for_doctor(alloc_doctor)
+            st.info(f"Department: **{dept}**")
             
-            if any(allocation.values()):
-                st.success("**Recommended Allocation:**")
-                if allocation["FIRST"]:
-                    st.write(f"• **FIRST**: {allocation['FIRST']}")
-                if allocation["SECOND"]:
-                    st.write(f"• **SECOND**: {allocation['SECOND']}")
-                if allocation["Third"]:
-                    st.write(f"• **Third**: {allocation['Third']}")
-            else:
-                st.warning("No available assistants found for this time slot in the department.")
-    else:
-        st.caption("Select a doctor to see department-specific assistant availability")
+            # Get available assistants
+            available = get_available_assistants(dept, alloc_in_time, alloc_out_time, df)
+            
+            st.markdown("**Assistant Availability:**")
+            for a in available:
+                if a["available"]:
+                    st.success(f"✅ {a['name']} - Available")
+                else:
+                    st.error(f"❌ {a['name']} - {a['reason']}")
+            
+            # Auto-allocate button
+            if st.button("🎯 Get Recommended Allocation", key="auto_alloc_btn"):
+                allocation = auto_allocate_assistants(alloc_doctor, alloc_in_time, alloc_out_time, df)
+                
+                if any(allocation.values()):
+                    st.success("**Recommended Allocation:**")
+                    if allocation["FIRST"]:
+                        st.write(f"• **FIRST**: {allocation['FIRST']}")
+                    if allocation["SECOND"]:
+                        st.write(f"• **SECOND**: {allocation['SECOND']}")
+                    if allocation["Third"]:
+                        st.write(f"• **Third**: {allocation['Third']}")
+                else:
+                    st.warning("No available assistants found for this time slot in the department.")
+        else:
+            st.caption("Select a doctor to see department-specific assistant availability")
+    
+if category == "Assistants" and assist_view == "Workload":
+    # ================ ASSISTANT WORKLOAD SUMMARY ================
+    st.markdown("### 📊 Assistant Workload Summary")
+    
+    # Count appointments per assistant
+    assistant_workload = {}
+    for assistant in ALL_ASSISTANTS:
+        schedule = get_assistant_schedule(assistant.upper(), df)
+        assistant_workload[assistant] = len(schedule)
+    
+    # Create workload dataframe
+    workload_data = []
+    for assistant, count in sorted(assistant_workload.items(), key=lambda x: x[1], reverse=True):
+        dept = get_department_for_assistant(assistant.upper())
+        workload_data.append({
+            "Assistant": assistant,
+            "Department": dept,
+            "Appointments Today": count
+        })
+    
+    if workload_data:
+        st.dataframe(pd.DataFrame(workload_data), use_container_width=True, hide_index=True)
+    
+if category == "Assistants" and assist_view == "Attendance":
+    # ================ ASSISTANTS ATTENDANCE (EXPERIMENTAL) ================
+    with st.expander("🕒 Assistants Attendance", expanded=False):
+        try:
+            render_assistant_attendance_tab(df if 'df' in locals() else pd.DataFrame(), file_path)
+        except Exception as e:
+            st.error(f"Unable to load attendance editor: {e}")
 
-# ================ ASSISTANT WORKLOAD SUMMARY ================
-st.markdown("### 📊 Assistant Workload Summary")
-
-# Count appointments per assistant
-assistant_workload = {}
-for assistant in ALL_ASSISTANTS:
-    schedule = get_assistant_schedule(assistant.upper(), df)
-    assistant_workload[assistant] = len(schedule)
-
-# Create workload dataframe
-workload_data = []
-for assistant, count in sorted(assistant_workload.items(), key=lambda x: x[1], reverse=True):
-    dept = get_department_for_assistant(assistant.upper())
-    workload_data.append({
-        "Assistant": assistant,
-        "Department": dept,
-        "Appointments Today": count
-    })
-
-if workload_data:
-    st.dataframe(pd.DataFrame(workload_data), use_container_width=True, hide_index=True)
-
-# ================ ASSISTANTS ATTENDANCE (EXPERIMENTAL) ================
-with st.expander("🕒 Assistants Attendance", expanded=False):
-    try:
-        render_assistant_attendance_tab(df if 'df' in locals() else pd.DataFrame(), file_path)
-    except Exception as e:
-        st.error(f"Unable to load attendance editor: {e}")
+# ================ ADMIN / SETTINGS ================
+if category == "Admin/Settings":
+    st.markdown("### 🔧 Admin / Settings")
+    st.write(f"Using Supabase: {USE_SUPABASE}")
+    st.write(f"Using Google Sheets: {USE_GOOGLE_SHEETS}")
+    st.write(f"Excel path: {file_path}")
