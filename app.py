@@ -185,7 +185,7 @@ def render_assistant_attendance_tab(schedule_df, excel_path):
         att_df = pd.concat([att_df, edited_final], ignore_index=True)
         save_attendance_sheet(excel_path, att_df)
         st.success("Attendance saved!")
-        st.experimental_rerun()
+        st.rerun()
 
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
