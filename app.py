@@ -5287,7 +5287,7 @@ if category == "Scheduling":
     sched_view = st.sidebar.radio(
         "Scheduling",
         ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
-        index=0,
+        index=4,
         key="nav_sched",
     )
 elif category == "Assistants":
