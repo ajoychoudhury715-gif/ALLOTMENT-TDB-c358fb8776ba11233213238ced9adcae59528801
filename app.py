@@ -1016,8 +1016,9 @@ st.markdown(
     }}
 
     /* Tighten gap below sticky header */
-    [data-testid="stAppViewContainer"] > .main {{
-        padding-top: 0.75rem !important;
+    .block-container {{
+        padding-top: 0.5rem !important;
+        padding-bottom: 1rem !important;
     }}
 
     /* Cards & tables */
