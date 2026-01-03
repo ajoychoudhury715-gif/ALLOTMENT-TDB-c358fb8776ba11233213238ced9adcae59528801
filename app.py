@@ -904,7 +904,7 @@ def render_schedule_summary_chips(df: pd.DataFrame):
     st.markdown(f'<div class="summary-row">{chips_html}</div>', unsafe_allow_html=True)
 
 def render_compact_dashboard(df_schedule: pd.DataFrame):
-    """Compact single-screen dashboard with weekly off + schedule summary (styled like mock)."""
+    """Compact single-screen dashboard with weekly off + schedule summary (pixel-matched layout)."""
     st.markdown(
         """
         <style>
@@ -915,175 +915,159 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         }
         .block-container {padding-top:0.3rem !important;}
         h1,h2,h3{margin:0.3rem 0 !important;}
-        div[data-testid="stMetric"]{padding:0.6rem 0.8rem !important;border-radius:12px; background:#f9fbfd; border:1px solid #e5e7eb;}
-        .dash-shell {
+        .dash-title {text-align:center; color:#1f3a5f; font-size:28px; font-weight:800; letter-spacing:0.5px;}
+        .dash-subtitle {text-align:center; margin-top:-10px; color:#1f3a5f; font-weight:700;}
+        div[data-testid="stVerticalBlockBorderWrapper"] {
             background: rgba(255,255,255,0.65);
             border: 1px solid rgba(255,255,255,0.6);
             border-radius: 20px;
             box-shadow: 0 24px 50px rgba(18, 44, 66, 0.18);
-            padding: 16px 18px 18px 18px;
-            backdrop-filter: blur(8px);
         }
-        .panel-left {border-right: 1px solid rgba(148,163,184,0.35); padding-right: 12px;}
-        .divider-line {height: 1px; background: rgba(148,163,184,0.4); margin: 14px 0 10px 0;}
-        .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 10px 12px; color: #8c1c13; margin-bottom: 8px;}
+        div[data-testid="stVerticalBlockBorderWrapper"] > div {
+            padding: 16px 18px 18px 18px;
+            border-radius: 20px;
+        }
+        .v-divider {width: 1px; background: rgba(148,163,184,0.5); min-height: 280px; margin: 8px auto;}
+        .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 10px; display:flex; align-items:center; gap:8px;}
+        .panel-title .link {font-size: 14px; opacity: 0.6; margin-left: 4px;}
+        .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 12px; color: #8c1c13; margin-bottom: 8px; display:flex; gap:10px; align-items:center;}
+        .alert-icon {width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ef4444; display:flex; align-items:center; justify-content:center; color:#ef4444; font-weight:700;}
         .alert-title {font-weight:700; margin-bottom:2px;}
         .alert-sub {opacity:0.85;}
-        .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 10px;}
-        .metric-title {font-size: 13px; color:#4b5563;}
+        .manage-pill {background: rgba(255,255,255,0.7); border: 1px solid rgba(203,213,225,0.9); border-radius: 12px; padding: 10px 12px; display:inline-flex; align-items:center; gap:8px; margin-top:6px;}
+        .metric-card {background:#f9fbfd; border:1px solid #e2e8f0; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
+        .metric-title {font-size: 12px; color:#6b7280; letter-spacing:0.6px;}
         .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
-        .btn-primary button {
-            background: #0f7a5f !important;
-            border: 1px solid #0f7a5f !important;
-            color: #fff !important;
-            box-shadow: 0 8px 18px rgba(15,122,95,0.35) !important;
-        }
-        .btn-secondary button {
-            background: #1f3a5f !important;
-            border: 1px solid #1f3a5f !important;
-            color: #fff !important;
-            box-shadow: 0 8px 18px rgba(31,58,95,0.28) !important;
-        }
-        .btn-ghost button {
-            background: #ffffff !important;
-            border: 1px solid #cbd5e1 !important;
-            color: #1f2937 !important;
-        }
-        .search-box input {
-            background: #f5f7fb !important;
-            border-radius: 10px !important;
-            border: 1px solid #cbd5e1 !important;
-        }
-        .sub-card {background: rgba(255,255,255,0.7); border: 1px solid rgba(203,213,225,0.8); border-radius: 12px; padding: 10px 12px; margin-top: 6px; display: inline-block;}
+        button[kind="primary"] {background:#0f7a5f !important; border:1px solid #0f7a5f !important; color:#fff !important; box-shadow:0 8px 18px rgba(15,122,95,0.35) !important;}
+        button[kind="secondary"] {background:#ffffff !important; border:1px solid #cbd5e1 !important; color:#1f2937 !important;}
+        .section-divider {height:1px; background: rgba(148,163,184,0.35); margin: 14px 0;}
+        .search-row input {background:#f5f7fb !important; border-radius:10px !important; border:1px solid #cbd5e1 !important;}
+        [data-testid="stDataFrameContainer"] {border-radius: 14px !important; border: 1px solid rgba(203,213,225,0.9) !important; box-shadow: 0 8px 20px rgba(15,23,42,0.08) !important;}
+        [data-testid="stDataFrameContainer"] thead th {background:#f2f5f8 !important; color:#475569 !important; font-weight:700 !important;}
         .summary-bar {background: rgba(255,255,255,0.75); border: 1px solid rgba(203,213,225,0.8); border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("<div class='compact-dashboard'>", unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align:center; color:#1f3a5f;'>THE DENTAL BOND</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;margin-top:-10px; color:#1f3a5f; font-weight:700;'>Real-time Scheduling Management System</p>", unsafe_allow_html=True)
+    st.markdown("<div class='dash-title'>THE DENTAL BOND</div>", unsafe_allow_html=True)
+    st.markdown("<div class='dash-subtitle'>Real-time Scheduling Management System</div>", unsafe_allow_html=True)
     st.write("")
 
-    st.markdown("<div class='dash-shell'>", unsafe_allow_html=True)
-    left, right = st.columns([1, 2], gap="medium")
+    with st.container(border=True):
+        left, divider, right = st.columns([1.05, 0.04, 1.6], gap="small")
 
-    with left:
-        st.markdown("<div class='panel-left'>", unsafe_allow_html=True)
-        st.markdown("<div class='panel-title'>🗓️ Assistants Weekly Off</div>", unsafe_allow_html=True)
-        today_idx = now_ist().weekday()
-        tomorrow_idx = (today_idx + 1) % 7
-        weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        today_off = WEEKLY_OFF.get(today_idx, [])
-        tomorrow_off = WEEKLY_OFF.get(tomorrow_idx, [])
+        with left:
+            st.markdown("<div class='panel-title'>🗓️ Assistants Weekly Off <span class='link'>🔗</span></div>", unsafe_allow_html=True)
+            today_idx = now_ist().weekday()
+            tomorrow_idx = (today_idx + 1) % 7
+            weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            today_off = WEEKLY_OFF.get(today_idx, [])
+            tomorrow_off = WEEKLY_OFF.get(tomorrow_idx, [])
 
-        if today_off:
-            st.markdown(
-                f"<div class='alert-card'><div class='alert-title'>Today ({weekday_names[today_idx]})</div>"
-                f"<div class='alert-sub'>{', '.join(today_off)} – Cannot be allocated</div></div>",
-                unsafe_allow_html=True,
-            )
+            if today_off:
+                st.markdown(
+                    "<div class='alert-card'>"
+                    "<div class='alert-icon'>⛔</div>"
+                    f"<div><div class='alert-title'>Today ({weekday_names[today_idx]})</div>"
+                    f"<div class='alert-sub'>{', '.join(today_off)} – Cannot be allocated</div></div></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.success(f"Today ({weekday_names[today_idx]}): All assistants available")
+
+            if tomorrow_off:
+                st.markdown(
+                    "<div class='alert-card'>"
+                    "<div class='alert-icon'>⛔</div>"
+                    f"<div><div class='alert-title'>Tomorrow ({weekday_names[tomorrow_idx]})</div>"
+                    f"<div class='alert-sub'>{', '.join(tomorrow_off)} – Cannot be allocated</div></div></div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info(f"Tomorrow ({weekday_names[tomorrow_idx]}): All assistants available")
+
+            st.markdown("<div class='manage-pill'>⚠️ Manage Reminders</div>", unsafe_allow_html=True)
+
+        with divider:
+            st.markdown("<div class='v-divider'></div>", unsafe_allow_html=True)
+
+        with right:
+            st.markdown("<div class='panel-title'>📋 Full Schedule</div>", unsafe_allow_html=True)
+            status_series = df_schedule["STATUS"].astype(str).str.upper().str.strip() if ("STATUS" in df_schedule.columns and not df_schedule.empty) else pd.Series(dtype=str)
+            total = len(status_series)
+            ongoing = status_series.str.contains("ON GOING|ONGOING").sum()
+            waiting = status_series.str.contains("WAITING").sum()
+            arrived = status_series.str.contains("ARRIVED").sum()
+            completed = status_series.str.contains("DONE|COMPLETED").sum()
+            cancelled = status_series.str.contains("CANCEL").sum()
+
+            r1c1, r1c2, r1c3 = st.columns(3, gap="small")
+            r2c1, r2c2, r2c3 = st.columns(3, gap="small")
+            for col, title, val in (
+                (r1c1, "TOTAL", total),
+                (r1c2, "ONGOING", ongoing),
+                (r1c3, "WAITING", waiting),
+                (r2c1, "ARRIVED", arrived),
+                (r2c2, "COMPLETED", completed),
+                (r2c3, "CANCELLED", cancelled),
+            ):
+                col.markdown(
+                    f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-value'>{val}</div></div>",
+                    unsafe_allow_html=True,
+                )
+
+            b1, b2, b3 = st.columns([1.2, 1.2, 1.6], gap="small")
+            with b1:
+                st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", type="primary")
+            with b2:
+                st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", type="secondary")
+            with b3:
+                st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
+
+        st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
+
+        header_left, header_right = st.columns([3, 1], gap="small")
+        with header_left:
+            st.markdown("<div class='panel-title'>📋 Full Schedule</div>", unsafe_allow_html=True)
+        with header_right:
+            st.markdown("<div class='search-row'>", unsafe_allow_html=True)
+            st.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...", key="compact_search")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if df_schedule is None or df_schedule.empty:
+            df_display = pd.DataFrame({
+                "Patient Name": ["AJOY CHOUDHURY", "SHRUTI LAD"],
+                "In Time": ["01:09 AM", "01:09 AM"],
+                "Out Time": ["01:14 AM", "01:14 AM"],
+                "Procedure": ["PLT/INE", "PSE/IENN"],
+                "FIRST": ["DR. HUSAIN", "DR. FARHATH"],
+                "SECOND": ["ANISHA", "LAWANA"],
+                "THIRD": ["NITIN", "MUKHILA"],
+                "CASE PAPER": ["None", "None"],
+                "SUCTION": ["None", "None"],
+                "Status": ["WAITING", "WAITING"],
+            })
         else:
-            st.success(f"Today ({weekday_names[today_idx]}): All assistants available")
+            df_display = df_schedule.copy()
+            rename_map = {}
+            if "Patient Name" not in df_display.columns and "Patient" in df_display.columns:
+                rename_map["Patient"] = "Patient Name"
+            if "DR." in df_display.columns and "Doctor" not in df_display.columns:
+                rename_map["DR."] = "Doctor"
+            df_display = df_display.rename(columns=rename_map)
+            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
+            if desired_cols:
+                df_display = df_display[desired_cols]
+            if "STATUS" in df_display.columns and "Status" not in df_display.columns:
+                df_display = df_display.rename(columns={"STATUS": "Status"})
 
-        if tomorrow_off:
-            st.markdown(
-                f"<div class='alert-card'><div class='alert-title'>Tomorrow ({weekday_names[tomorrow_idx]})</div>"
-                f"<div class='alert-sub'>{', '.join(tomorrow_off)} – Cannot be allocated</div></div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info(f"Tomorrow ({weekday_names[tomorrow_idx]}): All assistants available")
+        st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
 
-        st.markdown(
-            "<div class='sub-card'><span style='color:#f59e0b;'>⚠️</span> Manage Reminders</div>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("<div class='summary-bar'>", unsafe_allow_html=True)
+        with st.expander("📊 Schedule Summary by Doctor", expanded=False):
+            st.write("Summary table / charts here")
         st.markdown("</div>", unsafe_allow_html=True)
-
-    with right:
-        st.markdown("<div class='panel-title'>📅 Full Schedule</div>", unsafe_allow_html=True)
-        status_series = df_schedule["STATUS"].astype(str).str.upper().str.strip() if ("STATUS" in df_schedule.columns and not df_schedule.empty) else pd.Series(dtype=str)
-        total = len(status_series)
-        ongoing = status_series.str.contains("ON GOING|ONGOING").sum()
-        waiting = status_series.str.contains("WAITING").sum()
-        arrived = status_series.str.contains("ARRIVED").sum()
-        completed = status_series.str.contains("DONE|COMPLETED").sum()
-        cancelled = status_series.str.contains("CANCEL").sum()
-
-        c1, c2, c3, c4, c5, c6 = st.columns(6, gap="small")
-        for col, title, val in zip(
-            (c1, c2, c3, c4, c5, c6),
-            ["TOTAL", "ONGOING", "WAITING", "ARRIVED", "COMPLETED", "CANCELLED"],
-            [total, ongoing, waiting, arrived, completed, cancelled],
-        ):
-            col.markdown(
-                f"<div style='background:#f9fbfd;border:1px solid #e2e8f0;border-radius:12px;padding:12px 12px;text-align:center; min-height:80px;'>"
-                f"<div class='metric-title'>{title}</div><div class='metric-value'>{val}</div></div>",
-                unsafe_allow_html=True,
-            )
-
-        b1, b2, b3 = st.columns([1.2, 1.2, 1.6], gap="small")
-        with b1:
-            st.markdown("<div class='btn-primary'>", unsafe_allow_html=True)
-            st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", help="Add Patient")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with b2:
-            st.markdown("<div class='btn-secondary'>", unsafe_allow_html=True)
-            st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", help="Save")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with b3:
-            st.markdown("<div class='btn-ghost'>", unsafe_allow_html=True)
-            st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='divider-line'></div>", unsafe_allow_html=True)
-    header_left, header_right = st.columns([3, 1], gap="small")
-    with header_left:
-        st.markdown("<div class='panel-title'>📋 Full Schedule</div>", unsafe_allow_html=True)
-    with header_right:
-        st.markdown("<div class='search-box'>", unsafe_allow_html=True)
-        st.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...", key="compact_search", help="Type to search")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    if df_schedule is None or df_schedule.empty:
-        df_display = pd.DataFrame({
-            "Patient Name": ["AJOY CHOUDHURY", "SHRUTI LAD"],
-            "In Time": ["01:09 AM", "01:09 AM"],
-            "Out Time": ["01:14 AM", "01:14 AM"],
-            "Procedure": ["PLT/INE", "PSE/IENN"],
-            "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
-            "FIRST": ["ANISHA", "LAWANA"],
-            "SECOND": ["", ""],
-            "THIRD": ["NITIN", "MUKHILA"],
-            "CASE PAPER": ["None", "None"],
-            "SUCTION": ["None", "None"],
-            "Status": ["WAITING", "WAITING"],
-        })
-    else:
-        df_display = df_schedule.copy()
-        rename_map = {}
-        if "Patient Name" not in df_display.columns and "Patient" in df_display.columns:
-            rename_map["Patient"] = "Patient Name"
-        if "DR." in df_display.columns and "Doctor" not in df_display.columns:
-            rename_map["DR."] = "Doctor"
-        df_display = df_display.rename(columns=rename_map)
-        desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
-        if desired_cols:
-            df_display = df_display[desired_cols]
-        # Normalize status column case
-        if "STATUS" in df_display.columns and "Status" not in df_display.columns:
-            df_display = df_display.rename(columns={"STATUS": "Status"})
-
-    st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
-
-    st.markdown("<div class='summary-bar'>", unsafe_allow_html=True)
-    with st.expander("📊 Schedule Summary by Doctor", expanded=False):
-        st.write("Summary table / charts here")
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
