@@ -924,32 +924,27 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             padding: 16px 18px 18px 18px;
             backdrop-filter: blur(8px);
         }
-        .panel-row {display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px;}
         .panel-left {border-right: 1px solid rgba(148,163,184,0.35); padding-right: 12px;}
+        .divider-line {height: 1px; background: rgba(148,163,184,0.4); margin: 14px 0 10px 0;}
         .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 10px 12px; color: #8c1c13; margin-bottom: 8px;}
         .alert-title {font-weight:700; margin-bottom:2px;}
         .alert-sub {opacity:0.85;}
         .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 10px;}
         .metric-title {font-size: 13px; color:#4b5563;}
         .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
-        .control-btn button {
-            width: 100%;
-            border-radius: 10px !important;
-            font-weight: 700 !important;
-        }
-        .primary-btn button {
+        .btn-primary button {
             background: #0f7a5f !important;
             border: 1px solid #0f7a5f !important;
             color: #fff !important;
             box-shadow: 0 8px 18px rgba(15,122,95,0.35) !important;
         }
-        .secondary-btn button {
+        .btn-secondary button {
             background: #1f3a5f !important;
             border: 1px solid #1f3a5f !important;
             color: #fff !important;
             box-shadow: 0 8px 18px rgba(31,58,95,0.28) !important;
         }
-        .ghost-btn button {
+        .btn-ghost button {
             background: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
             color: #1f2937 !important;
@@ -960,20 +955,22 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             border: 1px solid #cbd5e1 !important;
         }
         .sub-card {background: rgba(255,255,255,0.7); border: 1px solid rgba(203,213,225,0.8); border-radius: 12px; padding: 10px 12px; margin-top: 6px; display: inline-block;}
+        .summary-bar {background: rgba(255,255,255,0.75); border: 1px solid rgba(203,213,225,0.8); border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+    st.markdown("<div class='compact-dashboard'>", unsafe_allow_html=True)
     st.markdown("<h2 style='text-align:center; color:#1f3a5f;'>THE DENTAL BOND</h2>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;margin-top:-10px; color:#1f3a5f; font-weight:700;'>Real-time Scheduling Management System</p>", unsafe_allow_html=True)
     st.write("")
 
     st.markdown("<div class='dash-shell'>", unsafe_allow_html=True)
-    st.markdown("<div class='dash-shell'><div class='panel-row'>", unsafe_allow_html=True)
-    left, right = st.columns([1, 1.6], gap="medium")
+    left, right = st.columns([1, 2], gap="medium")
 
     with left:
+        st.markdown("<div class='panel-left'>", unsafe_allow_html=True)
         st.markdown("<div class='panel-title'>🗓️ Assistants Weekly Off</div>", unsafe_allow_html=True)
         today_idx = now_ist().weekday()
         tomorrow_idx = (today_idx + 1) % 7
@@ -1003,6 +1000,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             "<div class='sub-card'><span style='color:#f59e0b;'>⚠️</span> Manage Reminders</div>",
             unsafe_allow_html=True,
         )
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
         st.markdown("<div class='panel-title'>📅 Full Schedule</div>", unsafe_allow_html=True)
@@ -1026,56 +1024,65 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 unsafe_allow_html=True,
             )
 
-        b1, b2, b3, b4 = st.columns([1.2, 1.2, 1.2, 2.5], gap="small")
+        b1, b2, b3 = st.columns([1.2, 1.2, 1.6], gap="small")
         with b1:
+            st.markdown("<div class='btn-primary'>", unsafe_allow_html=True)
             st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", help="Add Patient")
+            st.markdown("</div>", unsafe_allow_html=True)
         with b2:
+            st.markdown("<div class='btn-secondary'>", unsafe_allow_html=True)
             st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", help="Save")
+            st.markdown("</div>", unsafe_allow_html=True)
         with b3:
+            st.markdown("<div class='btn-ghost'>", unsafe_allow_html=True)
             st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
-        with b4:
-            st.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...", key="compact_search", help="Type to search")
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        if df_schedule is None or df_schedule.empty:
-            df_display = pd.DataFrame({
-                "Patient Name": ["AJOY CHOUDHURY", "SHRUTI LAD"],
-                "In Time": ["01:09 AM", "01:09 AM"],
-                "Out Time": ["01:14 AM", "01:14 AM"],
-                "Procedure": ["PLT/INE", "PSE/IENN"],
-                "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
-                "FIRST": ["ANISHA", "LAWANA"],
-                "SECOND": ["", ""],
-                "THIRD": ["NITIN", "MUKHILA"],
-                "CASE PAPER": ["None", "None"],
-                "SUCTION": ["None", "None"],
-                "Status": ["WAITING", "WAITING"],
-            })
-        else:
-            df_display = df_schedule.copy()
-            rename_map = {}
-            if "Patient Name" not in df_display.columns and "Patient" in df_display.columns:
-                rename_map["Patient"] = "Patient Name"
-            if "DR." in df_display.columns and "Doctor" not in df_display.columns:
-                rename_map["DR."] = "Doctor"
-            df_display = df_display.rename(columns=rename_map)
-            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
-            if desired_cols:
-                df_display = df_display[desired_cols]
-            # Normalize status column case
-            if "STATUS" in df_display.columns and "Status" not in df_display.columns:
-                df_display = df_display.rename(columns={"STATUS": "Status"})
+    st.markdown("<div class='divider-line'></div>", unsafe_allow_html=True)
+    header_left, header_right = st.columns([3, 1], gap="small")
+    with header_left:
+        st.markdown("<div class='panel-title'>📋 Full Schedule</div>", unsafe_allow_html=True)
+    with header_right:
+        st.markdown("<div class='search-box'>", unsafe_allow_html=True)
+        st.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...", key="compact_search", help="Type to search")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
+    if df_schedule is None or df_schedule.empty:
+        df_display = pd.DataFrame({
+            "Patient Name": ["AJOY CHOUDHURY", "SHRUTI LAD"],
+            "In Time": ["01:09 AM", "01:09 AM"],
+            "Out Time": ["01:14 AM", "01:14 AM"],
+            "Procedure": ["PLT/INE", "PSE/IENN"],
+            "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
+            "FIRST": ["ANISHA", "LAWANA"],
+            "SECOND": ["", ""],
+            "THIRD": ["NITIN", "MUKHILA"],
+            "CASE PAPER": ["None", "None"],
+            "SUCTION": ["None", "None"],
+            "Status": ["WAITING", "WAITING"],
+        })
+    else:
+        df_display = df_schedule.copy()
+        rename_map = {}
+        if "Patient Name" not in df_display.columns and "Patient" in df_display.columns:
+            rename_map["Patient"] = "Patient Name"
+        if "DR." in df_display.columns and "Doctor" not in df_display.columns:
+            rename_map["DR."] = "Doctor"
+        df_display = df_display.rename(columns=rename_map)
+        desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
+        if desired_cols:
+            df_display = df_display[desired_cols]
+        # Normalize status column case
+        if "STATUS" in df_display.columns and "Status" not in df_display.columns:
+            df_display = df_display.rename(columns={"STATUS": "Status"})
 
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
 
-    st.markdown(" ", unsafe_allow_html=True)
-    st.markdown(
-        "<div class='dash-shell' style='margin-top:10px; padding:10px 12px;'>",
-        unsafe_allow_html=True,
-    )
+    st.markdown("<div class='summary-bar'>", unsafe_allow_html=True)
     with st.expander("📊 Schedule Summary by Doctor", expanded=False):
         st.write("Summary table / charts here")
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
 # Global save-mode flags
