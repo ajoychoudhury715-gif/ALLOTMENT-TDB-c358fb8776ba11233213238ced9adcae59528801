@@ -69,33 +69,34 @@ if "nav_sched" not in st.session_state:
 def inject_white_pastel_sidebar():
     st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #f4f7fb 0%, #ffffff 55%, #1f3a5f 100%);
-        border-right: 1px solid #cbd5e1;
+        background: #f3f3f4;
+        border-right: 1px solid #d9c5b2;
     }
     [data-testid="stSidebarContent"] { padding: 16px 14px; }
     [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
-        background: #fff;
-        border: 1px solid #cbd5e1;
+        background: #f3f3f4;
+        border: 1px solid #d9c5b2;
         border-radius: 16px;
         padding: 10px 12px 8px 12px;
-        box-shadow: 0 8px 24px rgba(25, 42, 81, 0.15);
+        box-shadow: 0 8px 24px rgba(20, 17, 15, 0.15);
     }
     [data-testid="stSidebar"] button {
         border-radius: 14px !important;
         padding: 0.6rem 0.9rem !important;
-        border: 1px solid #1f3a5f !important;
-        background: linear-gradient(180deg, #2e86c1, #1f3a5f) !important;
-        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12) !important;
+        border: 1px solid #34312d !important;
+        background: #34312d !important;
+        box-shadow: 0 10px 22px rgba(20, 17, 15, 0.18) !important;
         font-weight: 700;
     }
-    .sidebar-title { font-size: 18px; font-weight: 800; color: #1f3a5f; margin-bottom: 6px; }
+    .sidebar-title { font-size: 18px; font-weight: 800; color: #14110f; margin-bottom: 6px; }
     .live-pill {
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
-        background:#e2e8f0; color:#1f3a5f; border:1px solid #cbd5e1; margin-bottom: 10px;
+        background:#d9c5b2; color:#14110f; border:1px solid #7e7f83; margin-bottom: 10px;
     }
-    .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
+    .live-dot { width:8px; height:8px; border-radius:999px; background:#34312d; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -913,46 +914,44 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         """
         <style>
         body, .stApp {
-            background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.65), transparent 35%),
-                        radial-gradient(circle at 80% 10%, rgba(46,134,193,0.22), transparent 50%),
-                        linear-gradient(135deg, #dce9ef 0%, #c8dde5 35%, #9ec4d4 70%, #7aaec3 100%) !important;
+            background: #f3f3f4 !important;
         }
         .block-container {padding-top:0.3rem !important;}
         h1,h2,h3{margin:0.3rem 0 !important;}
-        .dash-title {text-align:center; color:#1f3a5f; font-size:28px; font-weight:800; letter-spacing:0.5px;}
-        .dash-subtitle {text-align:center; margin-top:-10px; color:#1f3a5f; font-weight:700;}
+        .dash-title {text-align:center; color:#14110f; font-size:28px; font-weight:800; letter-spacing:0.5px;}
+        .dash-subtitle {text-align:center; margin-top:-10px; color:#7e7f83; font-weight:700;}
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            background: rgba(255,255,255,0.65);
-            border: 1px solid rgba(255,255,255,0.6);
+            background: #f3f3f4;
+            border: 1px solid #d9c5b2;
             border-radius: 20px;
-            box-shadow: 0 24px 50px rgba(18, 44, 66, 0.18);
+            box-shadow: 0 18px 36px rgba(20, 17, 15, 0.18);
         }
         div[data-testid="stVerticalBlockBorderWrapper"] > div {
             padding: 16px 18px 18px 18px;
             border-radius: 20px;
         }
-        .v-divider {width: 1px; background: rgba(148,163,184,0.5); min-height: 280px; margin: 8px auto;}
+        .v-divider {width: 1px; background: #d9c5b2; min-height: 280px; margin: 8px auto;}
         .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 8px; display:flex; align-items:center; gap:8px;}
         .panel-title .link {font-size: 14px; opacity: 0.6; margin-left: 4px;}
-        .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 12px; color: #8c1c13; margin-bottom: 8px; display:flex; gap:10px; align-items:center;}
-        .alert-icon {width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ef4444; display:flex; align-items:center; justify-content:center; color:#ef4444; font-weight:700;}
+        .alert-card {background: #d9c5b2; border: 1px solid #7e7f83; border-radius: 12px; padding: 12px; color: #14110f; margin-bottom: 8px; display:flex; gap:10px; align-items:center;}
+        .alert-icon {width: 28px; height: 28px; border-radius: 50%; border: 2px solid #34312d; display:flex; align-items:center; justify-content:center; color:#34312d; font-weight:700;}
         .alert-title {font-weight:700; margin-bottom:2px;}
         .alert-sub {opacity:0.85;}
-        .manage-pill {background: rgba(255,255,255,0.7); border: 1px solid rgba(203,213,225,0.9); border-radius: 12px; padding: 10px 12px; display:inline-flex; align-items:center; gap:8px; margin-top:6px;}
-        .metric-card {background:#f9fbfd; border:1px solid #e2e8f0; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
-        .metric-title {font-size: 12px; color:#6b7280; letter-spacing:0.6px;}
-        .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
+        .manage-pill {background: #f3f3f4; border: 1px solid #d9c5b2; border-radius: 12px; padding: 10px 12px; display:inline-flex; align-items:center; gap:8px; margin-top:6px; color:#14110f;}
+        .metric-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
+        .metric-title {font-size: 12px; color:#7e7f83; letter-spacing:0.6px;}
+        .metric-value {font-size: 22px; font-weight: 800; color:#14110f;}
         .metrics-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:6px;}
         #metrics-anchor + div[data-testid="stHorizontalBlock"] {margin-top: 0 !important;}
         .controls-row .stButton>button {height: 42px !important; border-radius: 12px !important;}
         .controls-row [data-baseweb="select"] > div {min-height: 42px !important; border-radius: 12px !important;}
-        button[kind="primary"] {background:#0f7a5f !important; border:1px solid #0f7a5f !important; color:#fff !important; box-shadow:0 8px 18px rgba(15,122,95,0.35) !important;}
-        button[kind="secondary"] {background:#ffffff !important; border:1px solid #cbd5e1 !important; color:#1f2937 !important;}
-        .section-divider {height:1px; background: rgba(148,163,184,0.35); margin: 14px 0;}
-        .search-row input {background:#f5f7fb !important; border-radius:10px !important; border:1px solid #cbd5e1 !important;}
-        [data-testid="stDataFrameContainer"] {border-radius: 14px !important; border: 1px solid rgba(203,213,225,0.9) !important; box-shadow: 0 8px 20px rgba(15,23,42,0.08) !important;}
-        [data-testid="stDataFrameContainer"] thead th {background:#f2f5f8 !important; color:#475569 !important; font-weight:700 !important;}
-        .summary-bar {background: rgba(255,255,255,0.75); border: 1px solid rgba(203,213,225,0.8); border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
+        button[kind="primary"] {background:#34312d !important; border:1px solid #34312d !important; color:#f3f3f4 !important; box-shadow:0 8px 18px rgba(20,17,15,0.25) !important;}
+        button[kind="secondary"] {background:#f3f3f4 !important; border:1px solid #7e7f83 !important; color:#14110f !important;}
+        .section-divider {height:1px; background: #d9c5b2; margin: 14px 0;}
+        .search-row input {background:#f3f3f4 !important; border-radius:10px !important; border:1px solid #d9c5b2 !important;}
+        [data-testid="stDataFrameContainer"] {border-radius: 14px !important; border: 1px solid #d9c5b2 !important; box-shadow: 0 8px 20px rgba(20,17,15,0.08) !important;}
+        [data-testid="stDataFrameContainer"] thead th {background:#f3f3f4 !important; color:#34312d !important; font-weight:700 !important;}
+        .summary-bar {background: #f3f3f4; border: 1px solid #d9c5b2; border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
         .compact-dashboard [data-testid="stVerticalBlock"] {gap: 0.5rem;}
         .compact-dashboard [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
         </style>
@@ -1063,7 +1062,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 "In Time": ["01:09 AM", "01:09 AM"],
                 "Out Time": ["01:14 AM", "01:14 AM"],
                 "Procedure": ["PLT/INE", "PSE/IENN"],
-                "FIRST": ["DR. HUSAIN", "DR. FARHATH"],
+                "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
+                "FIRST": ["ANISHA", "LAWANA"],
                 "SECOND": ["ANISHA", "LAWANA"],
                 "THIRD": ["NITIN", "MUKHILA"],
                 "CASE PAPER": ["None", "None"],
@@ -1078,7 +1078,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if "DR." in df_display.columns and "Doctor" not in df_display.columns:
                 rename_map["DR."] = "Doctor"
             df_display = df_display.rename(columns=rename_map)
-            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
+            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "Doctor", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
             if desired_cols:
                 df_display = df_display[desired_cols]
             if "STATUS" in df_display.columns and "Status" not in df_display.columns:
@@ -1115,38 +1115,38 @@ if "duty_current_assistant" not in st.session_state:
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
 LIGHT_COLORS = {
-    "bg_primary": "#f4f7fb",
-    "bg_secondary": "#ffffff",
-    "text_primary": "#1c1c1c",
-    "text_secondary": "#6b7280",
-    "button_bg": "#2e86c1",
-    "button_text": "#ffffff",
-    "accent": "#e67e22",
-    "success": "#10b981",
-    "warning": "#e67e22",
-    "danger": "#ef4444",
-    "info": "#1f3a5f",
+    "bg_primary": "#f3f3f4",
+    "bg_secondary": "#f3f3f4",
+    "text_primary": "#14110f",
+    "text_secondary": "#7e7f83",
+    "button_bg": "#34312d",
+    "button_text": "#f3f3f4",
+    "accent": "#d9c5b2",
+    "success": "#34312d",
+    "warning": "#d9c5b2",
+    "danger": "#7e7f83",
+    "info": "#34312d",
     # Solid surfaces
-    "glass_bg": "#ffffff",
-    "glass_border": "#cbd5e1",
+    "glass_bg": "#f3f3f4",
+    "glass_border": "#d9c5b2",
 }
 
 # Dark mode with vibrant neon accents for status indicators
 DARK_COLORS = {
-    "bg_primary": "#111827",
-    "bg_secondary": "#1f3a5f",
-    "text_primary": "#e5e7eb",
-    "text_secondary": "#9ca3af",
-    "button_bg": "#2e86c1",
-    "button_text": "#ffffff",
-    "accent": "#e67e22",
-    "success": "#10b981",
-    "warning": "#e67e22",
-    "danger": "#ef4444",
-    "info": "#2e86c1",
+    "bg_primary": "#14110f",
+    "bg_secondary": "#34312d",
+    "text_primary": "#f3f3f4",
+    "text_secondary": "#7e7f83",
+    "button_bg": "#34312d",
+    "button_text": "#f3f3f4",
+    "accent": "#d9c5b2",
+    "success": "#34312d",
+    "warning": "#d9c5b2",
+    "danger": "#7e7f83",
+    "info": "#34312d",
     # Solid surfaces
-    "glass_bg": "#1f2937",
-    "glass_border": "#374151",
+    "glass_bg": "#34312d",
+    "glass_border": "#7e7f83",
 }
 
 if "dark_mode" not in st.session_state:
@@ -1196,12 +1196,9 @@ st.markdown(
     }}
     
     body, .stApp {{
-        background:
-            radial-gradient(900px circle at 20% 20%, rgba(46, 134, 193, 0.12), transparent 45%),
-            radial-gradient(1100px circle at 80% 10%, rgba(31, 58, 95, 0.18), transparent 50%),
-            linear-gradient(135deg, #f4f7fb 0%, #ffffff 45%, #2e86c1 85%, #1f3a5f 100%) !important;
+        background: var(--bg-primary) !important;
         color: var(--text-primary) !important;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        font-family: 'Sora', sans-serif;
     }}
 
     /* Tighten gap below sticky header */
@@ -1221,14 +1218,14 @@ st.markdown(
 
     /* Cards & tables */
     .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
-        background: #fff8e4 !important;
-        border: 1px solid #909090 !important;
-        box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+        background: var(--glass-bg) !important;
+        border: 1px solid var(--glass-border) !important;
+        box-shadow: 0 12px 28px rgba(20, 17, 15, 0.18);
         border-radius: 16px;
         backdrop-filter: none !important;
     }}
     .stDataFrame table, .stTable table {{
-        background: #fff8e4 !important;
+        background: var(--glass-bg) !important;
     }}
     
     header {{
@@ -1297,65 +1294,65 @@ st.markdown(
     /* Premium Status-based row background colors with dynamic effects */
     /* Upcoming rows - Light blue */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("WAITING")) {{
-        background: linear-gradient(90deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%) !important;
+        background: rgba(217, 197, 178, 0.35) !important;
         border-left: 5px solid {COLORS['info']} !important;
     }}
     
     /* Ongoing rows - Light green */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ON GOING")) {{
-        background: linear-gradient(90deg, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.1) 100%) !important;
+        background: rgba(52, 49, 45, 0.12) !important;
         border-left: 5px solid {COLORS['success']} !important;
     }}
     
     /* Arrived rows - Light yellow */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ARRIVED")) {{
-        background: linear-gradient(90deg, rgba(245, 158, 11, 0.3) 0%, rgba(245, 158, 11, 0.1) 100%) !important;
+        background: rgba(217, 197, 178, 0.45) !important;
         border-left: 5px solid {COLORS['warning']} !important;
     }}
 
     /* Shifted rows - Yellow */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("SHIFTED")) {{
-        background: linear-gradient(90deg, rgba(245, 158, 11, 0.3) 0%, rgba(245, 158, 11, 0.1) 100%) !important;
+        background: rgba(217, 197, 178, 0.45) !important;
         border-left: 5px solid {COLORS['warning']} !important;
     }}
     
     /* Cancelled rows - Light red */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("CANCELLED")) {{
-        background: linear-gradient(90deg, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.1) 100%) !important;
+        background: rgba(126, 127, 131, 0.25) !important;
         border-left: 5px solid {COLORS['danger']} !important;
     }}
     
     /* Enhanced Hover effect with shadow lift */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("WAITING")):hover {{
-        background: linear-gradient(90deg, rgba(59, 130, 246, 0.5) 0%, rgba(59, 130, 246, 0.2) 100%) !important;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) inset !important;
+        background: rgba(217, 197, 178, 0.45) !important;
+        box-shadow: 0 4px 12px rgba(52, 49, 45, 0.18) inset !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ON GOING")):hover {{
-        background: linear-gradient(90deg, rgba(16, 185, 129, 0.5) 0%, rgba(16, 185, 129, 0.2) 100%) !important;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) inset !important;
+        background: rgba(52, 49, 45, 0.18) !important;
+        box-shadow: 0 4px 12px rgba(20, 17, 15, 0.18) inset !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ARRIVED")):hover {{
-        background: linear-gradient(90deg, rgba(245, 158, 11, 0.5) 0%, rgba(245, 158, 11, 0.2) 100%) !important;
-        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) inset !important;
+        background: rgba(217, 197, 178, 0.55) !important;
+        box-shadow: 0 4px 12px rgba(52, 49, 45, 0.18) inset !important;
     }}
 
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("SHIFTED")):hover {{
-        background: linear-gradient(90deg, rgba(245, 158, 11, 0.5) 0%, rgba(245, 158, 11, 0.2) 100%) !important;
-        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) inset !important;
+        background: rgba(217, 197, 178, 0.55) !important;
+        box-shadow: 0 4px 12px rgba(52, 49, 45, 0.18) inset !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("CANCELLED")):hover {{
-        background: linear-gradient(90deg, rgba(239, 68, 68, 0.5) 0%, rgba(239, 68, 68, 0.2) 100%) !important;
-        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) inset !important;
+        background: rgba(126, 127, 131, 0.35) !important;
+        box-shadow: 0 4px 12px rgba(126, 127, 131, 0.25) inset !important;
     }}
     
     /* Table Header Styling - Premium & Elegant */
     [data-testid="stDataFrameContainer"] thead {{
-        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['button_bg']} 100%) !important;
+        background: {COLORS['button_bg']} !important;
         border-bottom: 1px solid var(--glass-border) !important;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28) !important;
+        box-shadow: 0 6px 18px rgba(20, 17, 15, 0.28) !important;
     }}
     
     [data-testid="stDataFrameContainer"] thead th {{
@@ -1366,12 +1363,12 @@ st.markdown(
         font-size: 0.99rem !important;
         letter-spacing: 1px !important;
         text-transform: uppercase !important;
-        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['button_bg']} 100%) !important;
+        background: {COLORS['button_bg']} !important;
         position: relative !important;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
-        box-shadow: inset 0 1px 0 rgba(249, 249, 249, 0.18) !important;
+        text-shadow: 0 2px 4px rgba(20, 17, 15, 0.3) !important;
+        box-shadow: inset 0 1px 0 rgba(243, 243, 244, 0.18) !important;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        border-right: 1px solid rgba(249, 249, 249, 0.22) !important;
+        border-right: 1px solid rgba(243, 243, 244, 0.22) !important;
     }}
     
     [data-testid="stDataFrameContainer"] thead th:last-child {{
@@ -1381,7 +1378,7 @@ st.markdown(
     [data-testid="stDataFrameContainer"] thead th:hover {{
         filter: brightness(1.08) !important;
         transform: translateY(-2px) !important;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 10px 22px rgba(0, 0, 0, 0.22) !important;
+        box-shadow: inset 0 1px 0 rgba(243, 243, 244, 0.10), 0 10px 22px rgba(20, 17, 15, 0.22) !important;
     }}
     
     /* Premium Table Rows */
@@ -1393,19 +1390,19 @@ st.markdown(
     
     /* Alternating row background for better readability */
     [data-testid="stDataFrameContainer"] tbody tr:nth-child(even) {{
-        background-color: rgba(255, 255, 255, 0.04) !important;
+        background-color: rgba(243, 243, 244, 0.04) !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:hover {{
-        background-color: rgba(255, 255, 255, 0.06) !important;
-        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.22) inset !important;
+        background-color: rgba(243, 243, 244, 0.06) !important;
+        box-shadow: 0 2px 14px rgba(20, 17, 15, 0.22) inset !important;
     }}
     
     /* Premium Table Cells */
     [data-testid="stDataFrameContainer"] tbody td {{
         padding: 12px 14px !important;
-        border-bottom: 1px solid rgba(201, 187, 176, 0.55) !important;
-        border-right: 1px solid rgba(201, 187, 176, 0.35) !important;
+        border-bottom: 1px solid rgba(217, 197, 178, 0.55) !important;
+        border-right: 1px solid rgba(217, 197, 178, 0.35) !important;
         font-size: 0.93rem !important;
         line-height: 1.25 !important;
         vertical-align: middle !important;
@@ -1435,7 +1432,7 @@ st.markdown(
         border-radius: 14px;
         background: var(--glass-bg);
         border: 1px solid var(--glass-border);
-        box-shadow: 0 10px 26px rgba(0,0,0,0.12);
+        box-shadow: 0 10px 26px rgba(20,17,15,0.12);
         backdrop-filter: none !important;
         display: flex;
         flex-direction: column;
@@ -1463,14 +1460,14 @@ st.markdown(
     .main [data-baseweb="select"] button {{
         color: {COLORS['text_primary']} !important;
         background-color: {COLORS['bg_secondary']} !important;
-        border: 1px solid #d3c3b0 !important;
+        border: 1px solid #d9c5b2 !important;
         border-radius: 6px !important;
         transition: all 0.2s ease !important;
     }}
     
     .main [data-baseweb="select"] button:hover {{
         border-color: {COLORS['button_bg']} !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22) !important;
+        box-shadow: 0 2px 8px rgba(20, 17, 15, 0.22) !important;
     }}
     
     .main [data-baseweb="select"] button span {{
@@ -1480,7 +1477,7 @@ st.markdown(
     [data-baseweb="popover"] {{
         background-color: {COLORS['bg_secondary']} !important;
         border-radius: 8px !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+        box-shadow: 0 4px 12px rgba(20, 17, 15, 0.15) !important;
     }}
     
     [data-baseweb="menu"] {{
@@ -1535,7 +1532,7 @@ st.markdown(
     
     /* Button Styling - Premium & Attractive */
     .stButton>button {{
-        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['text_primary']} 160%) !important;
+        background: {COLORS['button_bg']} !important;
         color: {COLORS['button_text']} !important;
         border: none !important;
         border-radius: 8px !important;
@@ -1543,22 +1540,22 @@ st.markdown(
         font-size: 1rem !important;
         padding: 12px 28px !important;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25) !important;
+        box-shadow: 0 4px 18px rgba(20, 17, 15, 0.25) !important;
         letter-spacing: 0.5px !important;
         text-transform: uppercase !important;
         cursor: pointer !important;
     }}
     
     .stButton>button:hover {{
-        background: linear-gradient(135deg, {COLORS['text_primary']} 0%, {COLORS['button_bg']} 100%) !important;
+        background: {COLORS['button_bg']} !important;
         transform: translateY(-4px) !important;
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32) !important;
+        box-shadow: 0 10px 28px rgba(20, 17, 15, 0.32) !important;
         letter-spacing: 1px !important;
     }}
     
     .stButton>button:active {{
         transform: translateY(-1px) !important;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28) !important;
+        box-shadow: 0 2px 10px rgba(20, 17, 15, 0.28) !important;
     }}
     
     .stButton>button:focus {{
@@ -1623,7 +1620,7 @@ st.markdown(
         background: var(--glass-bg) !important;
         border-radius: 14px !important;
         border: 1px solid var(--glass-border) !important;
-        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.30) !important;
+        box-shadow: 0 14px 40px rgba(20, 17, 15, 0.30) !important;
         overflow: hidden !important;
         transition: all 0.3s ease !important;
         backdrop-filter: none !important;
@@ -1631,7 +1628,7 @@ st.markdown(
     }}
     
     [data-testid="stDataFrameContainer"]:hover {{
-        box-shadow: 0 18px 52px rgba(0, 0, 0, 0.36) !important;
+        box-shadow: 0 18px 52px rgba(20, 17, 15, 0.36) !important;
     }}
     
     /* Tabs Styling */
@@ -1658,28 +1655,28 @@ st.markdown(
     
     /* Alert/Message Styling */
     .st-info {{
-        background-color: rgba(59, 130, 246, 0.1) !important;
+        background-color: rgba(217, 197, 178, 0.18) !important;
         border-left: 4px solid {COLORS['info']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
     }}
     
     .st-success {{
-        background-color: rgba(16, 185, 129, 0.1) !important;
+        background-color: rgba(52, 49, 45, 0.12) !important;
         border-left: 4px solid {COLORS['success']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
     }}
     
     .st-warning {{
-        background-color: rgba(245, 158, 11, 0.1) !important;
+        background-color: rgba(217, 197, 178, 0.22) !important;
         border-left: 4px solid {COLORS['warning']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
     }}
     
     .st-error {{
-        background-color: rgba(239, 68, 68, 0.1) !important;
+        background-color: rgba(126, 127, 131, 0.18) !important;
         border-left: 4px solid {COLORS['danger']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
@@ -1693,9 +1690,9 @@ st.markdown(
     }}
     
     @keyframes pulse-glow {{
-        0% {{ box-shadow: 0 0 0 0 rgba(153, 88, 47, 0.7); }}
-        70% {{ box-shadow: 0 0 0 10px rgba(153, 88, 47, 0); }}
-        100% {{ box-shadow: 0 0 0 0 rgba(153, 88, 47, 0); }}
+        0% {{ box-shadow: 0 0 0 0 rgba(52, 49, 45, 0.7); }}
+        70% {{ box-shadow: 0 0 0 10px rgba(52, 49, 45, 0); }}
+        100% {{ box-shadow: 0 0 0 0 rgba(52, 49, 45, 0); }}
     }}
     
     @keyframes spin-check {{
@@ -1714,7 +1711,7 @@ st.markdown(
         height: 20px !important;
         cursor: pointer !important;
         transition: transform 140ms ease, filter 0.3s ease !important;
-        accent-color: #99582f !important;
+        accent-color: #34312d !important;
     }}
 
     /* Keyboard focus for table checkboxes */
@@ -1802,7 +1799,7 @@ st.markdown(
     /* Divider styling */
     hr {{
         border: none !important;
-        border-top: 2px solid #d3c3b0 !important;
+        border-top: 2px solid #d9c5b2 !important;
         margin: 2rem 0 !important;
     }}
     
@@ -1811,32 +1808,32 @@ st.markdown(
         background-color: {COLORS['bg_secondary']} !important;
         border-radius: 8px !important;
         padding: 1.5rem !important;
-        border: 1px solid #d3c3b0 !important;
+        border: 1px solid #d9c5b2 !important;
         margin-bottom: 1.5rem !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+        box-shadow: 0 2px 8px rgba(20, 17, 15, 0.08) !important;
     }}
     
     /* Save button styling - aesthetic and smooth */
     button[key="manual_save_btn"] {{
-        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['text_primary']} 160%) !important;
+        background: {COLORS['button_bg']} !important;
         color: {COLORS['button_text']} !important;
         border: none !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
-        box-shadow: 0 2px 8px rgba(153, 88, 47, 0.3) !important;
+        box-shadow: 0 2px 8px rgba(52, 49, 45, 0.3) !important;
         padding: 10px 20px !important;
     }}
     
     button[key="manual_save_btn"]:hover {{
-        background: linear-gradient(135deg, {COLORS['text_primary']} 0%, {COLORS['button_bg']} 100%) !important;
-        box-shadow: 0 4px 14px rgba(153, 88, 47, 0.4) !important;
+        background: {COLORS['button_bg']} !important;
+        box-shadow: 0 4px 14px rgba(52, 49, 45, 0.4) !important;
         transform: translateY(-2px) !important;
     }}
     
     button[key="manual_save_btn"]:active {{
         transform: translateY(0) !important;
-        box-shadow: 0 2px 6px rgba(153, 88, 47, 0.3) !important;
+        box-shadow: 0 2px 6px rgba(52, 49, 45, 0.3) !important;
     }}
 
     /* Availability dashboard styling */
@@ -1848,11 +1845,11 @@ st.markdown(
     }}
 
     .availability-card {{
-        background: linear-gradient(165deg, var(--bg-secondary), var(--bg-primary));
+        background: var(--bg-secondary);
         border: 1px solid var(--glass-border);
         border-radius: 18px;
         padding: 1.25rem 1.35rem;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+        box-shadow: 0 12px 32px rgba(20, 17, 15, 0.22);
         backdrop-filter: none !important;
         display: flex;
         flex-direction: column;
@@ -1916,7 +1913,7 @@ st.markdown(
         border-top: 4px solid var(--accent);
         border-radius: 14px;
         padding: 1rem 1.1rem;
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+        box-shadow: 0 12px 28px rgba(20, 17, 15, 0.18);
         min-height: 140px;
         display: flex;
         flex-direction: column;
@@ -1928,7 +1925,7 @@ st.markdown(
 
     .assistant-card:hover {{
         transform: translateY(-4px);
-        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
+        box-shadow: 0 16px 36px rgba(20, 17, 15, 0.24);
     }}
 
     .assistant-card.status-free {{ border-top-color: var(--success); }}
@@ -1962,27 +1959,27 @@ st.markdown(
     }}
 
     .assistant-card__status-pill.success {{
-        background: rgba(16, 185, 129, 0.2);
-        color: var(--success);
-        border: 1px solid rgba(16, 185, 129, 0.4);
+        background: rgba(52, 49, 45, 0.18);
+        color: var(--text-primary);
+        border: 1px solid rgba(52, 49, 45, 0.35);
     }}
-
+    
     .assistant-card__status-pill.warning {{
-        background: rgba(245, 158, 11, 0.2);
-        color: var(--warning);
-        border: 1px solid rgba(245, 158, 11, 0.4);
+        background: rgba(217, 197, 178, 0.35);
+        color: var(--text-primary);
+        border: 1px solid rgba(217, 197, 178, 0.6);
     }}
-
+    
     .assistant-card__status-pill.danger {{
-        background: rgba(239, 68, 68, 0.2);
-        color: var(--danger);
-        border: 1px solid rgba(239, 68, 68, 0.4);
+        background: rgba(126, 127, 131, 0.25);
+        color: var(--text-primary);
+        border: 1px solid rgba(126, 127, 131, 0.45);
     }}
-
+    
     .assistant-card__status-pill.info {{
-        background: rgba(59, 130, 246, 0.2);
-        color: var(--info);
-        border: 1px solid rgba(59, 130, 246, 0.4);
+        background: rgba(20, 17, 15, 0.12);
+        color: var(--text-primary);
+        border: 1px solid rgba(20, 17, 15, 0.35);
     }}
 
     .assistant-card__details {{
@@ -2026,10 +2023,10 @@ if os.path.exists(_logo_path):
 header_css = f"""
 <style>
 header[data-testid="stHeader"] {{
-    background: linear-gradient(135deg, #f4f7fb 0%, #ffffff 40%, #2e86c1 80%, #1f3a5f 100%) !important;
+    background: #f3f3f4 !important;
     min-height: 72px;
-    border-bottom: 1px solid rgba(150, 122, 161, 0.35);
-    box-shadow: 0 18px 50px rgba(25, 42, 81, 0.2);
+    border-bottom: 1px solid #d9c5b2;
+    box-shadow: 0 12px 32px rgba(20, 17, 15, 0.18);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -2052,8 +2049,8 @@ header[data-testid="stHeader"]::after {{
     font-weight: 800;
     line-height: 1.3;
     letter-spacing: 0.4px;
-    color: #192a51;
-    text-shadow: 0 3px 10px rgba(25, 42, 81, 0.22);
+    color: #14110f;
+    text-shadow: 0 3px 10px rgba(52, 49, 45, 0.2);
     pointer-events: none;
 }}
 </style>
@@ -2114,7 +2111,7 @@ if not (st.session_state.get("nav_category") == "Scheduling" and st.session_stat
         <style>
         .divider-line {{
             height: 2px;
-            background: linear-gradient(90deg, transparent 0%, #99582f 50%, transparent 100%);
+            background: {COLORS['accent']};
             margin: 0.8rem 0;
             border-radius: 1px;
         }}
@@ -2122,7 +2119,7 @@ if not (st.session_state.get("nav_category") == "Scheduling" and st.session_stat
             position: sticky;
             top: 0;
             z-index: 999;
-            background: linear-gradient(135deg, {COLORS['bg_primary']}00, {COLORS['bg_secondary']}00);
+            background: {COLORS['bg_primary']};
             padding: 0.4rem 0 0.35rem 0;
             box-shadow: none;
         }}
@@ -2155,7 +2152,7 @@ if not (st.session_state.get("nav_category") == "Scheduling" and st.session_stat
         st.markdown(
             f"""
             <div style="
-                background: linear-gradient(135deg, {bg}15, {COLORS['accent']}10);
+                background: {COLORS['bg_secondary']};
                 border: 1px solid {border}40;
                 border-left: 4px solid {border};
                 border-radius: 8px;
@@ -6343,26 +6340,26 @@ if category == "Assistants" and assist_view == "Availability":
     
         st.markdown(f"""
         <div style='display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.2rem;'>
-            <div style='background: var(--glass-bg, #f5f5f5); border: 1.5px solid var(--glass-border, #c9bbb0); border-radius: 1.2rem; padding: 1.2rem 2.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); min-width: 220px;'>
-                <div style='font-size: 2.2rem; font-weight: 700; color: var(--text-primary, #111b26); margin-bottom: 0.2rem;'>Overview</div>
-                <div style='font-size: 1.1rem; color: var(--text-secondary, #99582f);'>Current Assistant Status</div>
+            <div style='background: var(--glass-bg, #f3f3f4); border: 1.5px solid var(--glass-border, #d9c5b2); border-radius: 1.2rem; padding: 1.2rem 2.2rem; box-shadow: 0 2px 8px rgba(20, 17, 15, 0.04); min-width: 220px;'>
+                <div style='font-size: 2.2rem; font-weight: 700; color: var(--text-primary, #14110f); margin-bottom: 0.2rem;'>Overview</div>
+                <div style='font-size: 1.1rem; color: var(--text-secondary, #7e7f83);'>Current Assistant Status</div>
             </div>
             <div style='display: flex; gap: 1.2rem;'>
-                <div style='background: #10b98122; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #10b981;'>{free_count}</div>
-                    <div style='font-size: 1rem; color: #10b981;'>🟢 Free</div>
+                <div style='background: rgba(52, 49, 45, 0.15); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #34312d;'>{free_count}</div>
+                    <div style='font-size: 1rem; color: #34312d;'>🟢 Free</div>
                 </div>
-                <div style='background: #ef444422; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #ef4444;'>{busy_count}</div>
-                    <div style='font-size: 1rem; color: #ef4444;'>🔴 Busy</div>
+                <div style='background: rgba(126, 127, 131, 0.18); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #7e7f83;'>{busy_count}</div>
+                    <div style='font-size: 1rem; color: #7e7f83;'>🔴 Busy</div>
                 </div>
-                <div style='background: #f59e0b22; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #f59e0b;'>{blocked_count}</div>
-                    <div style='font-size: 1rem; color: #f59e0b;'>🚫 Blocked</div>
+                <div style='background: rgba(20, 17, 15, 0.12); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #14110f;'>{blocked_count}</div>
+                    <div style='font-size: 1rem; color: #14110f;'>🚫 Blocked</div>
                 </div>
-                <div style='background: #c9bbb022; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #99582f;'>{total_count}</div>
-                    <div style='font-size: 1rem; color: #99582f;'>Total</div>
+                <div style='background: rgba(217, 197, 178, 0.35); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #34312d;'>{total_count}</div>
+                    <div style='font-size: 1rem; color: #34312d;'>Total</div>
                 </div>
             </div>
         </div>
