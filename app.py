@@ -993,11 +993,11 @@ st.markdown(
 
     /* Premium glass cards & tables */
     .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
-        background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06)) !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        box-shadow: 0 20px 45px rgba(1,5,40,0.35);
+        background: rgba(0, 8, 20, 0.08) !important;
+        border: 1px solid rgba(255,255,255,0.10) !important;
+        box-shadow: 0 20px 45px rgba(0,0,0,0.35);
         border-radius: 16px;
-        backdrop-filter: blur(10px);
+        backdrop-filter: blur(8px);
     }}
     .stDataFrame table, .stTable table {{
         background: transparent !important;
