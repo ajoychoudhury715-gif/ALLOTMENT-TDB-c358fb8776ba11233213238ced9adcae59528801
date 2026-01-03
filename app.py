@@ -1743,77 +1743,72 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Professional Header with Logo
 _logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "The Dental Bond LOGO_page-0001.jpg")
-logo_html = ""
+logo_b64 = ""
 if os.path.exists(_logo_path):
     import base64
     with open(_logo_path, "rb") as f:
         logo_b64 = base64.b64encode(f.read()).decode()
-    logo_html = f'<img src="data:image/jpeg;base64,{logo_b64}" class="hero-logo" alt="Logo" />'
 
-st.markdown(f"""
+header_css = f"""
 <style>
-.hero-bar {{
-    margin: 0 0 1.2rem 0;
-    padding: 1.2rem 1.6rem;
-    border-radius: 0 0 18px 18px;
+header[data-testid="stHeader"] {{
+    background: linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 30%, #aaa1c8 60%, #967aa1 85%, #192a51 100%) !important;
+    height: 140px;
+    border-bottom: 1px solid rgba(150, 122, 161, 0.35);
+    box-shadow: 0 18px 50px rgba(25, 42, 81, 0.2);
     position: sticky;
     top: 0;
     z-index: 100;
-    background: linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 30%, #aaa1c8 60%, #967aa1 85%, #192a51 100%);
-    box-shadow: 0 18px 50px rgba(25, 42, 81, 0.25), inset 0 1px 0 rgba(255,255,255,0.4);
-    border: 1px solid rgba(150, 122, 161, 0.35);
 }}
-.hero-content {{
-    display: flex;
-    align-items: center;
-    gap: 1.2rem;
+header[data-testid="stHeader"] .stAppToolbar,
+header[data-testid="stHeader"] [data-testid="stToolbarActions"],
+header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
+    display: none !important;
 }}
-.hero-logo {{
-    width: 96px;
-    height: auto;
-    border-radius: 14px;
+header[data-testid="stHeader"]::before {{
+    content: "";
+    position: absolute;
+    left: 24px;
+    top: 24px;
+    width: 88px;
+    height: 88px;
+    border-radius: 16px;
+    background: {'url(data:image/jpeg;base64,' + logo_b64 + ')' if logo_b64 else 'linear-gradient(135deg, #d5c6e0, #aaa1c8)'} no-repeat center/cover;
     box-shadow: 0 12px 32px rgba(25, 42, 81, 0.25);
 }}
-.hero-text {{
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-}}
-.hero-title {{
-    margin: 0;
-    font-size: 2.2rem;
+header[data-testid="stHeader"]::after {{
+    content: "ALLOTMENT DASHBOARD\\AReal-time Scheduling Management System";
+    white-space: pre;
+    position: absolute;
+    left: 130px;
+    top: 36px;
+    font-size: 26px;
     font-weight: 800;
     letter-spacing: 1px;
     color: #192a51;
     text-shadow: 0 3px 12px rgba(25, 42, 81, 0.18);
-}}
-.hero-subtitle {{
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: #4d3f67;
-    text-transform: uppercase;
+    line-height: 1.3;
 }}
 @media (max-width: 768px) {{
-    .hero-bar {{ padding: 1rem 1.1rem; }}
-    .hero-content {{ flex-direction: column; text-align: center; }}
-    .hero-logo {{ width: 82px; }}
-    .hero-title {{ font-size: 1.8rem; }}
+    header[data-testid="stHeader"] {{
+        height: 120px;
+    }}
+    header[data-testid="stHeader"]::before {{
+        width: 68px;
+        height: 68px;
+        left: 16px;
+        top: 24px;
+    }}
+    header[data-testid="stHeader"]::after {{
+        left: 96px;
+        top: 32px;
+        font-size: 20px;
+    }}
 }}
 </style>
-<div class="hero-bar">
-  <div class="hero-content">
-    {logo_html}
-    <div class="hero-text">
-      <div class="hero-title">ALLOTMENT DASHBOARD</div>
-      <div class="hero-subtitle">Real-time Scheduling Management System</div>
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+"""
+st.markdown(header_css, unsafe_allow_html=True)
 
 # Indian Standard Time (IST = UTC+5:30)
 
