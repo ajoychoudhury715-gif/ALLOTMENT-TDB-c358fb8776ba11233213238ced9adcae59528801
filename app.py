@@ -2215,6 +2215,25 @@ def _parse_weekly_off_days(val: str) -> list[int]:
     return out
 
 
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _weekly_off_names(val: str) -> list[str]:
+    idxs = _parse_weekly_off_days(val)
+    return [WEEKDAY_NAMES[i] for i in idxs if 0 <= i < 7]
+
+
+def _weekly_off_str_from_list(lst: list[str]) -> str:
+    if not lst:
+        return ""
+    names_upper = [str(x).strip().upper() for x in lst if str(x).strip()]
+    out = []
+    for nm in names_upper:
+        if nm in [d.upper() for d in WEEKDAY_NAMES]:
+            out.append(WEEKDAY_NAMES[[d.upper() for d in WEEKDAY_NAMES].index(nm)])
+    return ",".join(out)
+
+
 def _seed_supabase_profiles_if_needed(client) -> None:
     """Ensure all configured assistants/doctors exist in Supabase profiles table."""
     if client is None:
@@ -5183,18 +5202,50 @@ if category == "Doctors" and doctor_view == "Overview":
         else:
             st.success("All doctors available tomorrow.")
 
-        st.markdown("#### By Department")
-        by_dept = {}
-        for _, row in doctors_df.iterrows():
-            dept = str(row.get("department", "")).strip().upper()
-            by_dept.setdefault(dept, []).append(row)
-        for dept, rows in by_dept.items():
-            with st.expander(f"{dept or 'UNKNOWN'} ({len(rows)})", expanded=False):
-                for r in rows:
-                    name = str(r.get("name", "")).title()
-                    status = str(r.get("status", "")).upper()
-                    wo = ", ".join([weekday_names[d] for d in _parse_weekly_off_days(r.get("weekly_off", ""))]) if r.get("weekly_off") else "None"
-                    st.write(f"- **{name}** · Status: {status} · Weekly Off: {wo}")
+        # Editable table
+        edit_df = doctors_df.copy()
+        edit_df["weekly_off"] = edit_df["weekly_off"].apply(_weekly_off_names)
+        edit_df_display = edit_df[PROFILE_COLUMNS]
+        edited = st.data_editor(
+            edit_df_display,
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "weekly_off": st.column_config.MultiSelectColumn("Weekly Off", options=WEEKDAY_NAMES),
+                "status": st.column_config.SelectboxColumn("Status", options=["ACTIVE", "INACTIVE"]),
+                "department": st.column_config.TextColumn("Department"),
+                "pref_first": st.column_config.TextColumn("Pref FIRST"),
+                "pref_second": st.column_config.TextColumn("Pref SECOND"),
+                "pref_third": st.column_config.TextColumn("Pref THIRD"),
+            },
+            hide_index=True,
+            key="doctor_overview_editor",
+        )
+        if st.button("💾 Save Doctors"):
+            df_to_save = edited.copy()
+            df_to_save = df_to_save[df_to_save["name"].astype(str).str.strip() != ""]
+            df_to_save["weekly_off"] = df_to_save["weekly_off"].apply(lambda lst: _weekly_off_str_from_list(lst if isinstance(lst, list) else []))
+            save_profiles(df_to_save, PROFILE_DOCTOR_SHEET)
+            st.toast("Doctors saved ✅", icon="✅")
+            st.rerun()
+
+        # Card view
+        st.markdown("#### Cards")
+        entries = []
+        for _, r in doctors_df.iterrows():
+            name = str(r.get("name", "")).title()
+            dept = str(r.get("department", "")).title()
+            wo_days = _parse_weekly_off_days(r.get("weekly_off", ""))
+            status = "BLOCKED" if today_idx in wo_days else "FREE"
+            entries.append({
+                "name": name,
+                "info": {
+                    "status": status,
+                    "reason": f"Weekly off {weekday_names[today_idx]}" if today_idx in wo_days else "Available",
+                    "department": dept or "N/A",
+                }
+            })
+        _render_assistant_cards(entries)
 
     render_doctor_overview()
 
