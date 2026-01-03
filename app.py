@@ -5211,7 +5211,12 @@ if category == "Doctors" and doctor_view == "Overview":
             num_rows="dynamic",
             use_container_width=True,
             column_config={
-                "weekly_off": st.column_config.MultiSelectColumn("Weekly Off", options=WEEKDAY_NAMES),
+                "weekly_off": st.column_config.TextColumn(
+                    "Weekly Off",
+                    help="Comma-separated days e.g. Monday,Wednesday",
+                    width="medium",
+                    default="",
+                ),
                 "status": st.column_config.SelectboxColumn("Status", options=["ACTIVE", "INACTIVE"]),
                 "department": st.column_config.TextColumn("Department"),
                 "pref_first": st.column_config.TextColumn("Pref FIRST"),
@@ -5224,7 +5229,9 @@ if category == "Doctors" and doctor_view == "Overview":
         if st.button("💾 Save Doctors"):
             df_to_save = edited.copy()
             df_to_save = df_to_save[df_to_save["name"].astype(str).str.strip() != ""]
-            df_to_save["weekly_off"] = df_to_save["weekly_off"].apply(lambda lst: _weekly_off_str_from_list(lst if isinstance(lst, list) else []))
+            df_to_save["weekly_off"] = df_to_save["weekly_off"].apply(
+                lambda val: _weekly_off_str_from_list(val if isinstance(val, list) else str(val).split(","))
+            )
             save_profiles(df_to_save, PROFILE_DOCTOR_SHEET)
             st.toast("Doctors saved ✅", icon="✅")
             st.rerun()
