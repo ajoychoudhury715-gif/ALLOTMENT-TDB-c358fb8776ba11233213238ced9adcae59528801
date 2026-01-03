@@ -1017,8 +1017,17 @@ st.markdown(
 
     /* Tighten gap below sticky header */
     .block-container {{
-        padding-top: 0.5rem !important;
-        padding-bottom: 1rem !important;
+        padding-top: 0.25rem !important;
+        padding-bottom: 0.5rem !important;
+    }}
+
+    /* Compact headings & metrics */
+    h1, h2, h3 {{
+        margin: 0.15rem 0 0.35rem 0 !important;
+    }}
+    div[data-testid="stMetric"] {{
+        padding: 0.6rem 0.8rem !important;
+        border-radius: 14px;
     }}
 
     /* Cards & tables */
