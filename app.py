@@ -66,13 +66,13 @@ def inject_white_pastel_sidebar():
     st.markdown("""
     <style>
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #fff8e4 0%, #d9d9d9 50%, #0f534b 100%);
-        border-right: 1px solid #909090;
+        background: linear-gradient(180deg, #f4f7fb 0%, #ffffff 55%, #1f3a5f 100%);
+        border-right: 1px solid #cbd5e1;
     }
     [data-testid="stSidebarContent"] { padding: 16px 14px; }
     [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
         background: #fff;
-        border: 1px solid #909090;
+        border: 1px solid #cbd5e1;
         border-radius: 16px;
         padding: 10px 12px 8px 12px;
         box-shadow: 0 8px 24px rgba(25, 42, 81, 0.15);
@@ -80,16 +80,16 @@ def inject_white_pastel_sidebar():
     [data-testid="stSidebar"] button {
         border-radius: 14px !important;
         padding: 0.6rem 0.9rem !important;
-        border: 1px solid #909090 !important;
-        background: linear-gradient(180deg, #0f534b, #0f534b) !important;
-        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18) !important;
+        border: 1px solid #1f3a5f !important;
+        background: linear-gradient(180deg, #2e86c1, #1f3a5f) !important;
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12) !important;
         font-weight: 700;
     }
-    .sidebar-title { font-size: 18px; font-weight: 800; color: #252525; margin-bottom: 6px; }
+    .sidebar-title { font-size: 18px; font-weight: 800; color: #1f3a5f; margin-bottom: 6px; }
     .live-pill {
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
-        background:#d9d9d9; color:#252525; border:1px solid #909090; margin-bottom: 10px;
+        background:#e2e8f0; color:#1f3a5f; border:1px solid #cbd5e1; margin-bottom: 10px;
     }
     .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
     </style>
@@ -926,38 +926,38 @@ if "duty_current_assistant" not in st.session_state:
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
 LIGHT_COLORS = {
-    "bg_primary": "#fff8e4",
-    "bg_secondary": "#d9d9d9",
-    "text_primary": "#252525",
-    "text_secondary": "#909090",
-    "button_bg": "#0f534b",
-    "button_text": "#fff8e4",
-    "accent": "#909090",
-    "success": "#55a630",
-    "warning": "#d9d9d9",
+    "bg_primary": "#f4f7fb",
+    "bg_secondary": "#ffffff",
+    "text_primary": "#1c1c1c",
+    "text_secondary": "#6b7280",
+    "button_bg": "#2e86c1",
+    "button_text": "#ffffff",
+    "accent": "#e67e22",
+    "success": "#10b981",
+    "warning": "#e67e22",
     "danger": "#ef4444",
-    "info": "#0f534b",
+    "info": "#1f3a5f",
     # Solid surfaces
-    "glass_bg": "#fff",
-    "glass_border": "#909090",
+    "glass_bg": "#ffffff",
+    "glass_border": "#cbd5e1",
 }
 
 # Dark mode with vibrant neon accents for status indicators
 DARK_COLORS = {
-    "bg_primary": "#252525",
-    "bg_secondary": "#0f534b",
-    "text_primary": "#fff8e4",
-    "text_secondary": "#d9d9d9",
-    "button_bg": "#fff8e4",
-    "button_text": "#252525",
-    "accent": "#909090",
-    "success": "#55a630",
-    "warning": "#d9d9d9",
+    "bg_primary": "#111827",
+    "bg_secondary": "#1f3a5f",
+    "text_primary": "#e5e7eb",
+    "text_secondary": "#9ca3af",
+    "button_bg": "#2e86c1",
+    "button_text": "#ffffff",
+    "accent": "#e67e22",
+    "success": "#10b981",
+    "warning": "#e67e22",
     "danger": "#ef4444",
-    "info": "#fff8e4",
+    "info": "#2e86c1",
     # Solid surfaces
-    "glass_bg": "#0f534b",
-    "glass_border": "#909090",
+    "glass_bg": "#1f2937",
+    "glass_border": "#374151",
 }
 
 if "dark_mode" not in st.session_state:
@@ -1008,9 +1008,9 @@ st.markdown(
     
     body, .stApp {{
         background:
-            radial-gradient(900px circle at 20% 20%, rgba(255, 248, 228, 0.65), transparent 45%),
-            radial-gradient(1100px circle at 80% 10%, rgba(15, 83, 75, 0.25), transparent 50%),
-            linear-gradient(135deg, #fff8e4 0%, #d9d9d9 45%, #0f534b 85%, #252525 100%) !important;
+            radial-gradient(900px circle at 20% 20%, rgba(46, 134, 193, 0.12), transparent 45%),
+            radial-gradient(1100px circle at 80% 10%, rgba(31, 58, 95, 0.18), transparent 50%),
+            linear-gradient(135deg, #f4f7fb 0%, #ffffff 45%, #2e86c1 85%, #1f3a5f 100%) !important;
         color: var(--text-primary) !important;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
@@ -1820,7 +1820,7 @@ if os.path.exists(_logo_path):
 header_css = f"""
 <style>
 header[data-testid="stHeader"] {{
-    background: linear-gradient(135deg, #fff8e4 0%, #d9d9d9 40%, #0f534b 80%, #252525 100%) !important;
+    background: linear-gradient(135deg, #f4f7fb 0%, #ffffff 40%, #2e86c1 80%, #1f3a5f 100%) !important;
     min-height: 72px;
     border-bottom: 1px solid rgba(150, 122, 161, 0.35);
     box-shadow: 0 18px 50px rgba(25, 42, 81, 0.2);
