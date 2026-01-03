@@ -984,9 +984,23 @@ st.markdown(
     
     body, .stApp {{
         background:
-            linear-gradient(135deg, #010528 0%, #004b8e 35%, #004b8e 65%, #010528 100%) !important;
+            radial-gradient(900px circle at 20% 20%, rgba(0, 75, 142, 0.22), transparent 45%),
+            radial-gradient(1100px circle at 80% 10%, rgba(1, 5, 40, 0.24), transparent 50%),
+            linear-gradient(135deg, #010528 0%, #0a2f5d 30%, #004b8e 55%, #0a2f5d 80%, #010528 100%) !important;
         color: var(--text-primary) !important;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    }}
+
+    /* Premium glass cards & tables */
+    .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
+        background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06)) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        box-shadow: 0 20px 45px rgba(1,5,40,0.35);
+        border-radius: 16px;
+        backdrop-filter: blur(10px);
+    }}
+    .stDataFrame table, .stTable table {{
+        background: transparent !important;
     }}
     
     header {{
