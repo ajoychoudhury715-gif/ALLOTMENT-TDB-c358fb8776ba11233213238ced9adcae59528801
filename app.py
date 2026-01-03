@@ -1753,8 +1753,8 @@ if os.path.exists(_logo_path):
 header_css = f"""
 <style>
 header[data-testid="stHeader"] {{
-    background: linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 30%, #aaa1c8 60%, #967aa1 85%, #192a51 100%) !important;
-    height: 140px;
+    background: linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 25%, #aaa1c8 50%, #967aa1 75%, #192a51 100%) !important;
+    min-height: 72px;
     border-bottom: 1px solid rgba(150, 122, 161, 0.35);
     box-shadow: 0 18px 50px rgba(25, 42, 81, 0.2);
     position: sticky;
@@ -1764,51 +1764,92 @@ header[data-testid="stHeader"] {{
 header[data-testid="stHeader"] .stAppToolbar,
 header[data-testid="stHeader"] [data-testid="stToolbarActions"],
 header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
-    display: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }}
-header[data-testid="stHeader"]::before {{
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -110%);
-    width: 88px;
-    height: 88px;
-    border-radius: 16px;
-    background: {'url(data:image/jpeg;base64,' + logo_b64 + ')' if logo_b64 else 'linear-gradient(135deg, #d5c6e0, #aaa1c8)'} no-repeat center/cover;
-    box-shadow: 0 12px 32px rgba(25, 42, 81, 0.25);
+.hero-bar {{
+    margin: 0 0 1rem 0;
+    padding: 18px 20px;
+    background: rgba(245, 230, 232, 0.78);
+    border: 1px solid rgba(150, 122, 161, 0.35);
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(25, 42, 81, 0.16);
+    backdrop-filter: blur(12px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
 }}
-header[data-testid="stHeader"]::after {{
-    content: "ALLOTMENT DASHBOARD\\AReal-time Scheduling Management System";
-    white-space: pre;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, 10%);
+.hero-content {{
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    color: #192a51;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}}
+.hero-text {{
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+}}
+.hero-logo {{
+    width: 74px;
+    height: 74px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #d5c6e0, #aaa1c8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    box-shadow: 0 12px 32px rgba(25, 42, 81, 0.2);
+}}
+.hero-logo img {{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}}
+.hero-title {{
     font-size: 26px;
     font-weight: 800;
-    letter-spacing: 1px;
-    color: #192a51;
-    text-shadow: 0 3px 12px rgba(25, 42, 81, 0.18);
-    line-height: 1.3;
+    letter-spacing: 0.5px;
+}}
+.hero-subtitle {{
+    font-size: 15px;
+    font-weight: 500;
+    opacity: 0.85;
 }}
 @media (max-width: 768px) {{
     header[data-testid="stHeader"] {{
-        height: 120px;
+        min-height: 64px;
     }}
-    header[data-testid="stHeader"]::before {{
-        width: 68px;
-        height: 68px;
-        left: 50%;
-        transform: translate(-50%, -120%);
+    .hero-bar {{
+        padding: 14px;
+        border-radius: 14px;
     }}
-    header[data-testid="stHeader"]::after {{
-        left: 50%;
-        transform: translate(-50%, 10%);
+    .hero-content {{
+        flex-direction: column;
+        gap: 10px;
+    }}
+    .hero-logo {{
+        width: 62px;
+        height: 62px;
+    }}
+    .hero-title {{
         font-size: 20px;
     }}
 }}
 </style>
+<div class="hero-bar">
+  <div class="hero-content">
+    <div class="hero-logo">{'<img src="data:image/jpeg;base64,' + logo_b64 + '" alt="Logo" />' if logo_b64 else '<span style="font-weight:700;color:#192a51;">TDB</span>'}</div>
+    <div class="hero-text">
+      <div class="hero-title">ALLOTMENT DASHBOARD</div>
+      <div class="hero-subtitle">Real-time Scheduling Management System</div>
+    </div>
+  </div>
+</div>
 """
 st.markdown(header_css, unsafe_allow_html=True)
 
