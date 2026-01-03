@@ -58,6 +58,10 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = "admin"
 if "current_user" not in st.session_state:
     st.session_state.current_user = "admin"
+if "nav_category" not in st.session_state:
+    st.session_state.nav_category = "Scheduling"
+if "nav_sched" not in st.session_state:
+    st.session_state.nav_sched = "Compact Dashboard"
 
 # -----------------------------
 # Premium sidebar CSS (white pastel)
@@ -2099,85 +2103,86 @@ def _date_from_any(val):
 now = datetime.now(IST)
 date_line_str = now.strftime('%B %d, %Y - %I:%M:%S %p')
 
-st.markdown(f"""
-    <style>
-    .divider-line {{
-        height: 2px;
-        background: linear-gradient(90deg, transparent 0%, #99582f 50%, transparent 100%);
-        margin: 0.8rem 0;
-        border-radius: 1px;
-    }}
-    .sticky-top {{
-        position: sticky;
-        top: 0;
-        z-index: 999;
-        background: linear-gradient(135deg, {COLORS['bg_primary']}00, {COLORS['bg_secondary']}00);
-        padding: 0.4rem 0 0.35rem 0;
-        box-shadow: none;
-    }}
-    .date-line {{
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-top: 0.5rem;
-    }}
-    </style>
-    <div class="sticky-top">
-        <div class="date-line">{date_line_str} IST</div>
-    </div>
-""", unsafe_allow_html=True)
+if not (st.session_state.get("nav_category") == "Scheduling" and st.session_state.get("nav_sched") == "Compact Dashboard"):
+    st.markdown(f"""
+        <style>
+        .divider-line {{
+            height: 2px;
+            background: linear-gradient(90deg, transparent 0%, #99582f 50%, transparent 100%);
+            margin: 0.8rem 0;
+            border-radius: 1px;
+        }}
+        .sticky-top {{
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background: linear-gradient(135deg, {COLORS['bg_primary']}00, {COLORS['bg_secondary']}00);
+            padding: 0.4rem 0 0.35rem 0;
+            box-shadow: none;
+        }}
+        .date-line {{
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 0.5rem;
+        }}
+        </style>
+        <div class="sticky-top">
+            <div class="date-line">{date_line_str} IST</div>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Assistants Weekly Off display (10mm below date)
-st.markdown("<div style='margin-top:10mm;'></div>", unsafe_allow_html=True)
+    # Assistants Weekly Off display (10mm below date)
+    st.markdown("<div style='margin-top:10mm;'></div>", unsafe_allow_html=True)
 
-weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-today_idx = now.weekday()
-tomorrow_idx = (today_idx + 1) % 7
+    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    today_idx = now.weekday()
+    tomorrow_idx = (today_idx + 1) % 7
 
-def _render_off_card(title: str, off_list: list[str]):
-    has_off = bool(off_list)
-    names = ", ".join(off_list) if has_off else "All assistants available"
-    icon = "🚫" if has_off else "✅"
-    bg = COLORS['danger'] if has_off else COLORS['success']
-    border = COLORS['danger'] if has_off else COLORS['success']
-    note = "Cannot be allocated" if has_off else "No weekly off"
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {bg}15, {COLORS['accent']}10);
-            border: 1px solid {border}40;
-            border-left: 4px solid {border};
-            border-radius: 8px;
-            padding: 12px 14px;
-            margin: 6px 0 10px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        ">
-            <span style="font-size: 1.3em;">{icon}</span>
-            <div>
-                <strong style="color: {COLORS['text_primary']};">{title}</strong>
-                <div style="color: {COLORS['text_secondary']}; margin-top: 2px;">
-                    <strong>{names}</strong> — {note}
+    def _render_off_card(title: str, off_list: list[str]):
+        has_off = bool(off_list)
+        names = ", ".join(off_list) if has_off else "All assistants available"
+        icon = "🚫" if has_off else "✅"
+        bg = COLORS['danger'] if has_off else COLORS['success']
+        border = COLORS['danger'] if has_off else COLORS['success']
+        note = "Cannot be allocated" if has_off else "No weekly off"
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, {bg}15, {COLORS['accent']}10);
+                border: 1px solid {border}40;
+                border-left: 4px solid {border};
+                border-radius: 8px;
+                padding: 12px 14px;
+                margin: 6px 0 10px 0;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            ">
+                <span style="font-size: 1.3em;">{icon}</span>
+                <div>
+                    <strong style="color: {COLORS['text_primary']};">{title}</strong>
+                    <div style="color: {COLORS['text_secondary']}; margin-top: 2px;">
+                        <strong>{names}</strong> — {note}
+                    </div>
                 </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
 
-st.markdown("### 🗓️ Assistants Weekly Off")
-col_today, col_tomorrow = st.columns(2)
-with col_today:
-    _render_off_card(
-        f"Today ({weekday_names[today_idx]})",
-        WEEKLY_OFF.get(today_idx, []),
-    )
-with col_tomorrow:
-    _render_off_card(
-        f"Tomorrow ({weekday_names[tomorrow_idx]})",
-        WEEKLY_OFF.get(tomorrow_idx, []),
-    )
+    st.markdown("### 🗓️ Assistants Weekly Off")
+    col_today, col_tomorrow = st.columns(2)
+    with col_today:
+        _render_off_card(
+            f"Today ({weekday_names[today_idx]})",
+            WEEKLY_OFF.get(today_idx, []),
+        )
+    with col_tomorrow:
+        _render_off_card(
+            f"Tomorrow ({weekday_names[tomorrow_idx]})",
+            WEEKLY_OFF.get(tomorrow_idx, []),
+        )
 
 
 def _get_app_version_short() -> str:
