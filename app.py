@@ -2188,6 +2188,32 @@ def _norm_staff_key(value: str) -> str:
     except Exception:
         return ""
 
+def _parse_weekly_off_days(val: str) -> list[int]:
+    """Parse weekly off string to list of weekday indices (0=Mon)."""
+    if not val:
+        return []
+    days_map = {
+        "MONDAY": 0, "MON": 0,
+        "TUESDAY": 1, "TUE": 1, "TUES": 1,
+        "WEDNESDAY": 2, "WED": 2,
+        "THURSDAY": 3, "THU": 3, "THURS": 3,
+        "FRIDAY": 4, "FRI": 4,
+        "SATURDAY": 5, "SAT": 5,
+        "SUNDAY": 6, "SUN": 6,
+    }
+    out: list[int] = []
+    for part in str(val).replace(";", ",").split(","):
+        p = part.strip().upper()
+        if not p:
+            continue
+        if p.isdigit():
+            idx = int(p)
+            if 0 <= idx <= 6:
+                out.append(idx)
+        elif p in days_map:
+            out.append(days_map[p])
+    return out
+
 
 def _seed_supabase_profiles_if_needed(client) -> None:
     """Ensure all configured assistants/doctors exist in Supabase profiles table."""
@@ -2256,21 +2282,12 @@ def _refresh_staff_options_from_supabase(client):
         week_map: dict[int, list[str]] = {i: [] for i in range(7)}
         if "weekly_off" in df.columns:
             for _, row in df.iterrows():
-                wo = str(row.get("weekly_off", "") or "").strip()
-                if not wo:
+                wo_days = _parse_weekly_off_days(row.get("weekly_off", ""))
+                name = str(row.get("name", "")).strip().upper()
+                if not name:
                     continue
-                names = [n.strip().upper() for n in str(row.get("name", "")).split(",") if n.strip()]
-                if not names:
-                    continue
-                parts = [p.strip() for p in wo.replace(";", ",").split(",") if p.strip()]
-                for p in parts:
-                    try:
-                        day_idx = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"].index(p.upper())
-                        for nm in names:
-                            if nm:
-                                week_map[day_idx].append(nm)
-                    except ValueError:
-                        continue
+                for idx in wo_days:
+                    week_map[idx].append(name)
         WEEKLY_OFF = week_map
     except Exception:
         pass
@@ -5106,7 +5123,7 @@ elif category == "Assistants":
 elif category == "Doctors":
     doctor_view = st.sidebar.radio(
         "Doctors",
-        ["Manage Profiles", "Summary", "Per-Doctor Schedule"],
+        ["Manage Profiles", "Overview", "Summary", "Per-Doctor Schedule"],
         index=0,
         key="nav_doc",
     )
@@ -5123,6 +5140,63 @@ if category == "Assistants" and assist_view == "Manage Profiles":
 
 if category == "Doctors" and doctor_view == "Manage Profiles":
     render_profile_manager(PROFILE_DOCTOR_SHEET, "Doctor", "Department")
+
+if category == "Doctors" and doctor_view == "Overview":
+    def render_doctor_overview():
+        st.markdown("### 🩺 Doctors Overview")
+        today_idx = now.weekday()
+        tomorrow_idx = (today_idx + 1) % 7
+        weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        doctors_df = load_profiles(PROFILE_DOCTOR_SHEET)
+        doctors_df["status"] = doctors_df.get("status", "ACTIVE").astype(str).str.upper()
+        total = len(doctors_df)
+        active = (doctors_df["status"] == "ACTIVE").sum() if not doctors_df.empty else 0
+
+        def _off_list(idx):
+            if "weekly_off" not in doctors_df.columns:
+                return []
+            offs = []
+            for _, row in doctors_df.iterrows():
+                days = _parse_weekly_off_days(row.get("weekly_off", ""))
+                if idx in days:
+                    offs.append(str(row.get("name", "")).strip().upper())
+            return offs
+
+        today_off = _off_list(today_idx)
+        tomorrow_off = _off_list(tomorrow_idx)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Total Doctors", total)
+        c2.metric("Active", active)
+        c3.metric(f"Off Today ({weekday_names[today_idx]})", len(today_off))
+        c4.metric(f"Off Tomorrow ({weekday_names[tomorrow_idx]})", len(tomorrow_off))
+
+        st.markdown("#### Today's Off Doctors")
+        if today_off:
+            st.warning(", ".join(sorted(today_off)))
+        else:
+            st.success("All doctors available today.")
+
+        st.markdown("#### Tomorrow's Off Doctors")
+        if tomorrow_off:
+            st.info(", ".join(sorted(tomorrow_off)))
+        else:
+            st.success("All doctors available tomorrow.")
+
+        st.markdown("#### By Department")
+        by_dept = {}
+        for _, row in doctors_df.iterrows():
+            dept = str(row.get("department", "")).strip().upper()
+            by_dept.setdefault(dept, []).append(row)
+        for dept, rows in by_dept.items():
+            with st.expander(f"{dept or 'UNKNOWN'} ({len(rows)})", expanded=False):
+                for r in rows:
+                    name = str(r.get("name", "")).title()
+                    status = str(r.get("status", "")).upper()
+                    wo = ", ".join([weekday_names[d] for d in _parse_weekly_off_days(r.get("weekly_off", ""))]) if r.get("weekly_off") else "None"
+                    st.write(f"- **{name}** · Status: {status} · Weekly Off: {wo}")
+
+    render_doctor_overview()
 
 if category == "Scheduling":
     # ================ Status Colors ================
