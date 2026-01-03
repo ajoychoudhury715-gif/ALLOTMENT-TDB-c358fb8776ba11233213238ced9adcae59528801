@@ -5204,8 +5204,16 @@ if category == "Doctors" and doctor_view == "Overview":
 
         # Editable table
         edit_df = doctors_df.copy()
-        edit_df["weekly_off"] = edit_df["weekly_off"].apply(_weekly_off_names)
-        edit_df_display = edit_df[PROFILE_COLUMNS]
+        edit_df["weekly_off"] = edit_df["weekly_off"].apply(
+            lambda v: ",".join(_weekly_off_names(v)) if v is not None else ""
+        )
+        for col in ["pref_first", "pref_second", "pref_third", "department", "status"]:
+            if col in edit_df.columns:
+                edit_df[col] = edit_df[col].astype(str)
+        for col in ["created_at", "updated_at"]:
+            if col in edit_df.columns:
+                edit_df[col] = edit_df[col].astype(str)
+        edit_df_display = edit_df[PROFILE_COLUMNS].copy()
         edited = st.data_editor(
             edit_df_display,
             num_rows="dynamic",
