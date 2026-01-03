@@ -3783,7 +3783,6 @@ if SUPABASE_AVAILABLE:
             supabase_table_name = sup_table
             supabase_row_id = sup_row
             PROFILE_SUPABASE_TABLE = profile_table
-            PROFILE_SUPABASE_TABLE = profile_table
             # Quick connectivity check (will also validate credentials)
             _ = supabase_client.table(supabase_table_name).select("id").limit(1).execute()
             USE_SUPABASE = True
@@ -4200,7 +4199,7 @@ def _data_editor_has_pending_edits(editor_key: str) -> bool:
 df_raw = None
 
 if USE_SUPABASE:
-    sup_url, sup_key, sup_table, sup_row = _get_supabase_config_from_secrets_or_env()
+    sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
     df_raw = load_data_from_supabase(sup_url, sup_key, sup_table, sup_row)
     if df_raw is None:
         st.error("⚠️ Failed to load data from Supabase.")
@@ -4428,7 +4427,7 @@ def save_data(dataframe, show_toast=True, message="Data saved!"):
         dataframe.attrs["meta"] = meta
         
         if USE_SUPABASE:
-            sup_url, sup_key, sup_table, sup_row = _get_supabase_config_from_secrets_or_env()
+            sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
             success = save_data_to_supabase(sup_url, sup_key, sup_table, sup_row, dataframe)
             if success and show_toast:
                 st.toast(f"🗄️ {message}", icon="✅")
@@ -5259,7 +5258,7 @@ if category == "Scheduling":
     with col_search:
         # Patient search
         if USE_SUPABASE and SUPABASE_AVAILABLE:
-            sup_url, sup_key, _, _ = _get_supabase_config_from_secrets_or_env()
+            sup_url, sup_key, _, _, _ = _get_supabase_config_from_secrets_or_env()
             patients_table, id_col, name_col = _get_patients_config_from_secrets_or_env()
     
             patient_query = st.text_input(
