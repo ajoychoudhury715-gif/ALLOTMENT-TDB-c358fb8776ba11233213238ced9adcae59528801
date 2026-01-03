@@ -2235,6 +2235,47 @@ def _seed_supabase_profiles_if_needed(client) -> None:
             pass
 
 
+def _refresh_staff_options_from_supabase(client):
+    """Override ALL_ASSISTANTS/ALL_DOCTORS and WEEKLY_OFF from Supabase profiles."""
+    global ALL_ASSISTANTS, ALL_DOCTORS, WEEKLY_OFF
+    try:
+        resp = client.table(PROFILE_SUPABASE_TABLE).select("*").execute()
+        data = resp.data or []
+        df = pd.DataFrame(data)
+        if df.empty:
+            return
+        df["name"] = df["name"].astype(str).str.upper()
+        df["department"] = df.get("department", "").astype(str).str.upper()
+        assistants = df[df["kind"] == PROFILE_ASSISTANT_SHEET]["name"].dropna().tolist()
+        doctors = df[df["kind"] == PROFILE_DOCTOR_SHEET]["name"].dropna().tolist()
+        if assistants:
+            ALL_ASSISTANTS = _unique_preserve_order(assistants)
+        if doctors:
+            ALL_DOCTORS = _unique_preserve_order(doctors)
+        # Weekly off mapping
+        week_map: dict[int, list[str]] = {i: [] for i in range(7)}
+        if "weekly_off" in df.columns:
+            for _, row in df.iterrows():
+                wo = str(row.get("weekly_off", "") or "").strip()
+                if not wo:
+                    continue
+                names = [n.strip().upper() for n in str(row.get("name", "")).split(",") if n.strip()]
+                if not names:
+                    continue
+                parts = [p.strip() for p in wo.replace(";", ",").split(",") if p.strip()]
+                for p in parts:
+                    try:
+                        day_idx = ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY"].index(p.upper())
+                        for nm in names:
+                            if nm:
+                                week_map[day_idx].append(nm)
+                    except ValueError:
+                        continue
+        WEEKLY_OFF = week_map
+    except Exception:
+        pass
+
+
 def _is_blank_cell(value: Any) -> bool:
     """True if value is empty/NaN/'nan'/'none'."""
     try:
@@ -3056,6 +3097,9 @@ supabase_row_id = "main"
 # Force supabase-only by default (no Excel fallback)
 FORCE_SUPABASE = True
 PROFILE_SUPABASE_TABLE = "profiles"
+# Hard defaults (override with secrets/env in prod)
+SUPABASE_URL_DEFAULT = "https://iulgvbjkqcrwwnrwjolh.supabase.co"
+SUPABASE_KEY_DEFAULT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1bGd2YmprcWNyd3ducndqb2xoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjQyNDM1NSwiZXhwIjoyMDgyMDAwMzU1fQ.PlilHFvaHxCTCdXHQILJ07enCTwTarOphYILnO9RIwU"
 
 gsheet_client = None
 gsheet_worksheet = None
@@ -3090,6 +3134,10 @@ PROFILE_COLUMNS = [
     "contact_email",
     "contact_phone",
     "status",
+    "weekly_off",          # comma-separated weekdays e.g. "Monday,Wednesday"
+    "pref_first",          # preference hints for FIRST role
+    "pref_second",         # preference hints for SECOND role
+    "pref_third",          # preference hints for Third role
     "created_at",
     "updated_at",
     "created_by",
@@ -3102,6 +3150,9 @@ def _ensure_profile_df(df: pd.DataFrame) -> pd.DataFrame:
     for col in PROFILE_COLUMNS:
         if col not in out.columns:
             out[col] = ""
+    # Normalize text casing
+    out["name"] = out["name"].astype(str).str.upper()
+    out["department"] = out["department"].astype(str).str.upper()
     return out[PROFILE_COLUMNS]
 
 
@@ -3118,8 +3169,18 @@ def load_profiles(sheet_name: str) -> pd.DataFrame:
             df = pd.DataFrame(data)
             if df.empty:
                 return _ensure_profile_df(pd.DataFrame())
-            if "name" in df.columns:
-                df["name"] = df["name"].astype(str).str.upper()
+            # Coerce helper columns
+            df["name"] = df["name"].astype(str).str.upper()
+            df["department"] = df.get("department", "").astype(str).str.upper()
+            # Ensure preference/weekly_off columns exist
+            if "weekly_off" not in df.columns:
+                df["weekly_off"] = ""
+            if "pref_first" not in df.columns:
+                df["pref_first"] = ""
+            if "pref_second" not in df.columns:
+                df["pref_second"] = ""
+            if "pref_third" not in df.columns:
+                df["pref_third"] = ""
             return _ensure_profile_df(df)
         except Exception:
             return _ensure_profile_df(pd.DataFrame())
@@ -3156,14 +3217,24 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
         try:
             clean_df = _ensure_profile_df(df)
             clean_df["kind"] = sheet_name
+            # Flatten weekly_off lists if present
+            def _fmt_wo(val):
+                if isinstance(val, list):
+                    return ",".join([str(v) for v in val if str(v).strip()])
+                return str(val or "")
+            clean_df["weekly_off"] = clean_df["weekly_off"].apply(_fmt_wo)
+            # Upsert per row
             rows = clean_df.to_dict(orient="records")
-            # Replace existing kind
-            supabase_client.table(PROFILE_SUPABASE_TABLE).delete().eq("kind", sheet_name).execute()
-            if rows:
-                supabase_client.table(PROFILE_SUPABASE_TABLE).insert(rows).execute()
+            for row in rows:
+                rid = row.get("id")
+                if rid:
+                    supabase_client.table(PROFILE_SUPABASE_TABLE).upsert(row, on_conflict="id").execute()
+                else:
+                    supabase_client.table(PROFILE_SUPABASE_TABLE).insert(row).execute()
             return
         except Exception as e:
             st.error(f"Error saving profiles to Supabase '{sheet_name}': {e}")
+            st.info("If you see column errors, add columns weekly_off, pref_first, pref_second, pref_third to the profiles table.")
             return
     try:
         clean_df = _ensure_profile_df(df)
@@ -3432,8 +3503,8 @@ def _open_spreadsheet(client, spreadsheet_ref: str):
 
 def _get_supabase_config_from_secrets_or_env():
     """Return (url, key, table, row_id, profile_table) from Streamlit secrets/env vars."""
-    url = ""
-    key = ""
+    url = SUPABASE_URL_DEFAULT
+    key = SUPABASE_KEY_DEFAULT
     service_key = ""
     table = supabase_table_name
     row_id = supabase_row_id
@@ -3788,6 +3859,7 @@ if SUPABASE_AVAILABLE:
             USE_SUPABASE = True
             st.sidebar.success("🗄️ Connected to Supabase")
             _seed_supabase_profiles_if_needed(supabase_client)
+            _refresh_staff_options_from_supabase(supabase_client)
         else:
             # Not configured; show a quick setup helper.
             with st.sidebar.expander("✅ Quick setup (Supabase)", expanded=False):
