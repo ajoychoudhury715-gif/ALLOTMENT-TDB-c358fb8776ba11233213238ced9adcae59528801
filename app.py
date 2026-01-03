@@ -66,31 +66,31 @@ def inject_white_pastel_sidebar():
     st.markdown("""
     <style>
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #007f5f 0%, #2b9348 50%, #55a630 100%);
-        border-right: 1px solid rgba(221, 223, 0, 0.25);
+        background: linear-gradient(180deg, #f5e6e8 0%, #d5c6e0 50%, #aaa1c8 100%);
+        border-right: 1px solid rgba(150, 122, 161, 0.35);
     }
     [data-testid="stSidebarContent"] { padding: 16px 14px; }
     [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
-        background: rgba(0, 127, 95, 0.25);
-        border: 1px solid rgba(221, 223, 0, 0.25);
+        background: rgba(245, 230, 232, 0.75);
+        border: 1px solid rgba(150, 122, 161, 0.35);
         border-radius: 16px;
         padding: 10px 12px 8px 12px;
-        box-shadow: 0 8px 24px rgba(0, 8, 20, 0.35);
+        box-shadow: 0 8px 24px rgba(25, 42, 81, 0.15);
         backdrop-filter: blur(10px);
     }
     [data-testid="stSidebar"] button {
         border-radius: 14px !important;
         padding: 0.6rem 0.9rem !important;
-        border: 1px solid rgba(221, 223, 0, 0.35) !important;
-        background: linear-gradient(180deg, #55a630, #2b9348) !important;
-        box-shadow: 0 10px 22px rgba(0, 8, 20, 0.35) !important;
+        border: 1px solid rgba(150, 122, 161, 0.35) !important;
+        background: linear-gradient(180deg, #aaa1c8, #967aa1) !important;
+        box-shadow: 0 10px 22px rgba(25, 42, 81, 0.2) !important;
         font-weight: 700;
     }
-    .sidebar-title { font-size: 18px; font-weight: 800; color: #ffff3f; margin-bottom: 6px; }
+    .sidebar-title { font-size: 18px; font-weight: 800; color: #192a51; margin-bottom: 6px; }
     .live-pill {
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
-        background:rgba(221, 223, 0, 0.15); color:#ffff3f; border:1px solid rgba(221, 223, 0, 0.35); margin-bottom: 10px;
+        background:rgba(150, 122, 161, 0.15); color:#192a51; border:1px solid rgba(150, 122, 161, 0.35); margin-bottom: 10px;
     }
     .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
     </style>
@@ -902,38 +902,38 @@ if "duty_current_assistant" not in st.session_state:
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
 LIGHT_COLORS = {
-    "bg_primary": "#007f5f",
-    "bg_secondary": "#2b9348",
-    "text_primary": "#ffff3f",
-    "text_secondary": "#dddf00",
-    "button_bg": "#55a630",
-    "button_text": "#0a0a0a",
-    "accent": "#80b918",
+    "bg_primary": "#f5e6e8",
+    "bg_secondary": "#d5c6e0",
+    "text_primary": "#192a51",
+    "text_secondary": "#967aa1",
+    "button_bg": "#967aa1",
+    "button_text": "#f5e6e8",
+    "accent": "#aaa1c8",
     "success": "#55a630",
-    "warning": "#dddf00",
+    "warning": "#d5c6e0",
     "danger": "#ef4444",
-    "info": "#aacc00",
+    "info": "#192a51",
     # Glass surfaces
-    "glass_bg": "rgba(0, 127, 95, 0.22)",
-    "glass_border": "rgba(221, 223, 0, 0.4)",
+    "glass_bg": "rgba(245, 230, 232, 0.65)",
+    "glass_border": "rgba(150, 122, 161, 0.45)",
 }
 
 # Dark mode with vibrant neon accents for status indicators
 DARK_COLORS = {
-    "bg_primary": "#007f5f",
-    "bg_secondary": "#2b9348",
-    "text_primary": "#ffff3f",
-    "text_secondary": "#dddf00",
-    "button_bg": "#55a630",
-    "button_text": "#0a0a0a",
-    "accent": "#80b918",
+    "bg_primary": "#192a51",
+    "bg_secondary": "#967aa1",
+    "text_primary": "#f5e6e8",
+    "text_secondary": "#d5c6e0",
+    "button_bg": "#aaa1c8",
+    "button_text": "#192a51",
+    "accent": "#d5c6e0",
     "success": "#55a630",
-    "warning": "#dddf00",
+    "warning": "#d5c6e0",
     "danger": "#ef4444",
-    "info": "#aacc00",
+    "info": "#f5e6e8",
     # Glass surfaces
-    "glass_bg": "rgba(0, 127, 95, 0.28)",
-    "glass_border": "rgba(221, 223, 0, 0.35)",
+    "glass_bg": "rgba(150, 122, 161, 0.35)",
+    "glass_border": "rgba(245, 230, 232, 0.35)",
 }
 
 if "dark_mode" not in st.session_state:
@@ -984,16 +984,16 @@ st.markdown(
     
     body, .stApp {{
         background:
-            radial-gradient(900px circle at 20% 20%, rgba(85, 166, 48, 0.20), transparent 45%),
-            radial-gradient(1100px circle at 80% 10%, rgba(0, 127, 95, 0.25), transparent 50%),
-            linear-gradient(135deg, #007f5f 0%, #2b9348 25%, #55a630 45%, #80b918 65%, #dddf00 80%, #ffff3f 100%) !important;
+            radial-gradient(900px circle at 20% 20%, rgba(245, 230, 232, 0.35), transparent 45%),
+            radial-gradient(1100px circle at 80% 10%, rgba(150, 122, 161, 0.25), transparent 50%),
+            linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 25%, #aaa1c8 55%, #967aa1 80%, #192a51 100%) !important;
         color: var(--text-primary) !important;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
 
     /* Premium glass cards & tables */
     .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
-        background: rgba(255, 255, 255, 0.06) !important;
+        background: rgba(245, 230, 232, 0.12) !important;
         border: 1px solid rgba(221, 223, 0, 0.25) !important;
         box-shadow: 0 20px 45px rgba(0,0,0,0.30);
         border-radius: 16px;
