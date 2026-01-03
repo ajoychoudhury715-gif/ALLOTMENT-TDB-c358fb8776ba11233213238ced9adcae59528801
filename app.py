@@ -994,7 +994,20 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             else:
                 st.info(f"Tomorrow ({weekday_names[tomorrow_idx]}): All assistants available")
 
-            st.markdown("<div class='manage-pill'>⚠️ Manage Reminders</div>", unsafe_allow_html=True)
+            manage_clicked = st.button("⚠️ Manage Reminders", key="compact_manage_reminders")
+            if manage_clicked:
+                st.session_state["show_compact_reminders"] = True
+
+    if st.session_state.get("show_compact_reminders"):
+        with st.expander("🔔 Manage Reminders", expanded=True):
+            st.checkbox("Enable 15-minute reminders", value=True, key="compact_enable_reminders")
+            st.selectbox(
+                "Default snooze (seconds)",
+                options=[30, 60, 90, 120, 150, 180, 300],
+                index=0,
+                key="compact_default_snooze_seconds",
+            )
+            st.caption("Reminders alert 15 minutes before a patient's In Time.")
 
         with divider:
             st.markdown("<div class='v-divider'></div>", unsafe_allow_html=True)
