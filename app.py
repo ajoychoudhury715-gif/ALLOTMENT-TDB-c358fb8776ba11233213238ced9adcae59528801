@@ -4718,26 +4718,7 @@ with st.sidebar:
                 'Date': block.get('date', ''),
                 'Reason': block.get('reason', '')
             }
-        try:
-            formatted_blocks = [_format_block(b) for b in st.session_state.time_blocks]
-            st.dataframe(formatted_blocks, hide_index=True)
-        except Exception as e:
-            st.warning(f"[DEBUG] Error formatting time_blocks: {e}")
-        # Developer mode toggle for raw JSON debug output
-        if 'show_debug_json' not in st.session_state:
-            st.session_state.show_debug_json = False
-        with st.expander("[DEV] Show raw time_blocks JSON", expanded=st.session_state.show_debug_json):
-            show = st.checkbox("Show raw JSON", value=st.session_state.show_debug_json, key="show_debug_json_checkbox")
-            st.session_state.show_debug_json = show
-            if show:
-                st.markdown("**[DEBUG] Raw time_blocks (JSON):**")
-                st.json(st.session_state.time_blocks)
-        try:
-            meta = df_raw.attrs.get("meta", {}) if hasattr(df_raw, "attrs") else {}
-            st.markdown("**[DEBUG] Meta in DataFrame:**")
-            st.json(meta)
-        except Exception as e:
-            st.warning(f"[DEBUG] Error reading meta: {e}")
+        # Developer debug removed from sidebar per request
     else:
         st.caption("No time blocks set for today")
 
