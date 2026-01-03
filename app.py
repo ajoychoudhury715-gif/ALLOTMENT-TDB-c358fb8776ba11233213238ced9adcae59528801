@@ -1755,9 +1755,12 @@ if os.path.exists(_logo_path):
 st.markdown(f"""
 <style>
 .hero-bar {{
-    margin: 1.5rem 0 1.2rem 0;
+    margin: 0 0 1.2rem 0;
     padding: 1.2rem 1.6rem;
-    border-radius: 18px;
+    border-radius: 0 0 18px 18px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
     background: linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 30%, #aaa1c8 60%, #967aa1 85%, #192a51 100%);
     box-shadow: 0 18px 50px rgba(25, 42, 81, 0.25), inset 0 1px 0 rgba(255,255,255,0.4);
     border: 1px solid rgba(150, 122, 161, 0.35);
