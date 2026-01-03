@@ -65,18 +65,17 @@ if "current_user" not in st.session_state:
 def inject_white_pastel_sidebar():
     st.markdown("""
     <style>
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #f5e6e8 0%, #d5c6e0 50%, #aaa1c8 100%);
-        border-right: 1px solid rgba(150, 122, 161, 0.35);
-    }
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #f5e6e8 0%, #d5c6e0 50%, #aaa1c8 100%);
+    border-right: 1px solid rgba(150, 122, 161, 0.35);
+}
     [data-testid="stSidebarContent"] { padding: 16px 14px; }
     [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
-        background: rgba(245, 230, 232, 0.75);
-        border: 1px solid rgba(150, 122, 161, 0.35);
+        background: #f5e6e8;
+        border: 1px solid #aaa1c8;
         border-radius: 16px;
         padding: 10px 12px 8px 12px;
         box-shadow: 0 8px 24px rgba(25, 42, 81, 0.15);
-        backdrop-filter: blur(10px);
     }
     [data-testid="stSidebar"] button {
         border-radius: 14px !important;
@@ -90,7 +89,7 @@ def inject_white_pastel_sidebar():
     .live-pill {
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
-        background:rgba(150, 122, 161, 0.15); color:#192a51; border:1px solid rgba(150, 122, 161, 0.35); margin-bottom: 10px;
+        background:#d5c6e0; color:#192a51; border:1px solid #aaa1c8; margin-bottom: 10px;
     }
     .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
     </style>
@@ -939,8 +938,8 @@ LIGHT_COLORS = {
     "danger": "#ef4444",
     "info": "#192a51",
     # Glass surfaces
-    "glass_bg": "rgba(245, 230, 232, 0.65)",
-    "glass_border": "rgba(150, 122, 161, 0.45)",
+    "glass_bg": "#d5c6e0",
+    "glass_border": "#aaa1c8",
 }
 
 # Dark mode with vibrant neon accents for status indicators
@@ -957,8 +956,8 @@ DARK_COLORS = {
     "danger": "#ef4444",
     "info": "#f5e6e8",
     # Glass surfaces
-    "glass_bg": "rgba(150, 122, 161, 0.35)",
-    "glass_border": "rgba(245, 230, 232, 0.35)",
+    "glass_bg": "#967aa1",
+    "glass_border": "#d5c6e0",
 }
 
 if "dark_mode" not in st.session_state:
@@ -1016,16 +1015,16 @@ st.markdown(
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
 
-    /* Premium glass cards & tables */
+    /* Cards & tables */
     .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
-        background: rgba(245, 230, 232, 0.12) !important;
-        border: 1px solid rgba(221, 223, 0, 0.25) !important;
-        box-shadow: 0 20px 45px rgba(0,0,0,0.30);
+        background: #f5e6e8 !important;
+        border: 1px solid #c8b6d3 !important;
+        box-shadow: 0 12px 28px rgba(0,0,0,0.18);
         border-radius: 16px;
-        backdrop-filter: blur(8px);
+        backdrop-filter: none !important;
     }}
     .stDataFrame table, .stTable table {{
-        background: transparent !important;
+        background: #f5e6e8 !important;
     }}
     
     header {{
@@ -1225,7 +1224,7 @@ st.markdown(
         background: var(--glass-bg);
         border: 1px solid var(--glass-border);
         box-shadow: 0 10px 26px rgba(0,0,0,0.12);
-        backdrop-filter: blur(8px);
+        backdrop-filter: none !important;
         display: flex;
         flex-direction: column;
         gap: 6px;
@@ -1303,8 +1302,8 @@ st.markdown(
         background: var(--glass-bg) !important;
         border-radius: 10px !important;
         border: 1px solid var(--glass-border) !important;
-        backdrop-filter: blur(14px) saturate(140%) !important;
-        -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
     }}
     
     /* Data editor dropdown text visibility */
@@ -1415,8 +1414,8 @@ st.markdown(
         box-shadow: 0 14px 40px rgba(0, 0, 0, 0.30) !important;
         overflow: hidden !important;
         transition: all 0.3s ease !important;
-        backdrop-filter: blur(14px) saturate(140%) !important;
-        -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
     }}
     
     [data-testid="stDataFrameContainer"]:hover {{
@@ -1637,12 +1636,12 @@ st.markdown(
     }}
 
     .availability-card {{
-        background: linear-gradient(165deg, var(--glass-bg), rgba(255,255,255,0.06));
+        background: linear-gradient(165deg, var(--bg-secondary), var(--bg-primary));
         border: 1px solid var(--glass-border);
         border-radius: 18px;
         padding: 1.25rem 1.35rem;
         box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-        backdrop-filter: blur(14px) saturate(160%);
+        backdrop-filter: none !important;
         display: flex;
         flex-direction: column;
         gap: 0.55rem;
@@ -1710,8 +1709,8 @@ st.markdown(
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
-        backdrop-filter: blur(12px) saturate(140%);
-        -webkit-backdrop-filter: blur(12px) saturate(140%);
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }}
 
