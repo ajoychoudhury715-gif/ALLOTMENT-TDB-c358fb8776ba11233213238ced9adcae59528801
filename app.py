@@ -945,11 +945,15 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         [data-testid="stDataFrameContainer"] {border-radius: 14px !important; border: 1px solid rgba(203,213,225,0.9) !important; box-shadow: 0 8px 20px rgba(15,23,42,0.08) !important;}
         [data-testid="stDataFrameContainer"] thead th {background:#f2f5f8 !important; color:#475569 !important; font-weight:700 !important;}
         .summary-bar {background: rgba(255,255,255,0.75); border: 1px solid rgba(203,213,225,0.8); border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
+        .compact-dashboard [data-testid="stVerticalBlock"] {gap: 0.5rem;}
+        .compact-dashboard [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
+        .metrics-stack [data-testid="stVerticalBlock"] {gap: 0.35rem;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+    st.markdown("<div class='compact-dashboard'>", unsafe_allow_html=True)
     st.markdown("<div class='dash-title'>THE DENTAL BOND</div>", unsafe_allow_html=True)
     st.markdown("<div class='dash-subtitle'>Real-time Scheduling Management System</div>", unsafe_allow_html=True)
     st.write("")
@@ -1002,6 +1006,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             completed = status_series.str.contains("DONE|COMPLETED").sum()
             cancelled = status_series.str.contains("CANCEL").sum()
 
+            st.markdown("<div class='metrics-stack'>", unsafe_allow_html=True)
             r1c1, r1c2, r1c3 = st.columns(3, gap="small")
             r2c1, r2c2, r2c3 = st.columns(3, gap="small")
             for col, title, val in (
@@ -1024,6 +1029,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", type="secondary")
             with b3:
                 st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
 
@@ -1068,6 +1074,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         with st.expander("📊 Schedule Summary by Doctor", expanded=False):
             st.write("Summary table / charts here")
         st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
