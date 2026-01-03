@@ -1258,6 +1258,14 @@ st.markdown(
         max-width: 2200px !important;
         margin: 0 auto !important;
     }}
+
+    html, body, [data-testid="stAppViewContainer"] {{
+        overflow-y: auto !important;
+        height: auto !important;
+    }}
+    [data-testid="stAppViewContainer"] > .main {{
+        overflow: visible !important;
+    }}
     
     /* Professional header styling */
     .header-container {{
@@ -2381,7 +2389,7 @@ def _norm_staff_key(value: str) -> str:
 
 def _parse_weekly_off_days(val: str) -> list[int]:
     """Parse weekly off string to list of weekday indices (0=Mon)."""
-    if not val:
+    if val is None:
         return []
     days_map = {
         "MONDAY": 0, "MON": 0,
@@ -2393,8 +2401,31 @@ def _parse_weekly_off_days(val: str) -> list[int]:
         "SUNDAY": 6, "SUN": 6,
     }
     out: list[int] = []
-    for part in str(val).replace(";", ",").split(","):
-        p = part.strip().upper()
+    parts: list[Any] = []
+    if isinstance(val, (list, tuple, set)):
+        parts = list(val)
+    elif isinstance(val, str):
+        raw = val.strip()
+        if not raw:
+            return []
+        if (raw.startswith("[") and raw.endswith("]")) or (raw.startswith("{") and raw.endswith("}")):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, (list, tuple, set)):
+                    parts = list(parsed)
+                else:
+                    parts = [parsed]
+            except Exception:
+                parts = raw.replace(";", ",").split(",")
+        else:
+            parts = raw.replace(";", ",").split(",")
+    else:
+        parts = [val]
+
+    for part in parts:
+        if part is None or (isinstance(part, float) and pd.isna(part)):
+            continue
+        p = str(part).strip().upper()
         if not p:
             continue
         if p.isdigit():
