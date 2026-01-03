@@ -51,7 +51,7 @@ GSHEETS_AVAILABLE = _gsheets_available
 # pip install pandas openpyxl streamlit gspread google-auth
 
 # Page config
-st.set_page_config(page_title="ALLOTMENT", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="THE DENTAL BOND", layout="wide", initial_sidebar_state="collapsed")
 
 # Session defaults for role/user (replace with real auth later)
 if "user_role" not in st.session_state:
@@ -1829,7 +1829,7 @@ header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
     visibility: visible !important;
 }}
 header[data-testid="stHeader"]::after {{
-    content: "ALLOTMENT DASHBOARD\\AReal-time Scheduling Management System";
+    content: "THE DENTAL BOND\\AReal-time Scheduling Management System";
     white-space: pre;
     position: absolute;
     left: 50%;
