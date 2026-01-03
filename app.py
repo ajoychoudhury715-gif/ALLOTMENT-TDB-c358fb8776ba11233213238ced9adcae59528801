@@ -961,8 +961,6 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
     )
 
     st.markdown("<div class='compact-dashboard'>", unsafe_allow_html=True)
-    st.markdown("<div class='dash-title'>THE DENTAL BOND</div>", unsafe_allow_html=True)
-    st.markdown("<div class='dash-subtitle'>Real-time Scheduling Management System</div>", unsafe_allow_html=True)
     st.write("")
 
     with st.container(border=True):
@@ -2494,6 +2492,9 @@ def _refresh_staff_options_from_supabase(client):
         week_map: dict[int, list[str]] = {i: [] for i in range(7)}
         if "weekly_off" in df.columns:
             for _, row in df.iterrows():
+                kind = str(row.get("kind", "")).strip()
+                if kind != PROFILE_ASSISTANT_SHEET:
+                    continue
                 wo_days = _parse_weekly_off_days(row.get("weekly_off", ""))
                 name = str(row.get("name", "")).strip().upper()
                 if not name:
