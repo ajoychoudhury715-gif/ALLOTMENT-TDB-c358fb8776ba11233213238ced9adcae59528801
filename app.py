@@ -1829,6 +1829,22 @@ header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
     opacity: 1 !important;
     visibility: visible !important;
 }}
+header[data-testid="stHeader"]::after {{
+    content: "ALLOTMENT DASHBOARD\\AReal-time Scheduling Management System";
+    white-space: pre;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.3;
+    letter-spacing: 0.4px;
+    color: #192a51;
+    text-shadow: 0 3px 10px rgba(25, 42, 81, 0.22);
+    pointer-events: none;
+}}
 .hero-bar {{
     margin: 0 0 1rem 0;
     padding: 18px 20px;
