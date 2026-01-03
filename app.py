@@ -928,7 +928,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             border-radius: 20px;
         }
         .v-divider {width: 1px; background: rgba(148,163,184,0.5); min-height: 280px; margin: 8px auto;}
-        .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 10px; display:flex; align-items:center; gap:8px;}
+        .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 8px; display:flex; align-items:center; gap:8px;}
         .panel-title .link {font-size: 14px; opacity: 0.6; margin-left: 4px;}
         .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 12px; color: #8c1c13; margin-bottom: 8px; display:flex; gap:10px; align-items:center;}
         .alert-icon {width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ef4444; display:flex; align-items:center; justify-content:center; color:#ef4444; font-weight:700;}
@@ -938,8 +938,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .metric-card {background:#f9fbfd; border:1px solid #e2e8f0; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
         .metric-title {font-size: 12px; color:#6b7280; letter-spacing:0.6px;}
         .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
-        .metrics-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:10px;}
-        .controls-row {margin-top:2px; margin-bottom:4px;}
+        .metrics-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:6px;}
+        #metrics-anchor + div[data-testid="stHorizontalBlock"] {margin-top: 0 !important;}
         .controls-row .stButton>button {height: 42px !important; border-radius: 12px !important;}
         .controls-row [data-baseweb="select"] > div {min-height: 42px !important; border-radius: 12px !important;}
         button[kind="primary"] {background:#0f7a5f !important; border:1px solid #0f7a5f !important; color:#fff !important; box-shadow:0 8px 18px rgba(15,122,95,0.35) !important;}
@@ -998,16 +998,16 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if manage_clicked:
                 st.session_state["show_compact_reminders"] = True
 
-    if st.session_state.get("show_compact_reminders"):
-        with st.expander("🔔 Manage Reminders", expanded=True):
-            st.checkbox("Enable 15-minute reminders", value=True, key="compact_enable_reminders")
-            st.selectbox(
-                "Default snooze (seconds)",
-                options=[30, 60, 90, 120, 150, 180, 300],
-                index=0,
-                key="compact_default_snooze_seconds",
-            )
-            st.caption("Reminders alert 15 minutes before a patient's In Time.")
+            if st.session_state.get("show_compact_reminders"):
+                with st.expander("🔔 Manage Reminders", expanded=True):
+                    st.checkbox("Enable 15-minute reminders", value=True, key="compact_enable_reminders")
+                    st.selectbox(
+                        "Default snooze (seconds)",
+                        options=[30, 60, 90, 120, 150, 180, 300],
+                        index=0,
+                        key="compact_default_snooze_seconds",
+                    )
+                    st.caption("Reminders alert 15 minutes before a patient's In Time.")
 
         with divider:
             st.markdown("<div class='v-divider'></div>", unsafe_allow_html=True)
@@ -1033,6 +1033,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 "</div>"
             )
             st.markdown(metrics_html, unsafe_allow_html=True)
+            st.markdown("<div id='metrics-anchor'></div>", unsafe_allow_html=True)
 
             st.markdown("<div class='controls-row'>", unsafe_allow_html=True)
             b1, b2, b3 = st.columns([1.2, 1.2, 1.6], gap="small")
