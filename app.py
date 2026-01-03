@@ -879,6 +879,31 @@ def render_assistant_attendance_tab(schedule_df, excel_path):
         st.success("Attendance saved!")
         st.rerun()
 
+def render_schedule_summary_chips(df: pd.DataFrame):
+    """Render top summary chips for schedule STATUS counts."""
+    if df is None or df.empty or "STATUS" not in df.columns:
+        return
+    status_series = df["STATUS"].astype(str).str.upper().str.strip()
+    total = len(status_series)
+    ongoing = status_series.str.contains("ON GOING|ONGOING").sum()
+    waiting = status_series.str.contains("WAITING").sum()
+    arrived = status_series.str.contains("ARRIVED").sum()
+    completed = status_series.str.contains("DONE|COMPLETED").sum()
+    cancelled = status_series.str.contains("CANCEL").sum()
+    chips = [
+        ("Total Cases", total, "info"),
+        ("Ongoing", ongoing, "success"),
+        ("Waiting", waiting, "warning"),
+        ("Arrived", arrived, "secondary"),
+        ("Completed", completed, "info"),
+        ("Cancelled", cancelled, "danger"),
+    ]
+    chips_html = "".join(
+        f'<div class="summary-chip {cls}"><div class="label">{label}</div><div class="value">{val}</div></div>'
+        for label, val, cls in chips
+    )
+    st.markdown(f'<div class="summary-row">{chips_html}</div>', unsafe_allow_html=True)
+
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
     st.session_state.auto_save_enabled = False
@@ -1186,6 +1211,43 @@ st.markdown(
         background-color: {COLORS['bg_secondary']} !important;
         border-radius: 6px !important;
     }}
+
+    /* Summary chips */
+    .summary-row {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        margin: 8px 0 18px 0;
+    }}
+    .summary-chip {{
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 10px 26px rgba(0,0,0,0.12);
+        backdrop-filter: blur(8px);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }}
+    .summary-chip .label {{
+        font-size: 12px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        opacity: 0.8;
+    }}
+    .summary-chip .value {{
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--text-primary);
+        line-height: 1.1;
+    }}
+    .summary-chip.success {{ border-color: {COLORS['success']}; }}
+    .summary-chip.warning {{ border-color: {COLORS['warning']}; }}
+    .summary-chip.danger {{ border-color: {COLORS['danger']}; }}
+    .summary-chip.info {{ border-color: {COLORS['info']}; }}
+    .summary-chip.secondary {{ border-color: {COLORS['accent']}; }}
     
     .main [data-baseweb="select"] button {{
         color: {COLORS['text_primary']} !important;
@@ -5215,6 +5277,7 @@ if category == "Scheduling":
     
     # Manual save button and patient controls for schedule editor
     st.markdown("### 📋 Full Schedule")
+    render_schedule_summary_chips(all_sorted)
     
     if not st.session_state.get("auto_save_enabled", False):
         st.caption("Auto-save is OFF. Use 'Save Changes' to persist updates.")
