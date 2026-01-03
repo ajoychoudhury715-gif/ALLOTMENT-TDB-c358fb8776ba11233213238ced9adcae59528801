@@ -1015,6 +1015,11 @@ st.markdown(
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
 
+    /* Tighten gap below sticky header */
+    [data-testid="stAppViewContainer"] > .main {{
+        padding-top: 0.75rem !important;
+    }}
+
     /* Cards & tables */
     .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
         background: #fff8e4 !important;
