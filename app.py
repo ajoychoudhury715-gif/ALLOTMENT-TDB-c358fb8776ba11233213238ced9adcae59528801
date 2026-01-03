@@ -5326,7 +5326,12 @@ s_sidebar_role_options = ["admin", "editor", "viewer"]
 # Role/current user controls removed as requested
 sched_view = assist_view = doctor_view = admin_view = None
 if category == "Scheduling":
-    sched_view = None
+    sched_view = st.sidebar.radio(
+        "Scheduling",
+        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
+        index=4,
+        key="nav_sched",
+    )
 elif category == "Assistants":
     assist_view = st.sidebar.radio(
         "Assistants",
@@ -5418,14 +5423,6 @@ if category == "Doctors" and doctor_view == "Overview":
     render_doctor_overview()
 
 if category == "Scheduling":
-    st.markdown("### Scheduling")
-    sched_view = st.radio(
-        "Scheduling Navigation",
-        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
-        horizontal=True,
-        key="nav_sched",
-        label_visibility="collapsed",
-    )
     if sched_view == "Compact Dashboard":
         try:
             render_compact_dashboard(df if "df" in locals() else pd.DataFrame())
