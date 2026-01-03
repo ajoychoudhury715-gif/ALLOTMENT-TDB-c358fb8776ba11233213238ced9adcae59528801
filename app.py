@@ -2189,6 +2189,52 @@ def _norm_staff_key(value: str) -> str:
         return ""
 
 
+def _seed_supabase_profiles_if_needed(client) -> None:
+    """Ensure all configured assistants/doctors exist in Supabase profiles table."""
+    if client is None:
+        return
+    try:
+        resp = client.table(PROFILE_SUPABASE_TABLE).select("id,name,kind").execute()
+        existing = resp.data or []
+        seen = {_norm_staff_key(r.get("name", "")) + "|" + str(r.get("kind", "")).upper() for r in existing}
+    except Exception:
+        seen = set()
+
+    now_iso = now_ist().isoformat(timespec="seconds")
+    to_insert: list[dict[str, Any]] = []
+
+    def _add(name: str, dept: str, kind: str):
+        key = _norm_staff_key(name) + "|" + kind.upper()
+        if key in seen:
+            return
+        to_insert.append({
+            "id": str(uuid.uuid4()),
+            "name": name.upper(),
+            "department": dept,
+            "contact_email": "",
+            "contact_phone": "",
+            "status": "ACTIVE",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "created_by": "system_seed",
+            "updated_by": "system_seed",
+            "kind": kind,
+        })
+
+    for dept, data in DEPARTMENTS.items():
+        for a in data.get("assistants", []):
+            _add(a, dept, PROFILE_ASSISTANT_SHEET)
+        for d in data.get("doctors", []):
+            _add(d, dept, PROFILE_DOCTOR_SHEET)
+
+    if to_insert:
+        try:
+            client.table(PROFILE_SUPABASE_TABLE).insert(to_insert).execute()
+            st.sidebar.info(f"Seeded {len(to_insert)} profiles to Supabase.")
+        except Exception:
+            pass
+
+
 def _is_blank_cell(value: Any) -> bool:
     """True if value is empty/NaN/'nan'/'none'."""
     try:
@@ -3007,7 +3053,9 @@ file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Putt Allot
 supabase_client = None
 supabase_table_name = "tdb_allotment_state"
 supabase_row_id = "main"
-FORCE_SUPABASE = False
+# Force supabase-only by default (no Excel fallback)
+FORCE_SUPABASE = True
+PROFILE_SUPABASE_TABLE = "profiles"
 
 gsheet_client = None
 gsheet_worksheet = None
@@ -3026,12 +3074,12 @@ def _as_bool(val) -> bool:
         return str(val).strip().lower() in {"1", "true", "yes", "on"}
     except Exception:
         return False
-
 # Allow forcing Supabase mode via env or secrets
 try:
-    FORCE_SUPABASE = _as_bool(_safe_secret_get("force_supabase", False)) or _as_bool(os.environ.get("FORCE_SUPABASE", ""))
+    if _as_bool(_safe_secret_get("force_supabase", False)) or _as_bool(os.environ.get("FORCE_SUPABASE", "")):
+        FORCE_SUPABASE = True
 except Exception:
-    FORCE_SUPABASE = False
+    pass
 
 PROFILE_ASSISTANT_SHEET = "Assistants"
 PROFILE_DOCTOR_SHEET = "Doctors"
@@ -3062,9 +3110,19 @@ def _now_iso():
 
 
 def load_profiles(sheet_name: str) -> pd.DataFrame:
-    """Load assistant/doctor profiles from Excel, creating the sheet if needed."""
-    if USE_SUPABASE:
-        return _ensure_profile_df(pd.DataFrame())
+    """Load assistant/doctor profiles (Supabase-first)."""
+    if USE_SUPABASE and supabase_client is not None:
+        try:
+            resp = supabase_client.table(PROFILE_SUPABASE_TABLE).select("*").eq("kind", sheet_name).execute()
+            data = resp.data or []
+            df = pd.DataFrame(data)
+            if df.empty:
+                return _ensure_profile_df(pd.DataFrame())
+            if "name" in df.columns:
+                df["name"] = df["name"].astype(str).str.upper()
+            return _ensure_profile_df(df)
+        except Exception:
+            return _ensure_profile_df(pd.DataFrame())
     try:
         if not os.path.exists(file_path):
             wb = openpyxl.Workbook()
@@ -3093,10 +3151,20 @@ def load_profiles(sheet_name: str) -> pd.DataFrame:
 
 
 def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
-    """Persist assistant/doctor profiles to Excel, preserving other sheets."""
-    if USE_SUPABASE:
-        st.info("Profiles saving skipped (Supabase mode).")
-        return
+    """Persist assistant/doctor profiles (Supabase-first)."""
+    if USE_SUPABASE and supabase_client is not None:
+        try:
+            clean_df = _ensure_profile_df(df)
+            clean_df["kind"] = sheet_name
+            rows = clean_df.to_dict(orient="records")
+            # Replace existing kind
+            supabase_client.table(PROFILE_SUPABASE_TABLE).delete().eq("kind", sheet_name).execute()
+            if rows:
+                supabase_client.table(PROFILE_SUPABASE_TABLE).insert(rows).execute()
+            return
+        except Exception as e:
+            st.error(f"Error saving profiles to Supabase '{sheet_name}': {e}")
+            return
     try:
         clean_df = _ensure_profile_df(df)
         try:
@@ -3363,12 +3431,13 @@ def _open_spreadsheet(client, spreadsheet_ref: str):
 
 
 def _get_supabase_config_from_secrets_or_env():
-    """Return (url, key, table, row_id) from Streamlit secrets/env vars."""
+    """Return (url, key, table, row_id, profile_table) from Streamlit secrets/env vars."""
     url = ""
     key = ""
     service_key = ""
     table = supabase_table_name
     row_id = supabase_row_id
+    profile_table = PROFILE_SUPABASE_TABLE
 
     try:
         if hasattr(st, 'secrets'):
@@ -3377,6 +3446,7 @@ def _get_supabase_config_from_secrets_or_env():
             service_key = str(st.secrets.get("supabase_service_role_key", "") or "").strip()
             table = str(st.secrets.get("supabase_table", table) or table).strip() or table
             row_id = str(st.secrets.get("supabase_row_id", row_id) or row_id).strip() or row_id
+            profile_table = str(st.secrets.get("supabase_profile_table", profile_table) or profile_table).strip() or profile_table
     except Exception:
         pass
 
@@ -3390,10 +3460,12 @@ def _get_supabase_config_from_secrets_or_env():
         table = os.getenv("SUPABASE_TABLE", table).strip() or table
     if os.getenv("SUPABASE_ROW_ID"):
         row_id = os.getenv("SUPABASE_ROW_ID", row_id).strip() or row_id
+    if os.getenv("SUPABASE_PROFILE_TABLE"):
+        profile_table = os.getenv("SUPABASE_PROFILE_TABLE", profile_table).strip() or profile_table
 
     # Prefer service role key when present (avoids RLS setup for server-side app).
     effective_key = service_key or key
-    return url, effective_key, table, row_id
+    return url, effective_key, table, row_id, profile_table
 
 
 def _get_expected_columns():
@@ -3705,15 +3777,18 @@ def _validate_service_account_info(info: dict) -> list[str]:
 # Try to connect to Google Sheets if credentials are available
 if SUPABASE_AVAILABLE:
     try:
-        sup_url, sup_key, sup_table, sup_row = _get_supabase_config_from_secrets_or_env()
+        sup_url, sup_key, sup_table, sup_row, profile_table = _get_supabase_config_from_secrets_or_env()
         if sup_url and sup_key:
             supabase_client = create_client(sup_url, sup_key)
             supabase_table_name = sup_table
             supabase_row_id = sup_row
+            PROFILE_SUPABASE_TABLE = profile_table
+            PROFILE_SUPABASE_TABLE = profile_table
             # Quick connectivity check (will also validate credentials)
             _ = supabase_client.table(supabase_table_name).select("id").limit(1).execute()
             USE_SUPABASE = True
             st.sidebar.success("🗄️ Connected to Supabase")
+            _seed_supabase_profiles_if_needed(supabase_client)
         else:
             # Not configured; show a quick setup helper.
             with st.sidebar.expander("✅ Quick setup (Supabase)", expanded=False):
@@ -3770,7 +3845,7 @@ if SUPABASE_AVAILABLE:
 # Force Supabase if configured (skips Excel fallback)
 if FORCE_SUPABASE and not USE_SUPABASE:
     try:
-        sup_url, sup_key, sup_table, sup_row = _get_supabase_config_from_secrets_or_env()
+        sup_url, sup_key, sup_table, sup_row, profile_table = _get_supabase_config_from_secrets_or_env()
         if sup_url and sup_key:
             supabase_client = create_client(sup_url, sup_key)
             supabase_table_name = sup_table
@@ -4137,60 +4212,8 @@ elif USE_GOOGLE_SHEETS:
         st.error("⚠️ Failed to load data from Google Sheets.")
         st.stop()
 else:
-    # Fallback to local Excel file (blocked if Supabase is forced)
-    if FORCE_SUPABASE:
-        st.error("Excel backend disabled. Configure Supabase (url/key) or Google Sheets.")
-        st.stop()
-    if not os.path.exists(file_path):
-        st.error("⚠️ 'Putt Allotment.xlsx' not found. For cloud deployment, configure Supabase (recommended) or Google Sheets in Streamlit secrets.")
-        st.info("💡 See README for Supabase setup instructions.")
-        st.stop()
-    
-    # Retry logic to handle temporary file corruption during concurrent writes
-    max_retries = 3
-    retry_delay = 0.5  # seconds
-    
-    for attempt in range(max_retries):
-        try:
-            meta: dict[str, str] = {}
-            with pd.ExcelFile(file_path, engine="openpyxl") as xls:
-                df_raw = pd.read_excel(xls, sheet_name="Sheet1")
-                try:
-                    if "Meta" in xls.sheet_names:
-                        meta_df = pd.read_excel(xls, sheet_name="Meta")
-                        if not meta_df.empty:
-                            # Expect columns: key, value (case-insensitive)
-                            cols = {str(c).strip().lower(): c for c in meta_df.columns}
-                            kcol = cols.get("key")
-                            vcol = cols.get("value")
-                            if kcol and vcol:
-                                for _, r in meta_df.iterrows():
-                                    k = str(r.get(kcol, "")).strip()
-                                    v = str(r.get(vcol, "")).strip()
-                                    if k:
-                                        meta[k] = v
-                except Exception:
-                    meta = {}
-            try:
-                if df_raw is not None:
-                    df_raw.attrs["meta"] = dict(meta)
-            except Exception:
-                pass
-            break  # Success, exit retry loop
-        except (zipfile.BadZipFile, Exception) as e:
-            if "BadZipFile" in str(type(e).__name__) or "Truncated" in str(e) or "corrupt" in str(e).lower():
-                if attempt < max_retries - 1:
-                    time_module.sleep(retry_delay)  # Wait before retry
-                    continue
-                else:
-                    st.error("⚠️ The Excel file appears to be corrupted or is being modified.")
-                    st.stop()
-            else:
-                raise e
-    
-    if df_raw is None:
-        st.error("⚠️ Failed to load the Excel file after multiple attempts.")
-        st.stop()
+    st.error("Excel backend disabled. Configure Supabase (recommended) or Google Sheets in secrets.")
+    st.stop()
 
 # Prefer in-session pending changes when auto-save is off
 if st.session_state.get("unsaved_df") is not None:
@@ -6136,11 +6159,14 @@ if category == "Assistants" and assist_view == "Workload":
     
 if category == "Assistants" and assist_view == "Attendance":
     # ================ ASSISTANTS ATTENDANCE (EXPERIMENTAL) ================
-    with st.expander("🕒 Assistants Attendance", expanded=False):
-        try:
-            render_assistant_attendance_tab(df if 'df' in locals() else pd.DataFrame(), file_path)
-        except Exception as e:
-            st.error(f"Unable to load attendance editor: {e}")
+    if USE_SUPABASE:
+        st.info("Attendance editor (sheet-based) is disabled in Supabase mode. Use the sidebar Punch widget instead.")
+    else:
+        with st.expander("🕒 Assistants Attendance", expanded=False):
+            try:
+                render_assistant_attendance_tab(df if 'df' in locals() else pd.DataFrame(), file_path)
+            except Exception as e:
+                st.error(f"Unable to load attendance editor: {e}")
 
 # ================ ADMIN / SETTINGS ================
 if category == "Admin/Settings":
