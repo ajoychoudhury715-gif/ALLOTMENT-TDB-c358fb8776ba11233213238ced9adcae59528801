@@ -904,26 +904,87 @@ def render_schedule_summary_chips(df: pd.DataFrame):
     st.markdown(f'<div class="summary-row">{chips_html}</div>', unsafe_allow_html=True)
 
 def render_compact_dashboard(df_schedule: pd.DataFrame):
-    """Compact single-screen dashboard with weekly off + schedule summary."""
+    """Compact single-screen dashboard with weekly off + schedule summary (styled like mock)."""
     st.markdown(
         """
         <style>
-        .block-container{padding-top:0.3rem !important;}
+        body, .stApp {
+            background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.5), transparent 35%),
+                        radial-gradient(circle at 80% 10%, rgba(46,134,193,0.25), transparent 50%),
+                        linear-gradient(135deg, #c3dce6 0%, #d7e8ee 40%, #8bb6c6 70%, #6ca6b6 100%) !important;
+        }
+        .block-container {padding-top:0.3rem !important;}
         h1,h2,h3{margin:0.3rem 0 !important;}
-        div[data-testid="stMetric"]{padding:0.6rem 0.8rem !important;border-radius:14px;}
+        div[data-testid="stMetric"]{padding:0.6rem 0.8rem !important;border-radius:14px; background:#f7fafc;}
+        .dash-shell {
+            background: rgba(255,255,255,0.65);
+            border: 1px solid rgba(255,255,255,0.6);
+            border-radius: 20px;
+            box-shadow: 0 24px 50px rgba(18, 44, 66, 0.18);
+            padding: 16px 18px 18px 18px;
+            backdrop-filter: blur(8px);
+        }
+        .alert-card {
+            background: #fce8e6;
+            border: 1px solid #f6b1ab;
+            border-radius: 12px;
+            padding: 10px 12px;
+            color: #8c1c13;
+            margin-bottom: 8px;
+        }
+        .alert-title {font-weight:700; margin-bottom:2px;}
+        .alert-sub {opacity:0.85;}
+        .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 10px;}
+        .metric-title {font-size: 13px; color:#4b5563;}
+        .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
+        .control-btn button {
+            width: 100%;
+            border-radius: 10px !important;
+            font-weight: 700 !important;
+        }
+        .primary-btn button {
+            background: #0f7a5f !important;
+            border: 1px solid #0f7a5f !important;
+            color: #fff !important;
+            box-shadow: 0 8px 18px rgba(15,122,95,0.35) !important;
+        }
+        .secondary-btn button {
+            background: #1f3a5f !important;
+            border: 1px solid #1f3a5f !important;
+            color: #fff !important;
+            box-shadow: 0 8px 18px rgba(31,58,95,0.28) !important;
+        }
+        .ghost-btn button {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #1f2937 !important;
+        }
+        .search-box input {
+            background: #f5f7fb !important;
+            border-radius: 10px !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+        .sub-card {
+            background: rgba(255,255,255,0.6);
+            border: 1px solid rgba(203,213,225,0.8);
+            border-radius: 14px;
+            padding: 10px 12px;
+            margin-top: 6px;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("<h2 style='text-align:center;'>THE DENTAL BOND</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;margin-top:-10px;'>Real-time Scheduling Management System</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center; color:#1f3a5f;'>THE DENTAL BOND</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;margin-top:-10px; color:#1f3a5f; font-weight:700;'>Real-time Scheduling Management System</p>", unsafe_allow_html=True)
     st.write("")
 
-    left, right = st.columns([1, 3], gap="small")
+    st.markdown("<div class='dash-shell'>", unsafe_allow_html=True)
+    left, right = st.columns([1, 2], gap="medium")
 
     with left:
-        st.subheader("🗓️ Assistants Weekly Off")
+        st.markdown("<div class='panel-title'>🗓️ Assistants Weekly Off</div>", unsafe_allow_html=True)
         today_idx = now_ist().weekday()
         tomorrow_idx = (today_idx + 1) % 7
         weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -931,19 +992,30 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         tomorrow_off = WEEKLY_OFF.get(tomorrow_idx, [])
 
         if today_off:
-            st.error(f"**Today ({weekday_names[today_idx]})**\n\n{', '.join(today_off)} – Cannot be allocated")
+            st.markdown(
+                f"<div class='alert-card'><div class='alert-title'>Today ({weekday_names[today_idx]})</div>"
+                f"<div class='alert-sub'>{', '.join(today_off)} – Cannot be allocated</div></div>",
+                unsafe_allow_html=True,
+            )
         else:
-            st.success(f"**Today ({weekday_names[today_idx]})**\n\nAll assistants available")
+            st.success(f"Today ({weekday_names[today_idx]}): All assistants available")
 
         if tomorrow_off:
-            st.error(f"**Tomorrow ({weekday_names[tomorrow_idx]})**\n\n{', '.join(tomorrow_off)} – Cannot be allocated")
+            st.markdown(
+                f"<div class='alert-card'><div class='alert-title'>Tomorrow ({weekday_names[tomorrow_idx]})</div>"
+                f"<div class='alert-sub'>{', '.join(tomorrow_off)} – Cannot be allocated</div></div>",
+                unsafe_allow_html=True,
+            )
         else:
-            st.info(f"**Tomorrow ({weekday_names[tomorrow_idx]})**\n\nAll assistants available")
+            st.info(f"Tomorrow ({weekday_names[tomorrow_idx]}): All assistants available")
 
-        st.button("🔔 Manage Reminders", use_container_width=True)
+        st.markdown(
+            "<div class='sub-card'><span style='color:#f59e0b;'>⚠️</span> Manage Reminders</div>",
+            unsafe_allow_html=True,
+        )
 
     with right:
-        st.subheader("📋 Full Schedule")
+        st.markdown("<div class='panel-title'>📅 Full Schedule</div>", unsafe_allow_html=True)
         status_series = df_schedule["STATUS"].astype(str).str.upper().str.strip() if ("STATUS" in df_schedule.columns and not df_schedule.empty) else pd.Series(dtype=str)
         total = len(status_series)
         ongoing = status_series.str.contains("ON GOING|ONGOING").sum()
@@ -953,26 +1025,34 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         cancelled = status_series.str.contains("CANCEL").sum()
 
         c1, c2, c3, c4, c5, c6 = st.columns(6, gap="small")
-        c1.metric("TOTAL", total)
-        c2.metric("ONGOING", ongoing)
-        c3.metric("WAITING", waiting)
-        c4.metric("ARRIVED", arrived)
-        c5.metric("COMPLETED", completed)
-        c6.metric("CANCELLED", cancelled)
+        for col, title, val in zip(
+            (c1, c2, c3, c4, c5, c6),
+            ["TOTAL", "ONGOING", "WAITING", "ARRIVED", "COMPLETED", "CANCELLED"],
+            [total, ongoing, waiting, arrived, completed, cancelled],
+        ):
+            col.markdown(
+                f"<div style='background:#f7fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;text-align:center;'>"
+                f"<div class='metric-title'>{title}</div><div class='metric-value'>{val}</div></div>",
+                unsafe_allow_html=True,
+            )
 
         b1, b2, b3, b4 = st.columns([1.2, 1.2, 1.2, 2.5], gap="small")
-        b1.button("➕ Add Patient", use_container_width=True)
-        b2.button("💾 Save Changes", use_container_width=True)
-        b3.selectbox("Delete row", ["Select row"], label_visibility="collapsed")
-        b4.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...")
+        with b1:
+            st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient")
+        with b2:
+            st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes")
+        with b3:
+            st.selectbox("Delete row", ["Select row"], label_visibility="collapsed", key="compact_delete_row")
+        with b4:
+            st.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...", key="compact_search", help="Type to search")
 
         if df_schedule is None or df_schedule.empty:
             df_display = pd.DataFrame({
-                "Patient Name": ["Sample Patient A", "Sample Patient B"],
-                "In Time": ["09:00", "09:30"],
-                "Out Time": ["09:20", "10:00"],
-                "Doctor": ["Dr. A", "Dr. B"],
-                "Status": ["WAITING", "PENDING"],
+                "Patient Name": ["AJOY CHOUDHURY", "SHRUTI LAD"],
+                "In Time": ["01:09 AM", "01:09 AM"],
+                "Out Time": ["01:14 AM", "01:14 AM"],
+                "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
+                "Status": ["WAITING", "WAITING"],
             })
         else:
             df_display = df_schedule.copy()
@@ -982,12 +1062,14 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if "DR." in df_display.columns and "Doctor" not in df_display.columns:
                 rename_map["DR."] = "Doctor"
             df_display = df_display.rename(columns=rename_map)
-            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Doctor", "STATUS"] if c in df_display.columns]
+            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS"] if c in df_display.columns]
             if desired_cols:
                 df_display = df_display[desired_cols]
 
         st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
 
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("---")
     with st.expander("📊 Schedule Summary by Doctor", expanded=False):
         st.write("Summary table / charts here")
 
