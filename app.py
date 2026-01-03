@@ -66,31 +66,31 @@ def inject_white_pastel_sidebar():
     st.markdown("""
     <style>
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #f7f9ff 0%, #ffffff 55%, #f7f9ff 100%);
-        border-right: 1px solid rgba(15, 23, 42, 0.06);
+        background: linear-gradient(180deg, #001d3d 0%, #000814 55%, #001d3d 100%);
+        border-right: 1px solid rgba(255, 214, 10, 0.25);
     }
     [data-testid="stSidebarContent"] { padding: 16px 14px; }
     [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
-        background: rgba(255, 255, 255, 0.85);
-        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: rgba(0, 13, 34, 0.6);
+        border: 1px solid rgba(255, 214, 10, 0.25);
         border-radius: 16px;
         padding: 10px 12px 8px 12px;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        box-shadow: 0 8px 24px rgba(0, 8, 20, 0.45);
         backdrop-filter: blur(10px);
     }
     [data-testid="stSidebar"] button {
         border-radius: 14px !important;
         padding: 0.6rem 0.9rem !important;
-        border: 1px solid rgba(15, 23, 42, 0.08) !important;
-        background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
-        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08) !important;
+        border: 1px solid rgba(255, 214, 10, 0.35) !important;
+        background: linear-gradient(180deg, #003566, #001d3d) !important;
+        box-shadow: 0 10px 22px rgba(0, 8, 20, 0.45) !important;
         font-weight: 700;
     }
-    .sidebar-title { font-size: 18px; font-weight: 800; color: #020617; margin-bottom: 6px; }
+    .sidebar-title { font-size: 18px; font-weight: 800; color: #ffd60a; margin-bottom: 6px; }
     .live-pill {
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
-        background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; margin-bottom: 10px;
+        background:rgba(255, 214, 10, 0.15); color:#ffd60a; border:1px solid rgba(255, 214, 10, 0.35); margin-bottom: 10px;
     }
     .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
     </style>
@@ -902,38 +902,38 @@ if "duty_current_assistant" not in st.session_state:
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
 LIGHT_COLORS = {
-    "bg_primary": "#ffffff",
-    "bg_secondary": "#f5f5f5",
-    "text_primary": "#111b26",
-    "text_secondary": "#99582f",
-    "button_bg": "#99582f",
-    "button_text": "#f9f9f9",
-    "accent": "#c9bbb0",
+    "bg_primary": "#000814",
+    "bg_secondary": "#001d3d",
+    "text_primary": "#ffd60a",
+    "text_secondary": "#ffc300",
+    "button_bg": "#003566",
+    "button_text": "#ffd60a",
+    "accent": "#003566",
     "success": "#10b981",
-    "warning": "#f59e0b",
+    "warning": "#ffc300",
     "danger": "#ef4444",
-    "info": "#3b82f6",
+    "info": "#ffd60a",
     # Glass surfaces
-    "glass_bg": "rgba(255, 255, 255, 0.75)",
-    "glass_border": "rgba(201, 187, 176, 0.65)",
+    "glass_bg": "rgba(0, 13, 34, 0.55)",
+    "glass_border": "rgba(255, 214, 10, 0.45)",
 }
 
 # Dark mode with vibrant neon accents for status indicators
 DARK_COLORS = {
-    "bg_primary": "#0b0f14",
-    "bg_secondary": "#111827",
-    "text_primary": "#e5e7eb",
-    "text_secondary": "#93c5fd",
-    "button_bg": "#60a5fa",
-    "button_text": "#0b0f14",
-    "accent": "#1f2937",
-    "success": "#00ff9c",
-    "warning": "#ffb000",
-    "danger": "#ff3b7a",
-    "info": "#00d1ff",
+    "bg_primary": "#000814",
+    "bg_secondary": "#001d3d",
+    "text_primary": "#ffd60a",
+    "text_secondary": "#ffc300",
+    "button_bg": "#003566",
+    "button_text": "#ffd60a",
+    "accent": "#003566",
+    "success": "#10b981",
+    "warning": "#ffc300",
+    "danger": "#ef4444",
+    "info": "#ffd60a",
     # Glass surfaces
-    "glass_bg": "rgba(17, 24, 39, 0.62)",
-    "glass_border": "rgba(255, 255, 255, 0.10)",
+    "glass_bg": "rgba(0, 13, 34, 0.65)",
+    "glass_border": "rgba(255, 214, 10, 0.35)",
 }
 
 if "dark_mode" not in st.session_state:
@@ -984,9 +984,9 @@ st.markdown(
     
     body, .stApp {{
         background:
-            radial-gradient(900px circle at 20% 20%, rgba(0, 75, 142, 0.22), transparent 45%),
-            radial-gradient(1100px circle at 80% 10%, rgba(1, 5, 40, 0.24), transparent 50%),
-            linear-gradient(135deg, #010528 0%, #0a2f5d 30%, #004b8e 55%, #0a2f5d 80%, #010528 100%) !important;
+            radial-gradient(900px circle at 20% 20%, rgba(0, 29, 61, 0.35), transparent 45%),
+            radial-gradient(1100px circle at 80% 10%, rgba(0, 8, 20, 0.32), transparent 50%),
+            linear-gradient(135deg, #000814 0%, #001d3d 30%, #003566 55%, #001d3d 80%, #000814 100%) !important;
         color: var(--text-primary) !important;
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
