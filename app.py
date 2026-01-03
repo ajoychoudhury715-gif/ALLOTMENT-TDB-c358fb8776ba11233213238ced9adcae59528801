@@ -903,6 +903,94 @@ def render_schedule_summary_chips(df: pd.DataFrame):
     )
     st.markdown(f'<div class="summary-row">{chips_html}</div>', unsafe_allow_html=True)
 
+def render_compact_dashboard(df_schedule: pd.DataFrame):
+    """Compact single-screen dashboard with weekly off + schedule summary."""
+    st.markdown(
+        """
+        <style>
+        .block-container{padding-top:0.3rem !important;}
+        h1,h2,h3{margin:0.3rem 0 !important;}
+        div[data-testid="stMetric"]{padding:0.6rem 0.8rem !important;border-radius:14px;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("<h2 style='text-align:center;'>THE DENTAL BOND</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;margin-top:-10px;'>Real-time Scheduling Management System</p>", unsafe_allow_html=True)
+    st.write("")
+
+    left, right = st.columns([1, 3], gap="small")
+
+    with left:
+        st.subheader("🗓️ Assistants Weekly Off")
+        today_idx = now_ist().weekday()
+        tomorrow_idx = (today_idx + 1) % 7
+        weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        today_off = WEEKLY_OFF.get(today_idx, [])
+        tomorrow_off = WEEKLY_OFF.get(tomorrow_idx, [])
+
+        if today_off:
+            st.error(f"**Today ({weekday_names[today_idx]})**\n\n{', '.join(today_off)} – Cannot be allocated")
+        else:
+            st.success(f"**Today ({weekday_names[today_idx]})**\n\nAll assistants available")
+
+        if tomorrow_off:
+            st.error(f"**Tomorrow ({weekday_names[tomorrow_idx]})**\n\n{', '.join(tomorrow_off)} – Cannot be allocated")
+        else:
+            st.info(f"**Tomorrow ({weekday_names[tomorrow_idx]})**\n\nAll assistants available")
+
+        st.button("🔔 Manage Reminders", use_container_width=True)
+
+    with right:
+        st.subheader("📋 Full Schedule")
+        status_series = df_schedule["STATUS"].astype(str).str.upper().str.strip() if ("STATUS" in df_schedule.columns and not df_schedule.empty) else pd.Series(dtype=str)
+        total = len(status_series)
+        ongoing = status_series.str.contains("ON GOING|ONGOING").sum()
+        waiting = status_series.str.contains("WAITING").sum()
+        arrived = status_series.str.contains("ARRIVED").sum()
+        completed = status_series.str.contains("DONE|COMPLETED").sum()
+        cancelled = status_series.str.contains("CANCEL").sum()
+
+        c1, c2, c3, c4, c5, c6 = st.columns(6, gap="small")
+        c1.metric("TOTAL", total)
+        c2.metric("ONGOING", ongoing)
+        c3.metric("WAITING", waiting)
+        c4.metric("ARRIVED", arrived)
+        c5.metric("COMPLETED", completed)
+        c6.metric("CANCELLED", cancelled)
+
+        b1, b2, b3, b4 = st.columns([1.2, 1.2, 1.2, 2.5], gap="small")
+        b1.button("➕ Add Patient", use_container_width=True)
+        b2.button("💾 Save Changes", use_container_width=True)
+        b3.selectbox("Delete row", ["Select row"], label_visibility="collapsed")
+        b4.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...")
+
+        if df_schedule is None or df_schedule.empty:
+            df_display = pd.DataFrame({
+                "Patient Name": ["Sample Patient A", "Sample Patient B"],
+                "In Time": ["09:00", "09:30"],
+                "Out Time": ["09:20", "10:00"],
+                "Doctor": ["Dr. A", "Dr. B"],
+                "Status": ["WAITING", "PENDING"],
+            })
+        else:
+            df_display = df_schedule.copy()
+            rename_map = {}
+            if "Patient Name" not in df_display.columns and "Patient" in df_display.columns:
+                rename_map["Patient"] = "Patient Name"
+            if "DR." in df_display.columns and "Doctor" not in df_display.columns:
+                rename_map["DR."] = "Doctor"
+            df_display = df_display.rename(columns=rename_map)
+            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Doctor", "STATUS"] if c in df_display.columns]
+            if desired_cols:
+                df_display = df_display[desired_cols]
+
+        st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
+
+    with st.expander("📊 Schedule Summary by Doctor", expanded=False):
+        st.write("Summary table / charts here")
+
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
     st.session_state.auto_save_enabled = False
@@ -5104,7 +5192,7 @@ sched_view = assist_view = doctor_view = admin_view = None
 if category == "Scheduling":
     sched_view = st.sidebar.radio(
         "Scheduling",
-        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming"],
+        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
         index=0,
         key="nav_sched",
     )
@@ -5199,6 +5287,12 @@ if category == "Doctors" and doctor_view == "Overview":
     render_doctor_overview()
 
 if category == "Scheduling":
+    if sched_view == "Compact Dashboard":
+        try:
+            render_compact_dashboard(df if "df" in locals() else pd.DataFrame())
+        except Exception as e:
+            st.error(f"Unable to render compact dashboard: {e}")
+        st.stop()
     # ================ Status Colors ================
     def get_status_background(status):
         # Return subtle styling without bright backgrounds
