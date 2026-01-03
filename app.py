@@ -5202,48 +5202,6 @@ if category == "Doctors" and doctor_view == "Overview":
         else:
             st.success("All doctors available tomorrow.")
 
-        # Editable table
-        edit_df = doctors_df.copy()
-        edit_df["weekly_off"] = edit_df["weekly_off"].apply(
-            lambda v: ",".join(_weekly_off_names(v)) if v is not None else ""
-        )
-        for col in ["pref_first", "pref_second", "pref_third", "department", "status"]:
-            if col in edit_df.columns:
-                edit_df[col] = edit_df[col].astype(str)
-        for col in ["created_at", "updated_at"]:
-            if col in edit_df.columns:
-                edit_df[col] = edit_df[col].astype(str)
-        edit_df_display = edit_df[PROFILE_COLUMNS].copy()
-        edited = st.data_editor(
-            edit_df_display,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "weekly_off": st.column_config.TextColumn(
-                    "Weekly Off",
-                    help="Comma-separated days e.g. Monday,Wednesday",
-                    width="medium",
-                    default="",
-                ),
-                "status": st.column_config.SelectboxColumn("Status", options=["ACTIVE", "INACTIVE"]),
-                "department": st.column_config.TextColumn("Department"),
-                "pref_first": st.column_config.TextColumn("Pref FIRST"),
-                "pref_second": st.column_config.TextColumn("Pref SECOND"),
-                "pref_third": st.column_config.TextColumn("Pref THIRD"),
-            },
-            hide_index=True,
-            key="doctor_overview_editor",
-        )
-        if st.button("💾 Save Doctors"):
-            df_to_save = edited.copy()
-            df_to_save = df_to_save[df_to_save["name"].astype(str).str.strip() != ""]
-            df_to_save["weekly_off"] = df_to_save["weekly_off"].apply(
-                lambda val: _weekly_off_str_from_list(val if isinstance(val, list) else str(val).split(","))
-            )
-            save_profiles(df_to_save, PROFILE_DOCTOR_SHEET)
-            st.toast("Doctors saved ✅", icon="✅")
-            st.rerun()
-
         # Card view
         st.markdown("#### Cards")
         entries = []
