@@ -909,13 +909,13 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         """
         <style>
         body, .stApp {
-            background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.5), transparent 35%),
-                        radial-gradient(circle at 80% 10%, rgba(46,134,193,0.25), transparent 50%),
-                        linear-gradient(135deg, #c3dce6 0%, #d7e8ee 40%, #8bb6c6 70%, #6ca6b6 100%) !important;
+            background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.65), transparent 35%),
+                        radial-gradient(circle at 80% 10%, rgba(46,134,193,0.22), transparent 50%),
+                        linear-gradient(135deg, #dce9ef 0%, #c8dde5 35%, #9ec4d4 70%, #7aaec3 100%) !important;
         }
         .block-container {padding-top:0.3rem !important;}
         h1,h2,h3{margin:0.3rem 0 !important;}
-        div[data-testid="stMetric"]{padding:0.6rem 0.8rem !important;border-radius:14px; background:#f7fafc;}
+        div[data-testid="stMetric"]{padding:0.6rem 0.8rem !important;border-radius:12px; background:#f9fbfd; border:1px solid #e5e7eb;}
         .dash-shell {
             background: rgba(255,255,255,0.65);
             border: 1px solid rgba(255,255,255,0.6);
@@ -924,14 +924,9 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             padding: 16px 18px 18px 18px;
             backdrop-filter: blur(8px);
         }
-        .alert-card {
-            background: #fce8e6;
-            border: 1px solid #f6b1ab;
-            border-radius: 12px;
-            padding: 10px 12px;
-            color: #8c1c13;
-            margin-bottom: 8px;
-        }
+        .panel-row {display: grid; grid-template-columns: 1fr 1.6fr; gap: 16px;}
+        .panel-left {border-right: 1px solid rgba(148,163,184,0.35); padding-right: 12px;}
+        .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 10px 12px; color: #8c1c13; margin-bottom: 8px;}
         .alert-title {font-weight:700; margin-bottom:2px;}
         .alert-sub {opacity:0.85;}
         .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 10px;}
@@ -964,13 +959,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             border-radius: 10px !important;
             border: 1px solid #cbd5e1 !important;
         }
-        .sub-card {
-            background: rgba(255,255,255,0.6);
-            border: 1px solid rgba(203,213,225,0.8);
-            border-radius: 14px;
-            padding: 10px 12px;
-            margin-top: 6px;
-        }
+        .sub-card {background: rgba(255,255,255,0.7); border: 1px solid rgba(203,213,225,0.8); border-radius: 12px; padding: 10px 12px; margin-top: 6px; display: inline-block;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -981,7 +970,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
     st.write("")
 
     st.markdown("<div class='dash-shell'>", unsafe_allow_html=True)
-    left, right = st.columns([1, 2], gap="medium")
+    st.markdown("<div class='dash-shell'><div class='panel-row'>", unsafe_allow_html=True)
+    left, right = st.columns([1, 1.6], gap="medium")
 
     with left:
         st.markdown("<div class='panel-title'>🗓️ Assistants Weekly Off</div>", unsafe_allow_html=True)
@@ -1031,18 +1021,18 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             [total, ongoing, waiting, arrived, completed, cancelled],
         ):
             col.markdown(
-                f"<div style='background:#f7fafc;border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;text-align:center;'>"
+                f"<div style='background:#f9fbfd;border:1px solid #e2e8f0;border-radius:12px;padding:12px 12px;text-align:center; min-height:80px;'>"
                 f"<div class='metric-title'>{title}</div><div class='metric-value'>{val}</div></div>",
                 unsafe_allow_html=True,
             )
 
         b1, b2, b3, b4 = st.columns([1.2, 1.2, 1.2, 2.5], gap="small")
         with b1:
-            st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient")
+            st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", help="Add Patient")
         with b2:
-            st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes")
+            st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", help="Save")
         with b3:
-            st.selectbox("Delete row", ["Select row"], label_visibility="collapsed", key="compact_delete_row")
+            st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
         with b4:
             st.text_input("Search patient...", label_visibility="collapsed", placeholder="Search patient...", key="compact_search", help="Type to search")
 
@@ -1051,7 +1041,13 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 "Patient Name": ["AJOY CHOUDHURY", "SHRUTI LAD"],
                 "In Time": ["01:09 AM", "01:09 AM"],
                 "Out Time": ["01:14 AM", "01:14 AM"],
+                "Procedure": ["PLT/INE", "PSE/IENN"],
                 "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
+                "FIRST": ["ANISHA", "LAWANA"],
+                "SECOND": ["", ""],
+                "THIRD": ["NITIN", "MUKHILA"],
+                "CASE PAPER": ["None", "None"],
+                "SUCTION": ["None", "None"],
                 "Status": ["WAITING", "WAITING"],
             })
         else:
@@ -1062,16 +1058,25 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if "DR." in df_display.columns and "Doctor" not in df_display.columns:
                 rename_map["DR."] = "Doctor"
             df_display = df_display.rename(columns=rename_map)
-            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS"] if c in df_display.columns]
+            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
             if desired_cols:
                 df_display = df_display[desired_cols]
+            # Normalize status column case
+            if "STATUS" in df_display.columns and "Status" not in df_display.columns:
+                df_display = df_display.rename(columns={"STATUS": "Status"})
 
         st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
 
     st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("---")
+
+    st.markdown(" ", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='dash-shell' style='margin-top:10px; padding:10px 12px;'>",
+        unsafe_allow_html=True,
+    )
     with st.expander("📊 Schedule Summary by Doctor", expanded=False):
         st.write("Summary table / charts here")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
