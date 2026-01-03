@@ -1744,135 +1744,73 @@ st.markdown(
 )
 
 # Professional Header with Logo
-col_logo, col_title, col_space = st.columns([0.3, 2, 0.3])
+_logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "The Dental Bond LOGO_page-0001.jpg")
+logo_html = ""
+if os.path.exists(_logo_path):
+    import base64
+    with open(_logo_path, "rb") as f:
+        logo_b64 = base64.b64encode(f.read()).decode()
+    logo_html = f'<img src="data:image/jpeg;base64,{logo_b64}" class="hero-logo" alt="Logo" />'
 
-with col_logo:
-    _logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "The Dental Bond LOGO_page-0001.jpg")
-    if os.path.exists(_logo_path):
-        st.image(_logo_path, width=140)
-
-with col_title:
-    st.markdown("""
-        <style>
-        .header-container {
-            position: relative;
-            padding: 2rem 0 1.8rem 0;
-            text-align: center;
-            color: #111b26;
-            overflow: visible;
-        }
-
-        /* Premium animated dazzle/glow behind title */
-        .header-container::before {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 420px;
-            height: 120px;
-            transform: translate(-50%, -50%);
-            background: radial-gradient(ellipse at center,
-                rgba(153, 88, 47, 0.45) 0%,
-                rgba(201, 187, 176, 0.30) 35%,
-                rgba(153, 88, 47, 0.18) 60%,
-                transparent 80%);
-            border-radius: 100px;
-            filter: blur(28px);
-            z-index: -3;
-            animation: dazzle-pulse 3.5s ease-in-out infinite alternate;
-        }
-
-        /* Secondary shimmer layer */
-        .header-container::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 340px;
-            height: 80px;
-            transform: translate(-50%, -50%);
-            background: linear-gradient(90deg,
-                transparent 0%,
-                rgba(255, 255, 255, 0.35) 25%,
-                rgba(255, 255, 255, 0.55) 50%,
-                rgba(255, 255, 255, 0.35) 75%,
-                transparent 100%);
-            border-radius: 60px;
-            filter: blur(10px);
-            z-index: -2;
-            animation: shimmer-slide 4s linear infinite;
-        }
-
-        @keyframes dazzle-pulse {
-            0% {
-                opacity: 0.7;
-                transform: translate(-50%, -50%) scale(1);
-            }
-            100% {
-                opacity: 1;
-                transform: translate(-50%, -50%) scale(1.08);
-            }
-        }
-
-        @keyframes shimmer-slide {
-            0% {
-                transform: translate(-80%, -50%);
-                opacity: 0;
-            }
-            10% {
-                opacity: 0.6;
-            }
-            90% {
-                opacity: 0.6;
-            }
-            100% {
-                transform: translate(30%, -50%);
-                opacity: 0;
-            }
-        }
-
-        .dashboard-title {
-            position: relative;
-            margin: 0;
-            padding: 0.5rem 1.5rem;
-            display: inline-block;
-            font-size: 2.5rem;
-            font-weight: 800;
-            color: #111b26;
-            letter-spacing: 2px;
-            text-shadow: 0 4px 16px rgba(153, 88, 47, 0.25), 0 2px 4px rgba(0, 0, 0, 0.08);
-            word-spacing: 0.12em;
-            background: linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.55) 100%);
-            border-radius: 16px;
-            border: 1px solid rgba(153, 88, 47, 0.25);
-            box-shadow: 0 8px 32px rgba(153, 88, 47, 0.18), inset 0 1px 0 rgba(255,255,255,0.6);
-        }
-
-        .dashboard-subtitle {
-            margin-top: 1.1rem;
-            font-size: 0.95rem;
-            color: #99582f;
-            letter-spacing: 0.6px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            .header-container::before,
-            .header-container::after {
-                animation: none;
-            }
-        }
-        </style>
-        <div class="header-container">
-            <div class="dashboard-title">
-                ALLOTMENT DASHBOARD
-            </div>
-            <div class="dashboard-subtitle">
-                Real-time Scheduling Management System
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+<style>
+.hero-bar {{
+    margin: 1.5rem 0 1.2rem 0;
+    padding: 1.2rem 1.6rem;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #f5e6e8 0%, #d5c6e0 30%, #aaa1c8 60%, #967aa1 85%, #192a51 100%);
+    box-shadow: 0 18px 50px rgba(25, 42, 81, 0.25), inset 0 1px 0 rgba(255,255,255,0.4);
+    border: 1px solid rgba(150, 122, 161, 0.35);
+}}
+.hero-content {{
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+}}
+.hero-logo {{
+    width: 96px;
+    height: auto;
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(25, 42, 81, 0.25);
+}}
+.hero-text {{
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}}
+.hero-title {{
+    margin: 0;
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #192a51;
+    text-shadow: 0 3px 12px rgba(25, 42, 81, 0.18);
+}}
+.hero-subtitle {{
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #4d3f67;
+    text-transform: uppercase;
+}}
+@media (max-width: 768px) {{
+    .hero-bar {{ padding: 1rem 1.1rem; }}
+    .hero-content {{ flex-direction: column; text-align: center; }}
+    .hero-logo {{ width: 82px; }}
+    .hero-title {{ font-size: 1.8rem; }}
+}}
+</style>
+<div class="hero-bar">
+  <div class="hero-content">
+    {logo_html}
+    <div class="hero-text">
+      <div class="hero-title">ALLOTMENT DASHBOARD</div>
+      <div class="hero-subtitle">Real-time Scheduling Management System</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 # Indian Standard Time (IST = UTC+5:30)
 
