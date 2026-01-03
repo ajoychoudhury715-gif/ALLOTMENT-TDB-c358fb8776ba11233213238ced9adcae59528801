@@ -938,6 +938,10 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .metric-card {background:#f9fbfd; border:1px solid #e2e8f0; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
         .metric-title {font-size: 12px; color:#6b7280; letter-spacing:0.6px;}
         .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
+        .metrics-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:10px;}
+        .controls-row {margin-top:2px; margin-bottom:4px;}
+        .controls-row .stButton>button {height: 42px !important; border-radius: 12px !important;}
+        .controls-row [data-baseweb="select"] > div {min-height: 42px !important; border-radius: 12px !important;}
         button[kind="primary"] {background:#0f7a5f !important; border:1px solid #0f7a5f !important; color:#fff !important; box-shadow:0 8px 18px rgba(15,122,95,0.35) !important;}
         button[kind="secondary"] {background:#ffffff !important; border:1px solid #cbd5e1 !important; color:#1f2937 !important;}
         .section-divider {height:1px; background: rgba(148,163,184,0.35); margin: 14px 0;}
@@ -947,7 +951,6 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .summary-bar {background: rgba(255,255,255,0.75); border: 1px solid rgba(203,213,225,0.8); border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
         .compact-dashboard [data-testid="stVerticalBlock"] {gap: 0.5rem;}
         .compact-dashboard [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
-        .metrics-stack [data-testid="stVerticalBlock"] {gap: 0.35rem;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1006,22 +1009,19 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             completed = status_series.str.contains("DONE|COMPLETED").sum()
             cancelled = status_series.str.contains("CANCEL").sum()
 
-            st.markdown("<div class='metrics-stack'>", unsafe_allow_html=True)
-            r1c1, r1c2, r1c3 = st.columns(3, gap="small")
-            r2c1, r2c2, r2c3 = st.columns(3, gap="small")
-            for col, title, val in (
-                (r1c1, "TOTAL", total),
-                (r1c2, "ONGOING", ongoing),
-                (r1c3, "WAITING", waiting),
-                (r2c1, "ARRIVED", arrived),
-                (r2c2, "COMPLETED", completed),
-                (r2c3, "CANCELLED", cancelled),
-            ):
-                col.markdown(
-                    f"<div class='metric-card'><div class='metric-title'>{title}</div><div class='metric-value'>{val}</div></div>",
-                    unsafe_allow_html=True,
-                )
+            metrics_html = (
+                "<div class='metrics-grid'>"
+                f"<div class='metric-card'><div class='metric-title'>TOTAL</div><div class='metric-value'>{total}</div></div>"
+                f"<div class='metric-card'><div class='metric-title'>ONGOING</div><div class='metric-value'>{ongoing}</div></div>"
+                f"<div class='metric-card'><div class='metric-title'>WAITING</div><div class='metric-value'>{waiting}</div></div>"
+                f"<div class='metric-card'><div class='metric-title'>ARRIVED</div><div class='metric-value'>{arrived}</div></div>"
+                f"<div class='metric-card'><div class='metric-title'>COMPLETED</div><div class='metric-value'>{completed}</div></div>"
+                f"<div class='metric-card'><div class='metric-title'>CANCELLED</div><div class='metric-value'>{cancelled}</div></div>"
+                "</div>"
+            )
+            st.markdown(metrics_html, unsafe_allow_html=True)
 
+            st.markdown("<div class='controls-row'>", unsafe_allow_html=True)
             b1, b2, b3 = st.columns([1.2, 1.2, 1.6], gap="small")
             with b1:
                 st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", type="primary")
