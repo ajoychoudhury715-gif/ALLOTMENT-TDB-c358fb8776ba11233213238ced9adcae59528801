@@ -983,12 +983,10 @@ st.markdown(
     }}
     
     body, .stApp {{
-                background:
-                    radial-gradient(1200px circle at 18% 8%, rgba(0, 209, 255, 0.10), transparent 42%),
-                    radial-gradient(900px circle at 82% 18%, rgba(0, 255, 156, 0.10), transparent 45%),
-                    linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%) !important;
-                color: var(--text-primary) !important;
-                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        background:
+            linear-gradient(135deg, #010528 0%, #004b8e 35%, #004b8e 65%, #010528 100%) !important;
+        color: var(--text-primary) !important;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
     
     header {{
