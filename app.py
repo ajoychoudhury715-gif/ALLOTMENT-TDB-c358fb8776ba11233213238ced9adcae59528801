@@ -1769,8 +1769,9 @@ header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
 header[data-testid="stHeader"]::before {{
     content: "";
     position: absolute;
-    left: 24px;
-    top: 24px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -110%);
     width: 88px;
     height: 88px;
     border-radius: 16px;
@@ -1781,8 +1782,9 @@ header[data-testid="stHeader"]::after {{
     content: "ALLOTMENT DASHBOARD\\AReal-time Scheduling Management System";
     white-space: pre;
     position: absolute;
-    left: 130px;
-    top: 36px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, 10%);
     font-size: 26px;
     font-weight: 800;
     letter-spacing: 1px;
@@ -1797,12 +1799,12 @@ header[data-testid="stHeader"]::after {{
     header[data-testid="stHeader"]::before {{
         width: 68px;
         height: 68px;
-        left: 16px;
-        top: 24px;
+        left: 50%;
+        transform: translate(-50%, -120%);
     }}
     header[data-testid="stHeader"]::after {{
-        left: 96px;
-        top: 32px;
+        left: 50%;
+        transform: translate(-50%, 10%);
         font-size: 20px;
     }}
 }}
