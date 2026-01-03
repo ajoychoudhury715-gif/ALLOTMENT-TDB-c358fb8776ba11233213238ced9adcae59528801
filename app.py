@@ -5098,13 +5098,7 @@ category = st.sidebar.radio(
     key="nav_category",
 )
 s_sidebar_role_options = ["admin", "editor", "viewer"]
-st.session_state.user_role = st.sidebar.selectbox(
-    "Role",
-    s_sidebar_role_options,
-    index=s_sidebar_role_options.index(st.session_state.get("user_role", "admin")),
-    key="user_role_select",
-)
-st.session_state.current_user = st.sidebar.text_input("Current user", value=st.session_state.get("current_user", "admin"))
+# Role/current user controls removed as requested
 sched_view = assist_view = doctor_view = admin_view = None
 if category == "Scheduling":
     sched_view = st.sidebar.radio(
