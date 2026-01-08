@@ -59,7 +59,7 @@ if "user_role" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = "admin"
 if "nav_category" not in st.session_state:
-    st.session_state.nav_category = "Scheduling"
+    st.session_state.nav_category = "Dashboard"
 if "nav_sched" not in st.session_state:
     st.session_state.nav_sched = "Compact Dashboard"
 
@@ -1092,6 +1092,335 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
+
+def render_home_dashboard():
+    """Home dashboard styled like the reference tile launcher screen."""
+    accent = "#1f5c2c"
+    accent_soft = "#e6efe7"
+    text_dark = "#1a1a1a"
+    tiles = [
+        {"label": "APPROVALS", "icon": "clipboard"},
+        {"label": "FOLLOW-UPS", "icon": "phone"},
+        {"label": "TODAY", "icon": "calendar", "badge": "19"},
+        {"label": "REGISTER", "icon": "book"},
+        {"label": "CHARTING", "icon": "chart"},
+        {"label": "CHANGE", "icon": "refresh"},
+        {"label": "NEW", "icon": "plus"},
+        {"label": "OUTFLOWS", "icon": "trend"},
+        {"label": "QUERIES", "icon": "list"},
+        {"label": "SEARCH", "icon": "search"},
+        {"label": "BLOCK", "icon": "ban", "badge": "24"},
+    ]
+
+    icon_svgs = {
+        "clipboard": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6" y="4" width="12" height="16" rx="2"></rect>
+                <rect x="9" y="2" width="6" height="4" rx="1"></rect>
+                <path d="M9.5 12.5l2 2 4-4"></path>
+            </svg>
+        """,
+        "phone": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3.07-8.63A2 2 0 0 1 4.06 2h3a2 2 0 0 1 2 1.72c.12.9.32 1.77.59 2.6a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.48-1.11a2 2 0 0 1 2.11-.45c.83.27 1.7.47 2.6.59A2 2 0 0 1 22 16.92z"></path>
+            </svg>
+        """,
+        "calendar": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2"></rect>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        """,
+        "book": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 4h6a4 4 0 0 1 4 4v12a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 4h-6a4 4 0 0 0-4 4v12a3 3 0 0 1 3-3h7z"></path>
+            </svg>
+        """,
+        "chart": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="4" y1="20" x2="20" y2="20"></line>
+                <line x1="7" y1="20" x2="7" y2="12"></line>
+                <line x1="12" y1="20" x2="12" y2="6"></line>
+                <line x1="17" y1="20" x2="17" y2="9"></line>
+            </svg>
+        """,
+        "refresh": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10"></path>
+                <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14"></path>
+            </svg>
+        """,
+        "plus": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <line x1="12" y1="8" x2="12" y2="16"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+        """,
+        "trend": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
+                <polyline points="17 18 23 18 23 12"></polyline>
+            </svg>
+        """,
+        "list": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <circle cx="4" cy="6" r="1"></circle>
+                <circle cx="4" cy="12" r="1"></circle>
+                <circle cx="4" cy="18" r="1"></circle>
+            </svg>
+        """,
+        "search": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+        """,
+        "ban": """
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <line x1="5" y1="5" x2="19" y2="19"></line>
+            </svg>
+        """,
+    }
+
+    tile_html = []
+    for tile in tiles:
+        badge_html = ""
+        if tile.get("badge"):
+            badge_html = f"<span class='tdb-badge'>{tile['badge']}</span>"
+        tile_html.append(
+            f"""
+            <div class="tdb-tile">
+                <div class="tdb-icon-wrap">
+                    {badge_html}
+                    {icon_svgs.get(tile["icon"], "")}
+                </div>
+                <div class="tdb-label">{tile["label"]}</div>
+            </div>
+            """
+        )
+
+    hero_logo = ""
+    if logo_b64:
+        hero_logo = f"<img class='tdb-hero-logo' src='data:image/jpeg;base64,{logo_b64}' alt='The Dental Bond logo'/>"
+
+    st.markdown(
+        f"""
+        <style>
+        header[data-testid="stHeader"] {{
+            display: none !important;
+        }}
+        [data-testid="stSidebar"] {{
+            display: none !important;
+        }}
+        .block-container {{
+            padding: 0 !important;
+            max-width: 100% !important;
+        }}
+        .main {{
+            padding: 0 !important;
+            max-width: 100% !important;
+        }}
+        body {{
+            background: #ffffff !important;
+        }}
+        .tdb-home {{
+            font-family: 'Sora', sans-serif;
+            background: #ffffff;
+            color: {text_dark};
+            min-height: 100vh;
+        }}
+        .tdb-topbar {{
+            background: {accent};
+            color: #ffffff;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+        }}
+        .tdb-top-left {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 18px;
+        }}
+        .tdb-hamburger {{
+            font-size: 22px;
+            line-height: 1;
+        }}
+        .tdb-center-title {{
+            font-size: 18px;
+            text-transform: uppercase;
+        }}
+        .tdb-top-right {{
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }}
+        .tdb-action {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 10px;
+            text-transform: uppercase;
+            gap: 2px;
+        }}
+        .tdb-action span {{
+            font-size: 18px;
+        }}
+        .tdb-shell {{
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 24px 60px;
+        }}
+        .tdb-hero {{
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 28px;
+            margin-bottom: 24px;
+        }}
+        .tdb-hero-center {{
+            text-align: center;
+        }}
+        .tdb-hero-title {{
+            font-size: 44px;
+            font-weight: 800;
+            color: {accent};
+            letter-spacing: 2px;
+        }}
+        .tdb-hero-sub {{
+            font-size: 20px;
+            font-weight: 700;
+            color: {accent};
+        }}
+        .tdb-hero-logo {{
+            max-width: 110px;
+            opacity: 0.7;
+            justify-self: center;
+        }}
+        .tdb-tiles {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 32px 28px;
+            margin-top: 12px;
+        }}
+        .tdb-tile {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }}
+        .tdb-icon-wrap {{
+            width: 86px;
+            height: 86px;
+            border-radius: 22px;
+            background: {accent_soft};
+            border: 2px solid {accent};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 12px 24px rgba(31, 92, 44, 0.15);
+            color: {accent};
+        }}
+        .tdb-icon-wrap svg {{
+            width: 42px;
+            height: 42px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.7px;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }}
+        .tdb-label {{
+            font-size: 13px;
+            font-weight: 700;
+            color: {accent};
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            text-align: center;
+        }}
+        .tdb-badge {{
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #e91e63;
+            color: #ffffff;
+            width: 26px;
+            height: 26px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            box-shadow: 0 6px 12px rgba(233, 30, 99, 0.3);
+        }}
+        .tdb-footer {{
+            text-align: center;
+            margin-top: 36px;
+            font-size: 12px;
+            letter-spacing: 0.4px;
+            color: {accent};
+        }}
+        @media (max-width: 980px) {{
+            .tdb-hero {{
+                grid-template-columns: 1fr;
+            }}
+            .tdb-top-right {{
+                display: none;
+            }}
+            .tdb-center-title {{
+                font-size: 16px;
+            }}
+        }}
+        </style>
+        <div class="tdb-home">
+            <div class="tdb-topbar">
+                <div class="tdb-top-left">
+                    <span class="tdb-hamburger">&#9776;</span>
+                    <span>iBeej</span>
+                </div>
+                <div class="tdb-center-title">THE DENTAL BOND</div>
+                <div class="tdb-top-right">
+                    <div class="tdb-action"><span>&#128276;</span>Notifications</div>
+                    <div class="tdb-action"><span>&#9881;</span>Service</div>
+                    <div class="tdb-action"><span>&#10227;</span>App Reload</div>
+                    <div class="tdb-action"><span>&#128100;</span></div>
+                </div>
+            </div>
+            <div class="tdb-shell">
+                <div class="tdb-hero">
+                    {hero_logo}
+                    <div class="tdb-hero-center">
+                        <div class="tdb-hero-title">QRM</div>
+                        <div class="tdb-hero-sub">The Dental Bond</div>
+                    </div>
+                    {hero_logo}
+                </div>
+                <div class="tdb-tiles">
+                    {''.join(tile_html)}
+                </div>
+                <div class="tdb-footer">&copy; iBeej Software Technologies 2026</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
     st.session_state.auto_save_enabled = False
@@ -2106,7 +2435,10 @@ def _date_from_any(val):
 now = datetime.now(IST)
 date_line_str = now.strftime('%B %d, %Y - %I:%M:%S %p')
 
-if not (st.session_state.get("nav_category") == "Scheduling" and st.session_state.get("nav_sched") == "Compact Dashboard"):
+if not (
+    st.session_state.get("nav_category") == "Scheduling"
+    and st.session_state.get("nav_sched") == "Compact Dashboard"
+) and st.session_state.get("nav_category") != "Dashboard":
     st.markdown(f"""
         <style>
         .divider-line {{
@@ -5315,14 +5647,16 @@ with st.sidebar:
 # ================ MAIN DASHBOARD NAVIGATION ================
 category = st.sidebar.radio(
     "Categories",
-    ["Scheduling", "Assistants", "Doctors", "Admin/Settings"],
+    ["Dashboard", "Scheduling", "Assistants", "Doctors", "Admin/Settings"],
     index=0,
     key="nav_category",
 )
 s_sidebar_role_options = ["admin", "editor", "viewer"]
 # Role/current user controls removed as requested
 sched_view = assist_view = doctor_view = admin_view = None
-if category == "Scheduling":
+if category == "Dashboard":
+    sched_view = assist_view = doctor_view = admin_view = None
+elif category == "Scheduling":
     sched_view = st.sidebar.radio(
         "Scheduling",
         ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
@@ -5350,6 +5684,9 @@ else:
         index=0,
         key="nav_admin",
     )
+
+if category == "Dashboard":
+    render_home_dashboard()
 
 if category == "Assistants" and assist_view == "Manage Profiles":
     render_profile_manager(PROFILE_ASSISTANT_SHEET, "Assistant", "Department")
