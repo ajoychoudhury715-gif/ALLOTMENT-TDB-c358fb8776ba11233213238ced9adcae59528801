@@ -954,6 +954,28 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .summary-bar {background: #f3f3f4; border: 1px solid #d9c5b2; border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
         .compact-dashboard [data-testid="stVerticalBlock"] {gap: 0.5rem;}
         .compact-dashboard [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
+        .schedule-cards {display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-top: 8px;}
+        .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
+        .card-head {display:flex; align-items:center; gap:10px;}
+        .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
+        .card-name {font-size:15px; font-weight:800; color:#14110f;}
+        .card-time {font-size:12px; color:#7e7f83;}
+        .card-menu {margin-left:auto; color:#7e7f83; font-weight:700;}
+        .doctor-pill {display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#d9c5b2; color:#34312d; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;}
+        .procedure-text {font-size:12px; color:#7e7f83;}
+        .staff-row {display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+        .staff-label {font-size:12px; color:#7e7f83;}
+        .staff-chip {padding:4px 8px; border-radius:999px; background:#f3f3f4; border:1px solid #d9c5b2; font-size:11px; color:#34312d;}
+        .card-footer {display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:auto;}
+        .flag {display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#34312d; border:1px solid #d9c5b2; background:#f3f3f4; padding:4px 8px; border-radius:10px;}
+        .flag.active {background:#d9c5b2; border-color:#7e7f83;}
+        .status-pill {padding:4px 12px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;}
+        .status-pill.waiting {background:#d9c5b2; color:#34312d;}
+        .status-pill.ongoing {background:#34312d; color:#f3f3f4;}
+        .status-pill.arrived {background:#7e7f83; color:#f3f3f4;}
+        .status-pill.completed {background:#14110f; color:#f3f3f4;}
+        .status-pill.cancelled {background:#7e7f83; color:#f3f3f4;}
+        .card-expand {font-size:12px; color:#7e7f83; border-top:1px solid #d9c5b2; padding-top:8px; display:flex; align-items:center; justify-content:space-between;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -1078,13 +1100,233 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if "DR." in df_display.columns and "Doctor" not in df_display.columns:
                 rename_map["DR."] = "Doctor"
             df_display = df_display.rename(columns=rename_map)
-            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "Doctor", "DR.", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
+            desired_cols = [
+                c
+                for c in [
+                    "Patient Name",
+                    "In Time",
+                    "Out Time",
+                    "Procedure",
+                    "Doctor",
+                    "DR.",
+                    "FIRST",
+                    "SECOND",
+                    "Third",
+                    "THIRD",
+                    "CASE PAPER",
+                    "SUCTION",
+                    "REMINDER_ROW_ID",
+                    "STATUS",
+                    "Status",
+                ]
+                if c in df_display.columns
+            ]
             if desired_cols:
                 df_display = df_display[desired_cols]
             if "STATUS" in df_display.columns and "Status" not in df_display.columns:
                 df_display = df_display.rename(columns={"STATUS": "Status"})
 
-        st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
+        view_options = ["Cards"]
+        if st.session_state.get("user_role") == "admin":
+            view_options.append("Table")
+        view_mode = st.radio(
+            "View",
+            view_options,
+            horizontal=True,
+            key="compact_view_mode",
+            label_visibility="collapsed",
+        )
+
+        def _clean_text(val) -> str:
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return ""
+            text = str(val).strip()
+            if text.lower() in {"nan", "none"}:
+                return ""
+            return text
+
+        def _truthy(val) -> bool:
+            if isinstance(val, bool):
+                return val
+            text = _clean_text(val).lower()
+            return text in {"yes", "y", "true", "1", "done", "checked"}
+
+        def _initials(name: str) -> str:
+            parts = [p for p in name.strip().split() if p]
+            if not parts:
+                return "--"
+            if len(parts) == 1:
+                return parts[0][:2].upper()
+            return (parts[0][0] + parts[-1][0]).upper()
+
+        def _status_class(status: str) -> str:
+            status_up = status.upper()
+            if "WAIT" in status_up:
+                return "waiting"
+            if "ONGOING" in status_up or "ON GOING" in status_up:
+                return "ongoing"
+            if "ARRIVED" in status_up:
+                return "arrived"
+            if "DONE" in status_up or "COMPLETED" in status_up:
+                return "completed"
+            if "CANCEL" in status_up or "SHIFT" in status_up:
+                return "cancelled"
+            return "waiting"
+
+        def _update_row_status(row_id, patient_name, in_time_str, new_status):
+            df_source = df_raw if "df_raw" in globals() else df_schedule
+            if df_source is None or df_source.empty:
+                st.warning("No schedule data to update.")
+                return
+            df_updated = df_source.copy()
+            idx = None
+            if row_id and "REMINDER_ROW_ID" in df_updated.columns:
+                matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
+                if matches.any():
+                    idx = matches.idxmax()
+            if idx is None and "Patient Name" in df_updated.columns and patient_name:
+                name_mask = df_updated["Patient Name"].astype(str).str.upper() == patient_name.upper()
+                if in_time_str and "In Time" in df_updated.columns:
+                    time_mask = df_updated["In Time"].astype(str) == in_time_str
+                    match = df_updated[name_mask & time_mask]
+                else:
+                    match = df_updated[name_mask]
+                if not match.empty:
+                    idx = match.index[0]
+            if idx is None:
+                st.warning("Unable to locate row for update.")
+                return
+
+            old_status = str(df_updated.at[idx, "STATUS"]).strip().upper() if "STATUS" in df_updated.columns else ""
+            if "STATUS" in df_updated.columns:
+                df_updated.at[idx, "STATUS"] = new_status
+            ts = _now_iso()
+            if "STATUS_CHANGED_AT" in df_updated.columns:
+                df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
+            if ("ONGOING" in new_status or "ON GOING" in new_status) and "ACTUAL_START_AT" in df_updated.columns:
+                if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
+                    df_updated.at[idx, "ACTUAL_START_AT"] = ts
+            if ("DONE" in new_status or "COMPLETED" in new_status) and "ACTUAL_END_AT" in df_updated.columns:
+                if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
+                    df_updated.at[idx, "ACTUAL_END_AT"] = ts
+            if "STATUS_LOG" in df_updated.columns:
+                existing_log = str(df_updated.at[idx, "STATUS_LOG"])
+                try:
+                    df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
+                        existing_log,
+                        {"at": ts, "from": old_status, "to": new_status},
+                    )
+                except Exception:
+                    df_updated.at[idx, "STATUS_LOG"] = existing_log
+
+            _maybe_save(df_updated, message=f"Status set to {new_status} for {patient_name}")
+            st.toast(f"{patient_name} marked {new_status}", icon="✅")
+            st.rerun()
+
+        search_value = st.session_state.get("compact_search", "").strip()
+        df_cards = df_display.copy()
+        if search_value:
+            query = search_value.lower()
+            mask = pd.Series(False, index=df_cards.index)
+            for col in ["Patient Name", "Doctor", "DR.", "Procedure", "FIRST", "SECOND", "Third", "THIRD", "Status"]:
+                if col in df_cards.columns:
+                    mask = mask | df_cards[col].astype(str).str.lower().str.contains(query, na=False)
+            df_cards = df_cards[mask]
+
+        if view_mode == "Table":
+            df_table = df_display.drop(columns=["REMINDER_ROW_ID"], errors="ignore")
+            st.data_editor(df_table, use_container_width=True, height=280, key="compact_schedule_editor")
+        else:
+            show_case = "CASE PAPER" in df_display.columns
+            show_suction = "SUCTION" in df_display.columns
+            cards_per_row = 4
+            card_rows = [
+                df_cards.iloc[i:i + cards_per_row]
+                for i in range(0, len(df_cards), cards_per_row)
+            ]
+            if df_cards.empty:
+                st.info("No patients found.")
+            for chunk in card_rows:
+                cols = st.columns(cards_per_row, gap="small")
+                for col, (_, row) in zip(cols, chunk.iterrows()):
+                    patient = _clean_text(row.get("Patient Name"))
+                    doctor = _clean_text(row.get("Doctor") or row.get("DR."))
+                    procedure = _clean_text(row.get("Procedure"))
+                    in_time = _clean_text(row.get("In Time") or row.get("In Time Str"))
+                    out_time = _clean_text(row.get("Out Time") or row.get("Out Time Str"))
+                    status = _clean_text(row.get("Status") or row.get("STATUS") or "WAITING")
+                    row_id = _clean_text(row.get("REMINDER_ROW_ID"))
+                    staff = [
+                        _clean_text(row.get("FIRST")),
+                        _clean_text(row.get("SECOND")),
+                        _clean_text(row.get("Third") or row.get("THIRD")),
+                    ]
+                    staff = [name for name in staff if name]
+                    time_text = " - ".join([t for t in [in_time, out_time] if t])
+                    staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
+
+                    with col:
+                        with st.container(border=True):
+                            st.markdown(
+                                f"""
+                                <div class="card-head">
+                                    <div class="card-avatar">{html.escape(_initials(patient))}</div>
+                                    <div>
+                                        <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
+                                        <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                    </div>
+                                    <div class="card-menu">...</div>
+                                </div>
+                                {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
+                                {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
+                                <div class="staff-row">
+                                    <span class="staff-label">Staff:</span>
+                                    {staff_html}
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                            flag_html = ""
+                            if show_case:
+                                case_active = _truthy(row.get("CASE PAPER"))
+                                flag_html += f"<span class='flag{' active' if case_active else ''}'>Case Paper</span>"
+                            if show_suction:
+                                suction_active = _truthy(row.get("SUCTION"))
+                                flag_html += f"<span class='flag{' active' if suction_active else ''}'>Suction</span>"
+                            st.markdown(
+                                f"""
+                                <div class="card-footer">
+                                    <div>{flag_html}</div>
+                                    <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                            action_cols = st.columns(3, gap="small")
+                            with action_cols[0]:
+                                if st.button("Edit", key=f"card_edit_{row_id}_{patient}"):
+                                    st.session_state["compact_view_mode"] = "Table"
+                                    st.session_state["compact_focus_row_id"] = row_id
+                                    st.toast("Switching to table view for editing.", icon="✏️")
+                                    st.rerun()
+                            with action_cols[1]:
+                                if st.button("Done", key=f"card_done_{row_id}_{patient}"):
+                                    _update_row_status(row_id, patient, in_time, "DONE")
+                            with action_cols[2]:
+                                if st.button("Cancel", key=f"card_cancel_{row_id}_{patient}"):
+                                    _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                            with st.expander("View Details", expanded=False):
+                                st.markdown(f"**Doctor:** {doctor or '—'}")
+                                st.markdown(f"**Procedure:** {procedure or '—'}")
+                                st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
+                                st.markdown(f"**Status:** {status}")
+                                if show_case:
+                                    st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
+                                if show_suction:
+                                    st.markdown(f"**Suction:** {'Yes' if _truthy(row.get('SUCTION')) else 'No'}")
 
         st.markdown("<div class='summary-bar'>", unsafe_allow_html=True)
         with st.expander("📊 Schedule Summary by Doctor", expanded=False):
