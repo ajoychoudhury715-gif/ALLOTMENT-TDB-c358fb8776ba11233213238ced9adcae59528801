@@ -171,6 +171,13 @@ def mins_to_hhmm(m):
     mm = m % 60
     return f"{h:02d}:{mm:02d}"
 
+def _normalize_html(block: str) -> str:
+    return "\n".join(
+        line.strip()
+        for line in textwrap.dedent(block).splitlines()
+        if line.strip()
+    )
+
 def get_assistants_list(schedule_df):
     cols = [c for c in ["FIRST", "SECOND", "Third"] if c in schedule_df.columns]
     names = set()
@@ -1269,7 +1276,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                     with col:
                         with st.container(border=True):
                             st.markdown(
-                                textwrap.dedent(
+                                _normalize_html(
                                     f"""
                                     <div class="card-head">
                                         <div class="card-avatar">{html.escape(_initials(patient))}</div>
@@ -1298,7 +1305,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 suction_active = _truthy(row.get("SUCTION"))
                                 flag_html += f"<span class='flag{' active' if suction_active else ''}'>Suction</span>"
                             st.markdown(
-                                textwrap.dedent(
+                                _normalize_html(
                                     f"""
                                     <div class="card-footer">
                                         <div>{flag_html}</div>
@@ -6240,32 +6247,34 @@ if category == "Scheduling":
                     staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
 
                     with col:
-                        card_html = f"""
-<div class="schedule-card">
-    <div class="card-head">
-        <div class="card-avatar">{html.escape(_initials(patient))}</div>
-        <div>
-            <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
-            <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
-        </div>
-        <div class="card-menu">...</div>
-    </div>
-    {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
-    {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
-    <div class="staff-row">
-        <span class="staff-label">Staff:</span>
-        {staff_html}
-    </div>
-    <div class="card-footer">
-        <div>
-            {f"<span class='flag{' active' if _truthy(row.get('CASE PAPER')) else ''}'>Case Paper</span>" if show_case else ""}
-            {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
-        </div>
-        <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
-    </div>
-</div>
-"""
-                        st.markdown(textwrap.dedent(card_html), unsafe_allow_html=True)
+                        card_html = _normalize_html(
+                            f"""
+                            <div class="schedule-card">
+                                <div class="card-head">
+                                    <div class="card-avatar">{html.escape(_initials(patient))}</div>
+                                    <div>
+                                        <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
+                                        <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                    </div>
+                                    <div class="card-menu">...</div>
+                                </div>
+                                {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
+                                {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
+                                <div class="staff-row">
+                                    <span class="staff-label">Staff:</span>
+                                    {staff_html}
+                                </div>
+                                <div class="card-footer">
+                                    <div>
+                                        {f"<span class='flag{' active' if _truthy(row.get('CASE PAPER')) else ''}'>Case Paper</span>" if show_case else ""}
+                                        {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
+                                    </div>
+                                    <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
+                                </div>
+                            </div>
+                            """
+                        )
+                        st.markdown(card_html, unsafe_allow_html=True)
                         action_cols = st.columns(3, gap="small")
                         with action_cols[0]:
                             if st.button("Edit", key=f"full_card_edit_{row_id}_{start}"):
