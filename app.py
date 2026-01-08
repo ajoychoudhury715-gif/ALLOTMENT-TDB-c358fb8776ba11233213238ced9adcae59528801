@@ -14,6 +14,7 @@ import uuid  # for generating stable row IDs
 import json
 import io
 import html
+import textwrap
 import openpyxl
 from openpyxl.utils import get_column_letter
 
@@ -6235,34 +6236,32 @@ if category == "Scheduling":
                     staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
 
                     with col:
-                        st.markdown(
-                            f"""
-                            <div class="schedule-card">
-                                <div class="card-head">
-                                    <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                    <div>
-                                        <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
-                                        <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
-                                    </div>
-                                    <div class="card-menu">...</div>
-                                </div>
-                                {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
-                                {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
-                                <div class="staff-row">
-                                    <span class="staff-label">Staff:</span>
-                                    {staff_html}
-                                </div>
-                                <div class="card-footer">
-                                    <div>
-                                        {f"<span class='flag{' active' if _truthy(row.get('CASE PAPER')) else ''}'>Case Paper</span>" if show_case else ""}
-                                        {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
-                                    </div>
-                                    <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
+                        card_html = f"""
+<div class="schedule-card">
+    <div class="card-head">
+        <div class="card-avatar">{html.escape(_initials(patient))}</div>
+        <div>
+            <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
+            <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+        </div>
+        <div class="card-menu">...</div>
+    </div>
+    {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
+    {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
+    <div class="staff-row">
+        <span class="staff-label">Staff:</span>
+        {staff_html}
+    </div>
+    <div class="card-footer">
+        <div>
+            {f"<span class='flag{' active' if _truthy(row.get('CASE PAPER')) else ''}'>Case Paper</span>" if show_case else ""}
+            {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
+        </div>
+        <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
+    </div>
+</div>
+"""
+                        st.markdown(textwrap.dedent(card_html), unsafe_allow_html=True)
                         action_cols = st.columns(3, gap="small")
                         with action_cols[0]:
                             if st.button("Edit", key=f"full_card_edit_{row_id}_{start}"):
