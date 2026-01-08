@@ -61,7 +61,7 @@ if "current_user" not in st.session_state:
 if "nav_category" not in st.session_state:
     st.session_state.nav_category = "Scheduling"
 if "nav_sched" not in st.session_state:
-    st.session_state.nav_sched = "Compact Dashboard"
+    st.session_state.nav_sched = "Full Schedule"
 
 # -----------------------------
 # Premium sidebar CSS (white pastel)
@@ -2348,7 +2348,7 @@ def _date_from_any(val):
 now = datetime.now(IST)
 date_line_str = now.strftime('%B %d, %Y - %I:%M:%S %p')
 
-if not (st.session_state.get("nav_category") == "Scheduling" and st.session_state.get("nav_sched") == "Compact Dashboard"):
+if st.session_state.get("nav_category") != "Dashboard":
     st.markdown(f"""
         <style>
         .divider-line {{
@@ -5567,8 +5567,8 @@ sched_view = assist_view = doctor_view = admin_view = None
 if category == "Scheduling":
     sched_view = st.sidebar.radio(
         "Scheduling",
-        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
-        index=4,
+        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming"],
+        index=0,
         key="nav_sched",
     )
 elif category == "Assistants":
@@ -5662,12 +5662,6 @@ if category == "Doctors" and doctor_view == "Overview":
     render_doctor_overview()
 
 if category == "Scheduling":
-    if sched_view == "Compact Dashboard":
-        try:
-            render_compact_dashboard(df if "df" in locals() else pd.DataFrame())
-        except Exception as e:
-            st.error(f"Unable to render compact dashboard: {e}")
-        st.stop()
     # ================ Status Colors ================
     def get_status_background(status):
         # Return subtle styling without bright backgrounds
@@ -5954,6 +5948,24 @@ if category == "Scheduling":
         else:
             st.caption("🔍 Patient search (Supabase only)")
     
+    view_cols = st.columns([0.2, 0.8], gap="small")
+    with view_cols[0]:
+        view_mode = st.radio(
+            "View",
+            ["Cards", "Table"],
+            horizontal=True,
+            key="full_schedule_view_mode",
+            label_visibility="collapsed",
+        )
+    with view_cols[1]:
+        card_search = st.text_input(
+            "Search schedule",
+            value="",
+            key="full_schedule_card_search",
+            placeholder="Search schedule...",
+            label_visibility="collapsed",
+        )
+
     display_all = all_sorted[[
         "Patient Name",
         "In Time Obj",
@@ -5967,6 +5979,7 @@ if category == "Scheduling":
         "OP",
         "SUCTION",
         "CLEANING",
+        "REMINDER_ROW_ID",
         "STATUS",
         "STATUS_CHANGED_AT",
         "ACTUAL_START_AT",
@@ -6002,61 +6015,277 @@ if category == "Scheduling":
     
     display_all["Overtime (min)"] = all_sorted.apply(_compute_overtime_min, axis=1)
     
-    edited_all = st.data_editor(
-        display_all, 
-        width="stretch", 
-        key="full_schedule_editor", 
-        hide_index=True,
-        disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
-        column_config={
-            "_orig_idx": None,  # Hide the original index column
-            "Patient Name": st.column_config.TextColumn(label="Patient Name"),
-            "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
-            "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
-            "Procedure": st.column_config.TextColumn(label="Procedure"),
-            "DR.": st.column_config.SelectboxColumn(
-                label="DR.",
-                options=DOCTOR_OPTIONS,
-                required=False
-            ),
-            "OP": st.column_config.SelectboxColumn(
-                label="OP",
-                options=["OP 1", "OP 2", "OP 3", "OP 4"],
-                required=False
-            ),
-            "FIRST": st.column_config.SelectboxColumn(
-                label="FIRST",
-                options=ASSISTANT_OPTIONS,
-                required=False
-            ),
-            "SECOND": st.column_config.SelectboxColumn(
-                label="SECOND",
-                options=ASSISTANT_OPTIONS,
-                required=False
-            ),
-            "Third": st.column_config.SelectboxColumn(
-                label="Third",
-                options=ASSISTANT_OPTIONS,
-                required=False
-            ),
-            "CASE PAPER": st.column_config.SelectboxColumn(
-                label="CASE PAPER",
-                options=ASSISTANT_OPTIONS,
-                required=False
-            ),
-            "SUCTION": st.column_config.CheckboxColumn(label="✨ SUCTION"),
-            "CLEANING": st.column_config.CheckboxColumn(label="🧹 CLEANING"),
-            "STATUS_CHANGED_AT": None,
-            "ACTUAL_START_AT": None,
-            "ACTUAL_END_AT": None,
-            "Overtime (min)": None,
-            "STATUS": st.column_config.SelectboxColumn(
-                label="STATUS",
-                options=STATUS_OPTIONS,
-                required=False
-            )
-        }
+    
+
+    st.markdown(
+        """
+        <style>
+        .full-schedule-cards {margin-top: 8px;}
+        .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
+        .card-head {display:flex; align-items:center; gap:10px;}
+        .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
+        .card-name {font-size:15px; font-weight:800; color:#14110f;}
+        .card-time {font-size:12px; color:#7e7f83;}
+        .card-menu {margin-left:auto; color:#7e7f83; font-weight:700;}
+        .doctor-pill {display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#d9c5b2; color:#34312d; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;}
+        .procedure-text {font-size:12px; color:#7e7f83;}
+        .staff-row {display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+        .staff-label {font-size:12px; color:#7e7f83;}
+        .staff-chip {padding:4px 8px; border-radius:999px; background:#f3f3f4; border:1px solid #d9c5b2; font-size:11px; color:#34312d;}
+        .card-footer {display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:auto;}
+        .flag {display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#34312d; border:1px solid #d9c5b2; background:#f3f3f4; padding:4px 8px; border-radius:10px;}
+        .flag.active {background:#d9c5b2; border-color:#7e7f83;}
+        .status-pill {padding:4px 12px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;}
+        .status-pill.waiting {background:#d9c5b2; color:#34312d;}
+        .status-pill.ongoing {background:#34312d; color:#f3f3f4;}
+        .status-pill.arrived {background:#7e7f83; color:#f3f3f4;}
+        .status-pill.completed {background:#14110f; color:#f3f3f4;}
+        .status-pill.cancelled {background:#7e7f83; color:#f3f3f4;}
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
+
+    def _clean_text(val) -> str:
+        if val is None or (isinstance(val, float) and pd.isna(val)):
+            return ""
+        text = str(val).strip()
+        if text.lower() in {"nan", "none"}:
+            return ""
+        return text
+
+    def _truthy(val) -> bool:
+        if isinstance(val, bool):
+            return val
+        text = _clean_text(val).lower()
+        return text in {"yes", "y", "true", "1", "done", "checked"}
+
+    def _initials(name: str) -> str:
+        parts = [p for p in name.strip().split() if p]
+        if not parts:
+            return "--"
+        if len(parts) == 1:
+            return parts[0][:2].upper()
+        return (parts[0][0] + parts[-1][0]).upper()
+
+    def _status_class(status: str) -> str:
+        status_up = status.upper()
+        if "WAIT" in status_up:
+            return "waiting"
+        if "ONGOING" in status_up or "ON GOING" in status_up:
+            return "ongoing"
+        if "ARRIVED" in status_up:
+            return "arrived"
+        if "DONE" in status_up or "COMPLETED" in status_up:
+            return "completed"
+        if "CANCEL" in status_up or "SHIFT" in status_up:
+            return "cancelled"
+        return "waiting"
+
+    def _fmt_time(val) -> str:
+        if isinstance(val, time_type):
+            return val.strftime("%I:%M %p").lstrip("0")
+        return _clean_text(val)
+
+    def _update_row_status(row_id, patient_name, in_time_val, new_status):
+        df_source = df_raw if "df_raw" in globals() else df
+        if df_source is None or df_source.empty:
+            st.warning("No schedule data to update.")
+            return
+        df_updated = df_source.copy()
+        idx = None
+        if row_id and "REMINDER_ROW_ID" in df_updated.columns:
+            matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
+            if matches.any():
+                idx = matches.idxmax()
+        if idx is None and "Patient Name" in df_updated.columns and patient_name:
+            name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
+            if in_time_val and "In Time" in df_updated.columns:
+                time_mask = df_updated["In Time"].astype(str) == str(in_time_val)
+                match = df_updated[name_mask & time_mask]
+            else:
+                match = df_updated[name_mask]
+            if not match.empty:
+                idx = match.index[0]
+        if idx is None:
+            st.warning("Unable to locate row for update.")
+            return
+
+        old_status_norm = ""
+        if "STATUS" in df_updated.columns:
+            old_status_norm = str(df_updated.at[idx, "STATUS"]).strip().upper()
+            df_updated.at[idx, "STATUS"] = new_status
+
+        ts = _now_iso()
+        if "STATUS_CHANGED_AT" in df_updated.columns:
+            df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
+        if ("ONGOING" in new_status or "ON GOING" in new_status) and "ACTUAL_START_AT" in df_updated.columns:
+            if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
+                df_updated.at[idx, "ACTUAL_START_AT"] = ts
+        if ("DONE" in new_status or "COMPLETED" in new_status) and "ACTUAL_END_AT" in df_updated.columns:
+            if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
+                df_updated.at[idx, "ACTUAL_END_AT"] = ts
+        if "STATUS_LOG" in df_updated.columns:
+            existing_log = str(df_updated.at[idx, "STATUS_LOG"])
+            try:
+                df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
+                    existing_log,
+                    {"at": ts, "from": old_status_norm, "to": new_status},
+                )
+            except Exception:
+                df_updated.at[idx, "STATUS_LOG"] = existing_log
+
+        _maybe_save(df_updated, message=f"Status set to {new_status} for {patient_name}")
+        st.toast(f"{patient_name} marked {new_status}", icon="OK")
+        st.rerun()
+
+    edited_all = None
+    if view_mode == "Table":
+        edited_all = st.data_editor(
+            display_all,
+            width="stretch",
+            key="full_schedule_editor",
+            hide_index=True,
+            disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
+            column_config={
+                "_orig_idx": None,  # Hide the original index column
+                "REMINDER_ROW_ID": None,
+                "Patient Name": st.column_config.TextColumn(label="Patient Name"),
+                "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
+                "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
+                "Procedure": st.column_config.TextColumn(label="Procedure"),
+                "DR.": st.column_config.SelectboxColumn(
+                    label="DR.",
+                    options=DOCTOR_OPTIONS,
+                    required=False,
+                ),
+                "OP": st.column_config.SelectboxColumn(
+                    label="OP",
+                    options=["OP 1", "OP 2", "OP 3", "OP 4"],
+                    required=False,
+                ),
+                "FIRST": st.column_config.SelectboxColumn(
+                    label="FIRST",
+                    options=ASSISTANT_OPTIONS,
+                    required=False,
+                ),
+                "SECOND": st.column_config.SelectboxColumn(
+                    label="SECOND",
+                    options=ASSISTANT_OPTIONS,
+                    required=False,
+                ),
+                "Third": st.column_config.SelectboxColumn(
+                    label="Third",
+                    options=ASSISTANT_OPTIONS,
+                    required=False,
+                ),
+                "CASE PAPER": st.column_config.SelectboxColumn(
+                    label="CASE PAPER",
+                    options=ASSISTANT_OPTIONS,
+                    required=False,
+                ),
+                "SUCTION": st.column_config.CheckboxColumn(label="SUCTION"),
+                "CLEANING": st.column_config.CheckboxColumn(label="CLEANING"),
+                "STATUS_CHANGED_AT": None,
+                "ACTUAL_START_AT": None,
+                "ACTUAL_END_AT": None,
+                "Overtime (min)": None,
+                "STATUS": st.column_config.SelectboxColumn(
+                    label="STATUS",
+                    options=STATUS_OPTIONS,
+                    required=False,
+                ),
+            },
+        )
+    else:
+        df_cards = display_all.copy()
+        if card_search:
+            query = card_search.lower().strip()
+            mask = pd.Series(False, index=df_cards.index)
+            for col in ["Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "STATUS"]:
+                if col in df_cards.columns:
+                    mask = mask | df_cards[col].astype(str).str.lower().str.contains(query, na=False)
+            df_cards = df_cards[mask]
+
+        show_case = "CASE PAPER" in df_cards.columns
+        show_suction = "SUCTION" in df_cards.columns
+        if df_cards.empty:
+            st.info("No patients found.")
+        else:
+            cards_per_row = 4
+            for start in range(0, len(df_cards), cards_per_row):
+                row_chunk = df_cards.iloc[start:start + cards_per_row]
+                cols = st.columns(cards_per_row, gap="small")
+                for col, (_, row) in zip(cols, row_chunk.iterrows()):
+                    patient = _clean_text(row.get("Patient Name"))
+                    doctor = _clean_text(row.get("DR."))
+                    procedure = _clean_text(row.get("Procedure"))
+                    in_time = row.get("In Time")
+                    out_time = row.get("Out Time")
+                    status = _clean_text(row.get("STATUS") or row.get("Status") or "WAITING")
+                    row_id = _clean_text(row.get("REMINDER_ROW_ID"))
+                    staff = [
+                        _clean_text(row.get("FIRST")),
+                        _clean_text(row.get("SECOND")),
+                        _clean_text(row.get("Third")),
+                    ]
+                    staff = [name for name in staff if name]
+                    time_parts = [t for t in [_fmt_time(in_time), _fmt_time(out_time)] if t]
+                    time_text = " - ".join(time_parts)
+                    staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
+
+                    with col:
+                        st.markdown(
+                            f"""
+                            <div class="schedule-card">
+                                <div class="card-head">
+                                    <div class="card-avatar">{html.escape(_initials(patient))}</div>
+                                    <div>
+                                        <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
+                                        <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                    </div>
+                                    <div class="card-menu">...</div>
+                                </div>
+                                {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
+                                {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
+                                <div class="staff-row">
+                                    <span class="staff-label">Staff:</span>
+                                    {staff_html}
+                                </div>
+                                <div class="card-footer">
+                                    <div>
+                                        {f"<span class='flag{' active' if _truthy(row.get('CASE PAPER')) else ''}'>Case Paper</span>" if show_case else ""}
+                                        {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
+                                    </div>
+                                    <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        action_cols = st.columns(3, gap="small")
+                        with action_cols[0]:
+                            if st.button("Edit", key=f"full_card_edit_{row_id}_{start}"):
+                                st.session_state.full_schedule_view_mode = "Table"
+                                st.toast("Switching to table view.", icon="OK")
+                                st.rerun()
+                        with action_cols[1]:
+                            if st.button("Done", key=f"full_card_done_{row_id}_{start}"):
+                                _update_row_status(row_id, patient, in_time, "DONE")
+                        with action_cols[2]:
+                            if st.button("Cancel", key=f"full_card_cancel_{row_id}_{start}"):
+                                _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                        with st.expander("View Details", expanded=False):
+                            st.markdown(f"**Doctor:** {doctor or '--'}")
+                            st.markdown(f"**Procedure:** {procedure or '--'}")
+                            st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
+                            st.markdown(f"**Status:** {status}")
+                            if show_case:
+                                st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
+                            if show_suction:
+                                st.markdown(f"**Suction:** {'Yes' if _truthy(row.get('SUCTION')) else 'No'}")
+    # ================ Manual save
     
     # ================ Manual save: process edits only when user clicks save button ================
     if st.session_state.get("manual_save_triggered"):
@@ -6798,3 +7027,5 @@ if category == "Admin/Settings":
         st.write(f"Using Supabase: {USE_SUPABASE}")
         st.write(f"Using Google Sheets: {USE_GOOGLE_SHEETS}")
         st.write(f"Excel path: {file_path}")
+
+
