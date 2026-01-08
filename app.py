@@ -1269,22 +1269,24 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                     with col:
                         with st.container(border=True):
                             st.markdown(
-                                f"""
-                                <div class="card-head">
-                                    <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                    <div>
-                                        <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
-                                        <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                textwrap.dedent(
+                                    f"""
+                                    <div class="card-head">
+                                        <div class="card-avatar">{html.escape(_initials(patient))}</div>
+                                        <div>
+                                            <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
+                                            <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                        </div>
+                                        <div class="card-menu">...</div>
                                     </div>
-                                    <div class="card-menu">...</div>
-                                </div>
-                                {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
-                                {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
-                                <div class="staff-row">
-                                    <span class="staff-label">Staff:</span>
-                                    {staff_html}
-                                </div>
-                                """,
+                                    {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
+                                    {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
+                                    <div class="staff-row">
+                                        <span class="staff-label">Staff:</span>
+                                        {staff_html}
+                                    </div>
+                                    """
+                                ),
                                 unsafe_allow_html=True,
                             )
 
@@ -1296,12 +1298,14 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 suction_active = _truthy(row.get("SUCTION"))
                                 flag_html += f"<span class='flag{' active' if suction_active else ''}'>Suction</span>"
                             st.markdown(
-                                f"""
-                                <div class="card-footer">
-                                    <div>{flag_html}</div>
-                                    <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
-                                </div>
-                                """,
+                                textwrap.dedent(
+                                    f"""
+                                    <div class="card-footer">
+                                        <div>{flag_html}</div>
+                                        <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
+                                    </div>
+                                    """
+                                ),
                                 unsafe_allow_html=True,
                             )
 
