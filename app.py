@@ -1181,10 +1181,90 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 return "cancelled"
             return "waiting"
 
-        def _set_compact_table_view(row_id: str) -> None:
-            st.session_state["compact_view_mode"] = "Table"
-            st.session_state["compact_focus_row_id"] = row_id
-            st.toast("Switching to table view for editing.", icon="✏️")
+        def _toggle_compact_card_edit(token: str) -> None:
+            current = st.session_state.get("compact_edit_token", "")
+            st.session_state["compact_edit_token"] = "" if current == token else token
+
+        def _clear_compact_card_edit() -> None:
+            st.session_state["compact_edit_token"] = ""
+
+        def _compact_normalize_time_input(raw_value: str) -> tuple[str, str | None]:
+            text = str(raw_value or "").strip()
+            if not text:
+                return "", None
+            t = _coerce_to_time_obj(text)
+            if t is None:
+                return "", "Invalid time format. Use HH:MM or 09:30 AM."
+            return f"{t.hour:02d}:{t.minute:02d}", None
+
+        def _compact_build_select_options(options: list[str], current_value: str) -> tuple[list[str], int]:
+            current = str(current_value or "").strip()
+            opts = [opt for opt in options if str(opt).strip()]
+            if current and current not in opts:
+                opts = [current] + opts
+            opts = [""] + opts
+            index = opts.index(current) if current in opts else 0
+            return opts, index
+
+        def _apply_compact_card_edit(row_id, patient_name, in_time_str, updates: dict[str, Any]) -> bool:
+            df_source = df_raw if "df_raw" in globals() else df_schedule
+            if df_source is None or df_source.empty:
+                st.warning("No schedule data to update.")
+                return False
+            df_updated = df_source.copy()
+            idx = None
+            if row_id and "REMINDER_ROW_ID" in df_updated.columns:
+                matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
+                if matches.any():
+                    idx = matches.idxmax()
+            if idx is None and "Patient Name" in df_updated.columns and patient_name:
+                name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
+                if in_time_str and "In Time" in df_updated.columns:
+                    time_mask = df_updated["In Time"].astype(str) == str(in_time_str)
+                    match = df_updated[name_mask & time_mask]
+                else:
+                    match = df_updated[name_mask]
+                if not match.empty:
+                    idx = match.index[0]
+            if idx is None:
+                st.warning("Unable to locate row for update.")
+                return False
+
+            status_col = "STATUS" if "STATUS" in df_updated.columns else "Status" if "Status" in df_updated.columns else ""
+            old_status_norm = str(df_updated.at[idx, status_col]).strip().upper() if status_col else ""
+
+            for col, val in updates.items():
+                if col in df_updated.columns:
+                    df_updated.at[idx, col] = val
+
+            if status_col:
+                new_status_norm = str(df_updated.at[idx, status_col]).strip().upper()
+                if new_status_norm and new_status_norm != old_status_norm:
+                    ts = _now_iso()
+                    if "STATUS_CHANGED_AT" in df_updated.columns:
+                        df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
+                    if ("ONGOING" in new_status_norm or "ON GOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
+                        if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
+                            df_updated.at[idx, "ACTUAL_START_AT"] = ts
+                    if ("DONE" in new_status_norm or "COMPLETED" in new_status_norm) and "ACTUAL_END_AT" in df_updated.columns:
+                        if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
+                            df_updated.at[idx, "ACTUAL_END_AT"] = ts
+                    if "STATUS_LOG" in df_updated.columns:
+                        existing_log = str(df_updated.at[idx, "STATUS_LOG"])
+                        try:
+                            df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
+                                existing_log,
+                                {"at": ts, "from": old_status_norm, "to": new_status_norm},
+                            )
+                        except Exception:
+                            df_updated.at[idx, "STATUS_LOG"] = existing_log
+
+            _maybe_save(df_updated, show_toast=False, message=f"Updated {patient_name or 'patient'}")
+            if st.session_state.get("auto_save_enabled", False):
+                st.toast("Changes saved.", icon="✅")
+            else:
+                st.toast("Changes queued. Click 'Save Changes'.", icon="📝")
+            return True
 
         def _update_row_status(row_id, patient_name, in_time_str, new_status):
             df_source = df_raw if "df_raw" in globals() else df_schedule
@@ -1261,7 +1341,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 st.info("No patients found.")
             for chunk in card_rows:
                 cols = st.columns(cards_per_row, gap="small")
-                for col, (_, row) in zip(cols, chunk.iterrows()):
+                for col, (row_index, row) in zip(cols, chunk.iterrows()):
                     patient = _clean_text(row.get("Patient Name"))
                     doctor = _clean_text(row.get("Doctor") or row.get("DR."))
                     procedure = _clean_text(row.get("Procedure"))
@@ -1277,6 +1357,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                     staff = [name for name in staff if name]
                     time_text = " - ".join([t for t in [in_time, out_time] if t])
                     staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
+                    row_key = row_id if row_id else f"compact_{row_index}"
+                    is_editing = st.session_state.get("compact_edit_token") == row_key
 
                     with col:
                         with st.container(border=True):
@@ -1323,18 +1405,144 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
 
                             action_cols = st.columns(3, gap="small")
                             with action_cols[0]:
+                                edit_label = "Close" if is_editing else "Edit"
                                 st.button(
-                                    "Edit",
-                                    key=f"card_edit_{row_id}_{patient}",
-                                    on_click=_set_compact_table_view,
-                                    args=(row_id,),
+                                    edit_label,
+                                    key=f"card_edit_{row_key}",
+                                    on_click=_toggle_compact_card_edit,
+                                    args=(row_key,),
+                                    use_container_width=True,
+                                    type="secondary",
                                 )
                             with action_cols[1]:
-                                if st.button("Done", key=f"card_done_{row_id}_{patient}"):
+                                if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
+                                    _clear_compact_card_edit()
                                     _update_row_status(row_id, patient, in_time, "DONE")
                             with action_cols[2]:
-                                if st.button("Cancel", key=f"card_cancel_{row_id}_{patient}"):
+                                if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
+                                    _clear_compact_card_edit()
                                     _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                            if is_editing:
+                                staff_first = _clean_text(row.get("FIRST"))
+                                staff_second = _clean_text(row.get("SECOND"))
+                                staff_third = _clean_text(row.get("Third") or row.get("THIRD"))
+                                in_time_value = "" if str(in_time or "").strip().upper() in {"N/A", "NONE", "NAT"} else in_time
+                                out_time_value = "" if str(out_time or "").strip().upper() in {"N/A", "NONE", "NAT"} else out_time
+
+                                with st.form(key=f"compact_edit_form_{row_key}"):
+                                    form_left, form_right = st.columns(2, gap="small")
+                                    with form_left:
+                                        patient_input = st.text_input(
+                                            "Patient Name",
+                                            value=patient,
+                                            key=f"compact_edit_patient_{row_key}",
+                                        )
+                                        in_time_input = st.text_input(
+                                            "In Time",
+                                            value=in_time_value,
+                                            key=f"compact_edit_in_{row_key}",
+                                            placeholder="HH:MM or 09:30 AM",
+                                        )
+                                        out_time_input = st.text_input(
+                                            "Out Time",
+                                            value=out_time_value,
+                                            key=f"compact_edit_out_{row_key}",
+                                            placeholder="HH:MM or 10:30 AM",
+                                        )
+                                        status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status)
+                                        status_input = st.selectbox(
+                                            "Status",
+                                            options=status_options,
+                                            index=status_index,
+                                            key=f"compact_edit_status_{row_key}",
+                                        )
+                                    with form_right:
+                                        doctor_options, doctor_index = _compact_build_select_options(DOCTOR_OPTIONS, doctor)
+                                        doctor_input = st.selectbox(
+                                            "Doctor",
+                                            options=doctor_options,
+                                            index=doctor_index,
+                                            key=f"compact_edit_doctor_{row_key}",
+                                        )
+                                        procedure_input = st.text_input(
+                                            "Procedure",
+                                            value=procedure,
+                                            key=f"compact_edit_procedure_{row_key}",
+                                        )
+                                        first_options, first_index = _compact_build_select_options(ASSISTANT_OPTIONS, staff_first)
+                                        first_input = st.selectbox(
+                                            "First",
+                                            options=first_options,
+                                            index=first_index,
+                                            key=f"compact_edit_first_{row_key}",
+                                        )
+                                        second_options, second_index = _compact_build_select_options(ASSISTANT_OPTIONS, staff_second)
+                                        second_input = st.selectbox(
+                                            "Second",
+                                            options=second_options,
+                                            index=second_index,
+                                            key=f"compact_edit_second_{row_key}",
+                                        )
+                                        third_options, third_index = _compact_build_select_options(ASSISTANT_OPTIONS, staff_third)
+                                        third_input = st.selectbox(
+                                            "Third",
+                                            options=third_options,
+                                            index=third_index,
+                                            key=f"compact_edit_third_{row_key}",
+                                        )
+
+                                    flag_cols = st.columns(2, gap="small")
+                                    with flag_cols[0]:
+                                        case_paper_input = st.checkbox(
+                                            "Case Paper",
+                                            value=_truthy(row.get("CASE PAPER")),
+                                            key=f"compact_edit_case_{row_key}",
+                                        )
+                                    with flag_cols[1]:
+                                        suction_input = st.checkbox(
+                                            "Suction",
+                                            value=_truthy(row.get("SUCTION")),
+                                            key=f"compact_edit_suction_{row_key}",
+                                        )
+
+                                    form_actions = st.columns(2, gap="small")
+                                    with form_actions[0]:
+                                        save_clicked = st.form_submit_button("Save", use_container_width=True)
+                                    with form_actions[1]:
+                                        cancel_clicked = st.form_submit_button("Cancel", use_container_width=True)
+
+                                if cancel_clicked:
+                                    _clear_compact_card_edit()
+                                    st.rerun()
+                                if save_clicked:
+                                    in_norm, in_err = _compact_normalize_time_input(in_time_input)
+                                    out_norm, out_err = _compact_normalize_time_input(out_time_input)
+                                    if in_err or out_err:
+                                        if in_err:
+                                            st.error(in_err)
+                                        if out_err:
+                                            st.error(out_err)
+                                    else:
+                                        updates = {
+                                            "Patient Name": str(patient_input or "").strip(),
+                                            "In Time": in_norm,
+                                            "Out Time": out_norm,
+                                            "Procedure": str(procedure_input or "").strip(),
+                                            "DR.": str(doctor_input or "").strip(),
+                                            "Doctor": str(doctor_input or "").strip(),
+                                            "FIRST": str(first_input or "").strip(),
+                                            "SECOND": str(second_input or "").strip(),
+                                            "Third": str(third_input or "").strip(),
+                                            "THIRD": str(third_input or "").strip(),
+                                            "CASE PAPER": "Yes" if case_paper_input else "",
+                                            "SUCTION": bool(suction_input),
+                                            "STATUS": str(status_input or "").strip(),
+                                            "Status": str(status_input or "").strip(),
+                                        }
+                                        if _apply_compact_card_edit(row_id, patient, in_time_value, updates):
+                                            _clear_compact_card_edit()
+                                            st.rerun()
 
                             with st.expander("View Details", expanded=False):
                                 st.markdown(f"**Doctor:** {doctor or '—'}")
@@ -6100,9 +6308,90 @@ if category == "Scheduling":
             return "cancelled"
         return "waiting"
 
-    def _set_full_schedule_table_view() -> None:
-        st.session_state["full_schedule_view_mode"] = "Table"
-        st.toast("Switching to table view.", icon="✅")
+    def _toggle_full_card_edit(token: str) -> None:
+        current = st.session_state.get("full_edit_token", "")
+        st.session_state["full_edit_token"] = "" if current == token else token
+
+    def _clear_full_card_edit() -> None:
+        st.session_state["full_edit_token"] = ""
+
+    def _full_normalize_time_input(raw_value: str) -> tuple[str, str | None]:
+        text = str(raw_value or "").strip()
+        if not text:
+            return "", None
+        t = _coerce_to_time_obj(text)
+        if t is None:
+            return "", "Invalid time format. Use HH:MM or 09:30 AM."
+        return f"{t.hour:02d}:{t.minute:02d}", None
+
+    def _full_build_select_options(options: list[str], current_value: str) -> tuple[list[str], int]:
+        current = str(current_value or "").strip()
+        opts = [opt for opt in options if str(opt).strip()]
+        if current and current not in opts:
+            opts = [current] + opts
+        opts = [""] + opts
+        index = opts.index(current) if current in opts else 0
+        return opts, index
+
+    def _apply_full_card_edit(row_id, patient_name, in_time_val, updates: dict[str, Any]) -> bool:
+        df_source = df_raw if "df_raw" in globals() else df
+        if df_source is None or df_source.empty:
+            st.warning("No schedule data to update.")
+            return False
+        df_updated = df_source.copy()
+        idx = None
+        if row_id and "REMINDER_ROW_ID" in df_updated.columns:
+            matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
+            if matches.any():
+                idx = matches.idxmax()
+        if idx is None and "Patient Name" in df_updated.columns and patient_name:
+            name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
+            if in_time_val and "In Time" in df_updated.columns:
+                time_mask = df_updated["In Time"].astype(str) == str(in_time_val)
+                match = df_updated[name_mask & time_mask]
+            else:
+                match = df_updated[name_mask]
+            if not match.empty:
+                idx = match.index[0]
+        if idx is None:
+            st.warning("Unable to locate row for update.")
+            return False
+
+        status_col = "STATUS" if "STATUS" in df_updated.columns else "Status" if "Status" in df_updated.columns else ""
+        old_status_norm = str(df_updated.at[idx, status_col]).strip().upper() if status_col else ""
+
+        for col, val in updates.items():
+            if col in df_updated.columns:
+                df_updated.at[idx, col] = val
+
+        if status_col:
+            new_status_norm = str(df_updated.at[idx, status_col]).strip().upper()
+            if new_status_norm and new_status_norm != old_status_norm:
+                ts = _now_iso()
+                if "STATUS_CHANGED_AT" in df_updated.columns:
+                    df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
+                if ("ONGOING" in new_status_norm or "ON GOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
+                    if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
+                        df_updated.at[idx, "ACTUAL_START_AT"] = ts
+                if ("DONE" in new_status_norm or "COMPLETED" in new_status_norm) and "ACTUAL_END_AT" in df_updated.columns:
+                    if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
+                        df_updated.at[idx, "ACTUAL_END_AT"] = ts
+                if "STATUS_LOG" in df_updated.columns:
+                    existing_log = str(df_updated.at[idx, "STATUS_LOG"])
+                    try:
+                        df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
+                            existing_log,
+                            {"at": ts, "from": old_status_norm, "to": new_status_norm},
+                        )
+                    except Exception:
+                        df_updated.at[idx, "STATUS_LOG"] = existing_log
+
+        _maybe_save(df_updated, show_toast=False, message=f"Updated {patient_name or 'patient'}")
+        if st.session_state.get("auto_save_enabled", False):
+            st.toast("Changes saved.", icon="✅")
+        else:
+            st.toast("Changes queued. Click 'Save Changes'.", icon="📝")
+        return True
 
     def _fmt_time(val) -> str:
         if isinstance(val, time_type):
@@ -6158,7 +6447,7 @@ if category == "Scheduling":
                 df_updated.at[idx, "STATUS_LOG"] = existing_log
 
         _maybe_save(df_updated, message=f"Status set to {new_status} for {patient_name}")
-        st.toast(f"{patient_name} marked {new_status}", icon="OK")
+        st.toast(f"{patient_name} marked {new_status}", icon="✅")
         st.rerun()
 
     edited_all = None
@@ -6238,7 +6527,7 @@ if category == "Scheduling":
             for start in range(0, len(df_cards), cards_per_row):
                 row_chunk = df_cards.iloc[start:start + cards_per_row]
                 cols = st.columns(cards_per_row, gap="small")
-                for col, (_, row) in zip(cols, row_chunk.iterrows()):
+                for col, (row_index, row) in zip(cols, row_chunk.iterrows()):
                     patient = _clean_text(row.get("Patient Name"))
                     doctor = _clean_text(row.get("DR."))
                     procedure = _clean_text(row.get("Procedure"))
@@ -6255,6 +6544,8 @@ if category == "Scheduling":
                     time_parts = [t for t in [_fmt_time(in_time), _fmt_time(out_time)] if t]
                     time_text = " - ".join(time_parts)
                     staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
+                    row_key = row_id if row_id else f"full_{start}_{row_index}"
+                    is_editing = st.session_state.get("full_edit_token") == row_key
 
                     with col:
                         card_html = _normalize_html(
@@ -6287,17 +6578,173 @@ if category == "Scheduling":
                         st.markdown(card_html, unsafe_allow_html=True)
                         action_cols = st.columns(3, gap="small")
                         with action_cols[0]:
+                            edit_label = "Close" if is_editing else "Edit"
                             st.button(
-                                "Edit",
-                                key=f"full_card_edit_{row_id}_{start}",
-                                on_click=_set_full_schedule_table_view,
+                                edit_label,
+                                key=f"full_card_edit_{row_key}_{start}",
+                                on_click=_toggle_full_card_edit,
+                                args=(row_key,),
+                                use_container_width=True,
+                                type="secondary",
                             )
                         with action_cols[1]:
-                            if st.button("Done", key=f"full_card_done_{row_id}_{start}"):
+                            if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
+                                _clear_full_card_edit()
                                 _update_row_status(row_id, patient, in_time, "DONE")
                         with action_cols[2]:
-                            if st.button("Cancel", key=f"full_card_cancel_{row_id}_{start}"):
+                            if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
+                                _clear_full_card_edit()
                                 _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                        if is_editing:
+                            staff_first = _clean_text(row.get("FIRST"))
+                            staff_second = _clean_text(row.get("SECOND"))
+                            staff_third = _clean_text(row.get("Third"))
+                            in_time_value = _fmt_time(in_time)
+                            in_time_value = "" if str(in_time_value or "").strip().upper() in {"N/A", "NONE", "NAT"} else in_time_value
+                            out_time_value = _fmt_time(out_time)
+                            out_time_value = "" if str(out_time_value or "").strip().upper() in {"N/A", "NONE", "NAT"} else out_time_value
+                            op_value = _clean_text(row.get("OP"))
+
+                            with st.form(key=f"full_edit_form_{row_key}"):
+                                patient_input = st.text_input(
+                                    "Patient Name",
+                                    value=patient,
+                                    key=f"full_edit_patient_{row_key}",
+                                )
+                                time_cols = st.columns(2, gap="small")
+                                with time_cols[0]:
+                                    in_time_input = st.text_input(
+                                        "In Time",
+                                        value=in_time_value,
+                                        key=f"full_edit_in_{row_key}",
+                                        placeholder="HH:MM or 09:30 AM",
+                                    )
+                                with time_cols[1]:
+                                    out_time_input = st.text_input(
+                                        "Out Time",
+                                        value=out_time_value,
+                                        key=f"full_edit_out_{row_key}",
+                                        placeholder="HH:MM or 10:30 AM",
+                                    )
+
+                                top_cols = st.columns(2, gap="small")
+                                with top_cols[0]:
+                                    doctor_options, doctor_index = _full_build_select_options(DOCTOR_OPTIONS, doctor)
+                                    doctor_input = st.selectbox(
+                                        "Doctor",
+                                        options=doctor_options,
+                                        index=doctor_index,
+                                        key=f"full_edit_doctor_{row_key}",
+                                    )
+                                with top_cols[1]:
+                                    procedure_input = st.text_input(
+                                        "Procedure",
+                                        value=procedure,
+                                        key=f"full_edit_procedure_{row_key}",
+                                    )
+
+                                mid_cols = st.columns(2, gap="small")
+                                with mid_cols[0]:
+                                    op_input = st.text_input(
+                                        "OP",
+                                        value=op_value,
+                                        key=f"full_edit_op_{row_key}",
+                                    )
+                                with mid_cols[1]:
+                                    status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
+                                    status_input = st.selectbox(
+                                        "Status",
+                                        options=status_options,
+                                        index=status_index,
+                                        key=f"full_edit_status_{row_key}",
+                                    )
+
+                                staff_cols = st.columns(3, gap="small")
+                                with staff_cols[0]:
+                                    first_options, first_index = _full_build_select_options(ASSISTANT_OPTIONS, staff_first)
+                                    first_input = st.selectbox(
+                                        "First",
+                                        options=first_options,
+                                        index=first_index,
+                                        key=f"full_edit_first_{row_key}",
+                                    )
+                                with staff_cols[1]:
+                                    second_options, second_index = _full_build_select_options(ASSISTANT_OPTIONS, staff_second)
+                                    second_input = st.selectbox(
+                                        "Second",
+                                        options=second_options,
+                                        index=second_index,
+                                        key=f"full_edit_second_{row_key}",
+                                    )
+                                with staff_cols[2]:
+                                    third_options, third_index = _full_build_select_options(ASSISTANT_OPTIONS, staff_third)
+                                    third_input = st.selectbox(
+                                        "Third",
+                                        options=third_options,
+                                        index=third_index,
+                                        key=f"full_edit_third_{row_key}",
+                                    )
+
+                                flag_cols = st.columns(3, gap="small")
+                                with flag_cols[0]:
+                                    case_paper_input = st.checkbox(
+                                        "Case Paper",
+                                        value=_truthy(row.get("CASE PAPER")),
+                                        key=f"full_edit_case_{row_key}",
+                                    )
+                                with flag_cols[1]:
+                                    suction_input = st.checkbox(
+                                        "Suction",
+                                        value=_truthy(row.get("SUCTION")),
+                                        key=f"full_edit_suction_{row_key}",
+                                    )
+                                with flag_cols[2]:
+                                    cleaning_input = st.checkbox(
+                                        "Cleaning",
+                                        value=_truthy(row.get("CLEANING")),
+                                        key=f"full_edit_cleaning_{row_key}",
+                                    )
+
+                                form_actions = st.columns(2, gap="small")
+                                with form_actions[0]:
+                                    save_clicked = st.form_submit_button("Save", use_container_width=True)
+                                with form_actions[1]:
+                                    cancel_clicked = st.form_submit_button("Cancel", use_container_width=True)
+
+                            if cancel_clicked:
+                                _clear_full_card_edit()
+                                st.rerun()
+                            if save_clicked:
+                                in_norm, in_err = _full_normalize_time_input(in_time_input)
+                                out_norm, out_err = _full_normalize_time_input(out_time_input)
+                                if in_err or out_err:
+                                    if in_err:
+                                        st.error(in_err)
+                                    if out_err:
+                                        st.error(out_err)
+                                else:
+                                    updates = {
+                                        "Patient Name": str(patient_input or "").strip(),
+                                        "In Time": in_norm,
+                                        "Out Time": out_norm,
+                                        "Procedure": str(procedure_input or "").strip(),
+                                        "DR.": str(doctor_input or "").strip(),
+                                        "Doctor": str(doctor_input or "").strip(),
+                                        "OP": str(op_input or "").strip(),
+                                        "FIRST": str(first_input or "").strip(),
+                                        "SECOND": str(second_input or "").strip(),
+                                        "Third": str(third_input or "").strip(),
+                                        "THIRD": str(third_input or "").strip(),
+                                        "CASE PAPER": "Yes" if case_paper_input else "",
+                                        "SUCTION": bool(suction_input),
+                                        "CLEANING": bool(cleaning_input),
+                                        "STATUS": str(status_input or "").strip(),
+                                        "Status": str(status_input or "").strip(),
+                                    }
+                                    if _apply_full_card_edit(row_id, patient, in_time_value, updates):
+                                        _clear_full_card_edit()
+                                        st.rerun()
 
                         with st.expander("View Details", expanded=False):
                             st.markdown(f"**Doctor:** {doctor or '--'}")
