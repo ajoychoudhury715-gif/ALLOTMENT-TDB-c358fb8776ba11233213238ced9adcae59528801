@@ -6102,7 +6102,7 @@ if category == "Scheduling":
 
     def _set_full_schedule_table_view() -> None:
         st.session_state["full_schedule_view_mode"] = "Table"
-        st.toast("Switching to table view.", icon="OK")
+        st.toast("Switching to table view.", icon="✅")
 
     def _fmt_time(val) -> str:
         if isinstance(val, time_type):
