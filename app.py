@@ -951,7 +951,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .metric-value {font-size: 22px; font-weight: 800; color:#14110f;}
         .metrics-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:6px;}
         #metrics-anchor + div[data-testid="stHorizontalBlock"] {margin-top: 0 !important;}
-        .controls-row .stButton>button {height: 42px !important; border-radius: 12px !important;}
+        .controls-row .stButton>button {height: 34px !important; border-radius: 10px !important;}
         .controls-row [data-baseweb="select"] > div {min-height: 42px !important; border-radius: 12px !important;}
         button[kind="primary"] {background:#34312d !important; border:1px solid #34312d !important; color:#f3f3f4 !important; box-shadow:0 8px 18px rgba(20,17,15,0.25) !important;}
         button[kind="secondary"] {background:#f3f3f4 !important; border:1px solid #7e7f83 !important; color:#14110f !important;}
@@ -2003,13 +2003,13 @@ st.markdown(
         background: {COLORS['button_bg']} !important;
         color: {COLORS['button_text']} !important;
         border: none !important;
-        border-radius: 8px !important;
+        border-radius: 10px !important;
         font-weight: 700 !important;
-        font-size: 1rem !important;
-        padding: 12px 28px !important;
+        font-size: 0.85rem !important;
+        padding: 8px 16px !important;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
         box-shadow: 0 4px 18px rgba(20, 17, 15, 0.25) !important;
-        letter-spacing: 0.5px !important;
+        letter-spacing: 0.3px !important;
         text-transform: uppercase !important;
         cursor: pointer !important;
     }}
