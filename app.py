@@ -1181,6 +1181,11 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 return "cancelled"
             return "waiting"
 
+        def _set_compact_table_view(row_id: str) -> None:
+            st.session_state["compact_view_mode"] = "Table"
+            st.session_state["compact_focus_row_id"] = row_id
+            st.toast("Switching to table view for editing.", icon="✏️")
+
         def _update_row_status(row_id, patient_name, in_time_str, new_status):
             df_source = df_raw if "df_raw" in globals() else df_schedule
             if df_source is None or df_source.empty:
@@ -1318,11 +1323,12 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
 
                             action_cols = st.columns(3, gap="small")
                             with action_cols[0]:
-                                if st.button("Edit", key=f"card_edit_{row_id}_{patient}"):
-                                    st.session_state["compact_view_mode"] = "Table"
-                                    st.session_state["compact_focus_row_id"] = row_id
-                                    st.toast("Switching to table view for editing.", icon="✏️")
-                                    st.rerun()
+                                st.button(
+                                    "Edit",
+                                    key=f"card_edit_{row_id}_{patient}",
+                                    on_click=_set_compact_table_view,
+                                    args=(row_id,),
+                                )
                             with action_cols[1]:
                                 if st.button("Done", key=f"card_done_{row_id}_{patient}"):
                                     _update_row_status(row_id, patient, in_time, "DONE")
@@ -6094,6 +6100,10 @@ if category == "Scheduling":
             return "cancelled"
         return "waiting"
 
+    def _set_full_schedule_table_view() -> None:
+        st.session_state["full_schedule_view_mode"] = "Table"
+        st.toast("Switching to table view.", icon="OK")
+
     def _fmt_time(val) -> str:
         if isinstance(val, time_type):
             return val.strftime("%I:%M %p").lstrip("0")
@@ -6277,10 +6287,11 @@ if category == "Scheduling":
                         st.markdown(card_html, unsafe_allow_html=True)
                         action_cols = st.columns(3, gap="small")
                         with action_cols[0]:
-                            if st.button("Edit", key=f"full_card_edit_{row_id}_{start}"):
-                                st.session_state.full_schedule_view_mode = "Table"
-                                st.toast("Switching to table view.", icon="OK")
-                                st.rerun()
+                            st.button(
+                                "Edit",
+                                key=f"full_card_edit_{row_id}_{start}",
+                                on_click=_set_full_schedule_table_view,
+                            )
                         with action_cols[1]:
                             if st.button("Done", key=f"full_card_done_{row_id}_{start}"):
                                 _update_row_status(row_id, patient, in_time, "DONE")
