@@ -4067,6 +4067,7 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
     df_profiles = load_profiles(sheet_name)
     status_options = ["ACTIVE", "INACTIVE"]
     dept_options = [""] + sorted(DEPARTMENTS.keys())
+    hidden_cols = ["id", "created_at", "updated_at", "created_by", "updated_by"]
 
     st.markdown(f"### {entity_label} Profiles")
 
@@ -4096,7 +4097,8 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
     if search_term:
         filtered = filtered[filtered["name"].str.contains(search_term, case=False, na=False)]
 
-    st.dataframe(filtered, use_container_width=True, hide_index=True)
+    display_filtered = filtered.drop(columns=[c for c in hidden_cols if c in filtered.columns], errors="ignore")
+    st.dataframe(display_filtered, use_container_width=True, hide_index=True)
 
     is_editor = user_role in ("admin", "editor")
     if not is_editor:
@@ -4139,21 +4141,24 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         use_container_width=True,
         key=f"{sheet_name}_editor",
         column_config={
-            "id": st.column_config.TextColumn("ID", disabled=True),
+            "id": None,
             "name": st.column_config.TextColumn(f"{entity_label} Name", required=True),
             "department": st.column_config.SelectboxColumn(dept_label, options=dept_options),
             "contact_email": st.column_config.TextColumn("Contact Email"),
             "contact_phone": st.column_config.TextColumn("Contact Phone"),
             "status": st.column_config.SelectboxColumn("Status", options=status_options, required=True),
-            "created_at": st.column_config.TextColumn("Created At", disabled=True),
-            "updated_at": st.column_config.TextColumn("Updated At", disabled=True),
-            "created_by": st.column_config.TextColumn("Created By", disabled=True),
-            "updated_by": st.column_config.TextColumn("Updated By", disabled=True),
+            "created_at": None,
+            "updated_at": None,
+            "created_by": None,
+            "updated_by": None,
         },
     )
     if st.button("Save profile changes", key=f"{sheet_name}_save_btn"):
         edited_df["updated_at"] = _now_iso()
         edited_df["updated_by"] = user_name
+        for col in hidden_cols:
+            if col not in edited_df.columns and col in df_profiles.columns:
+                edited_df[col] = df_profiles[col].values
         save_profiles(edited_df, sheet_name)
         st.success("Profiles updated.")
         st.rerun()
