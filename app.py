@@ -1645,6 +1645,14 @@ if "save_conflict" not in st.session_state:
     st.session_state.save_conflict = None
 if "is_saving" not in st.session_state:
     st.session_state.is_saving = False
+if "supabase_ready" not in st.session_state:
+    st.session_state.supabase_ready = False
+if "supabase_ready_at" not in st.session_state:
+    st.session_state.supabase_ready_at = 0.0
+if "supabase_profiles_seeded" not in st.session_state:
+    st.session_state.supabase_profiles_seeded = False
+if "supabase_staff_refreshed" not in st.session_state:
+    st.session_state.supabase_staff_refreshed = False
 if "active_duty_run_id" not in st.session_state:
     st.session_state.active_duty_run_id = None
 if "active_duty_due_at" not in st.session_state:
@@ -3903,6 +3911,7 @@ PROFILE_SUPABASE_TABLE = "profiles"
 # Hard defaults (override with secrets/env in prod)
 SUPABASE_URL_DEFAULT = "https://iulgvbjkqcrwwnrwjolh.supabase.co"
 SUPABASE_KEY_DEFAULT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1bGd2YmprcWNyd3ducndqb2xoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjQyNDM1NSwiZXhwIjoyMDgyMDAwMzU1fQ.PlilHFvaHxCTCdXHQILJ07enCTwTarOphYILnO9RIwU"
+SUPABASE_CHECK_TTL_SECONDS = 60
 
 gsheet_client = None
 gsheet_worksheet = None
@@ -4360,6 +4369,35 @@ def _get_supabase_config_from_secrets_or_env():
     return url, effective_key, table, row_id, profile_table
 
 
+@st.cache_resource
+def _get_supabase_client_cached(_url: str, _key: str):
+    return create_client(_url, _key)
+
+
+def _get_supabase_client(_url: str, _key: str):
+    if not SUPABASE_AVAILABLE:
+        return None
+    if not _url or not _key:
+        return None
+    try:
+        return _get_supabase_client_cached(_url, _key)
+    except Exception:
+        try:
+            return create_client(_url, _key)
+        except Exception:
+            return None
+
+
+def _supabase_ready_recent() -> bool:
+    try:
+        if not st.session_state.get("supabase_ready"):
+            return False
+        last = float(st.session_state.get("supabase_ready_at") or 0.0)
+        return (time_module.time() - last) < SUPABASE_CHECK_TTL_SECONDS
+    except Exception:
+        return False
+
+
 def _get_expected_columns():
     return [
         "Patient ID", "Patient Name", "In Time", "Out Time", "Procedure", "DR.",
@@ -4443,7 +4481,9 @@ def search_patients_from_supabase(
 ):
     """Search patients (id + name) from a Supabase table."""
     q = (_query or "").strip()
-    client = create_client(_url, _key)
+    client = _get_supabase_client(_url, _key)
+    if client is None:
+        return []
 
     def _is_simple_ident(name: str) -> bool:
         return bool(re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", str(name or "")))
@@ -4586,7 +4626,9 @@ def load_data_from_supabase(_url: str, _key: str, _table: str, _row_id: str):
     payload = {"columns": [...], "rows": [ {col: val, ...}, ... ]}
     """
     try:
-        client = create_client(_url, _key)
+        client = _get_supabase_client(_url, _key)
+        if client is None:
+            return None
         resp = client.table(_table).select("payload").eq("id", _row_id).execute()
 
         data = getattr(resp, "data", None)
@@ -4629,7 +4671,9 @@ def load_data_from_supabase(_url: str, _key: str, _table: str, _row_id: str):
 def save_data_to_supabase(_url: str, _key: str, _table: str, _row_id: str, df: pd.DataFrame) -> bool:
     """Save dataframe payload to Supabase (upsert)."""
     try:
-        client = create_client(_url, _key)
+        client = _get_supabase_client(_url, _key)
+        if client is None:
+            return False
 
         df_clean = df.copy().fillna("")
         # Convert to JSON-serializable primitives; avoid pandas NA
@@ -4671,16 +4715,26 @@ if SUPABASE_AVAILABLE:
     try:
         sup_url, sup_key, sup_table, sup_row, profile_table = _get_supabase_config_from_secrets_or_env()
         if sup_url and sup_key:
-            supabase_client = create_client(sup_url, sup_key)
+            supabase_client = _get_supabase_client(sup_url, sup_key)
+            if supabase_client is None:
+                raise RuntimeError("Supabase client unavailable.")
             supabase_table_name = sup_table
             supabase_row_id = sup_row
             PROFILE_SUPABASE_TABLE = profile_table
-            # Quick connectivity check (will also validate credentials)
-            _ = supabase_client.table(supabase_table_name).select("id").limit(1).execute()
+            # Quick connectivity check (will also validate credentials).
+            # Skip repeated checks to keep button clicks responsive.
+            if not _supabase_ready_recent():
+                _ = supabase_client.table(supabase_table_name).select("id").limit(1).execute()
+                st.session_state.supabase_ready = True
+                st.session_state.supabase_ready_at = time_module.time()
+                st.sidebar.success("Connected to Supabase")
             USE_SUPABASE = True
-            st.sidebar.success("🗄️ Connected to Supabase")
-            _seed_supabase_profiles_if_needed(supabase_client)
-            _refresh_staff_options_from_supabase(supabase_client)
+            if not st.session_state.supabase_profiles_seeded:
+                _seed_supabase_profiles_if_needed(supabase_client)
+                st.session_state.supabase_profiles_seeded = True
+            if not st.session_state.supabase_staff_refreshed:
+                _refresh_staff_options_from_supabase(supabase_client)
+                st.session_state.supabase_staff_refreshed = True
         else:
             # Not configured; show a quick setup helper.
             with st.sidebar.expander("✅ Quick setup (Supabase)", expanded=False):
@@ -4718,6 +4772,11 @@ if SUPABASE_AVAILABLE:
                 )
     except Exception as e:
         # Safe diagnostics: only presence of keys, not values.
+        st.session_state.supabase_ready = False
+        st.session_state.supabase_ready_at = 0.0
+        st.session_state.supabase_profiles_seeded = False
+        st.session_state.supabase_staff_refreshed = False
+        supabase_client = None
         present = {}
         try:
             if hasattr(st, 'secrets'):
@@ -4739,11 +4798,13 @@ if FORCE_SUPABASE and not USE_SUPABASE:
     try:
         sup_url, sup_key, sup_table, sup_row, profile_table = _get_supabase_config_from_secrets_or_env()
         if sup_url and sup_key:
-            supabase_client = create_client(sup_url, sup_key)
-            supabase_table_name = sup_table
-            supabase_row_id = sup_row
-            USE_SUPABASE = True
-            st.sidebar.info("Supabase forced via config.")
+            supabase_client = _get_supabase_client(sup_url, sup_key)
+            if supabase_client is not None:
+                supabase_table_name = sup_table
+                supabase_row_id = sup_row
+                PROFILE_SUPABASE_TABLE = profile_table
+                USE_SUPABASE = True
+                st.sidebar.info("Supabase forced via config.")
     except Exception:
         pass
 
@@ -5125,7 +5186,9 @@ def _fetch_remote_save_version() -> int | None:
     try:
         if USE_SUPABASE:
             sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
-            client = create_client(sup_url, sup_key)
+            client = _get_supabase_client(sup_url, sup_key)
+            if client is None:
+                return None
             resp = client.table(sup_table).select("payload").eq("id", sup_row).limit(1).execute()
             data = getattr(resp, "data", None)
             if not data:
