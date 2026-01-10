@@ -4104,34 +4104,48 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         st.info("You are in read-only mode. Switch to admin/editor to add or edit profiles.")
         return
 
-    st.markdown(f"#### Add {entity_label}")
-    with st.form(f"add_{sheet_name}_form", clear_on_submit=True):
-        name = st.text_input(f"{entity_label} Name")
-        dept = st.selectbox(dept_label, options=dept_options, key=f"{sheet_name}_dept_new")
-        contact_email = st.text_input("Contact Email", key=f"{sheet_name}_email_new")
-        contact_phone = st.text_input("Contact Phone", key=f"{sheet_name}_phone_new")
-        status_val = st.selectbox("Status", options=status_options, key=f"{sheet_name}_status_new")
-        submitted = st.form_submit_button(f"Add {entity_label}")
-        if submitted:
-            if not name.strip():
-                st.warning("Name is required.")
-            else:
-                new_row = {
-                    "id": str(uuid.uuid4()),
-                    "name": name.strip(),
-                    "department": dept.strip(),
-                    "contact_email": contact_email.strip(),
-                    "contact_phone": contact_phone.strip(),
-                    "status": status_val,
-                    "created_at": _now_iso(),
-                    "updated_at": _now_iso(),
-                    "created_by": user_name,
-                    "updated_by": user_name,
-                }
-                df_profiles = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
-                save_profiles(df_profiles, sheet_name)
-                st.success(f"{entity_label} added.")
-                st.rerun()
+    def _render_add_profile_dialog_body() -> None:
+        st.markdown(f"### Add {entity_label}")
+        with st.form(f"add_{sheet_name}_form", clear_on_submit=True):
+            name = st.text_input(f"{entity_label} Name")
+            dept = st.selectbox(dept_label, options=dept_options, key=f"{sheet_name}_dept_new")
+            contact_email = st.text_input("Contact Email", key=f"{sheet_name}_email_new")
+            contact_phone = st.text_input("Contact Phone", key=f"{sheet_name}_phone_new")
+            status_val = st.selectbox("Status", options=status_options, key=f"{sheet_name}_status_new")
+            submitted = st.form_submit_button(f"Add {entity_label}")
+            if submitted:
+                if not name.strip():
+                    st.warning("Name is required.")
+                else:
+                    new_row = {
+                        "id": str(uuid.uuid4()),
+                        "name": name.strip(),
+                        "department": dept.strip(),
+                        "contact_email": contact_email.strip(),
+                        "contact_phone": contact_phone.strip(),
+                        "status": status_val,
+                        "created_at": _now_iso(),
+                        "updated_at": _now_iso(),
+                        "created_by": user_name,
+                        "updated_by": user_name,
+                    }
+                    df_profiles_local = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
+                    save_profiles(df_profiles_local, sheet_name)
+                    st.success(f"{entity_label} added.")
+                    st.rerun()
+
+    _dialog_decorator = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
+    if _dialog_decorator:
+        @_dialog_decorator(f"Add {entity_label}")
+        def _render_add_profile_dialog() -> None:
+            _render_add_profile_dialog_body()
+    else:
+        def _render_add_profile_dialog() -> None:
+            st.warning("Popup add requires a newer Streamlit version.")
+            _render_add_profile_dialog_body()
+
+    if st.button(f"Add {entity_label}", key=f"add_{sheet_name}_open", use_container_width=True):
+        _render_add_profile_dialog()
 
     st.markdown("#### Edit All Profiles")
     edited_df = st.data_editor(
