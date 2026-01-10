@@ -1785,6 +1785,8 @@ if "save_conflict" not in st.session_state:
     st.session_state.save_conflict = None
 if "is_saving" not in st.session_state:
     st.session_state.is_saving = False
+if "unsaved_df_version" not in st.session_state:
+    st.session_state.unsaved_df_version = 0
 if "supabase_ready" not in st.session_state:
     st.session_state.supabase_ready = False
 if "supabase_ready_at" not in st.session_state:
@@ -5645,19 +5647,6 @@ _extra_statuses = _collect_unique_upper(df_raw, "STATUS")
 STATUS_OPTIONS = _unique_preserve_order(STATUS_BASE_OPTIONS + _extra_statuses)
 
 
-# Process data
-df = df_raw.copy()
-# Don't force numeric conversion yet - handle both formats
-df["In Time"] = df["In Time"]
-df["Out Time"] = df["Out Time"]
-
-df["In Time Str"] = df["In Time"].apply(dec_to_time)
-df["Out Time Str"] = df["Out Time"].apply(dec_to_time)
-
-# Create time objects for picker
-df["In Time Obj"] = df["In Time Str"].apply(safe_str_to_time_obj)
-df["Out Time Obj"] = df["Out Time Str"].apply(safe_str_to_time_obj)
-
 # Convert checkbox columns (SUCTION, CLEANING) - checkmark or content to boolean
 def str_to_checkbox(val: Any) -> bool:
     """Convert string values to boolean for checkboxes"""
@@ -5690,21 +5679,45 @@ def str_to_checkbox(val: Any) -> bool:
     # Any other non-empty content is treated as checked (legacy behavior)
     return True
 
-# Convert existing checkbox data
-if "SUCTION" in df.columns:
-    df["SUCTION"] = df["SUCTION"].apply(str_to_checkbox)
-if "CLEANING" in df.columns:
-    df["CLEANING"] = df["CLEANING"].apply(str_to_checkbox)
+def _schedule_cache_key() -> tuple:
+    if st.session_state.get("unsaved_df") is not None:
+        return ("unsaved", st.session_state.get("unsaved_df_version", 0))
+    return (
+        "saved",
+        st.session_state.get("loaded_save_version"),
+        st.session_state.get("last_saved_hash"),
+    )
 
-# Convert time values to minutes since midnight for comparison (function defined earlier)
-df["In_min"] = df["In Time"].apply(time_to_minutes).astype('Int64')
-df["Out_min"] = df["Out Time"].apply(time_to_minutes).astype('Int64')
 
-# Handle possible overnight cases
-df.loc[df["Out_min"] < df["In_min"], "Out_min"] += 1440
+def _prepare_schedule_df_static(df_any: pd.DataFrame) -> pd.DataFrame:
+    df_local = df_any.copy()
+    df_local["In Time Str"] = df_local["In Time"].apply(dec_to_time)
+    df_local["Out Time Str"] = df_local["Out Time"].apply(dec_to_time)
+    df_local["In Time Obj"] = df_local["In Time Str"].apply(safe_str_to_time_obj)
+    df_local["Out Time Obj"] = df_local["Out Time Str"].apply(safe_str_to_time_obj)
+    if "SUCTION" in df_local.columns:
+        df_local["SUCTION"] = df_local["SUCTION"].apply(str_to_checkbox)
+    if "CLEANING" in df_local.columns:
+        df_local["CLEANING"] = df_local["CLEANING"].apply(str_to_checkbox)
+    df_local["In_min"] = df_local["In Time"].apply(time_to_minutes).astype("Int64")
+    df_local["Out_min"] = df_local["Out Time"].apply(time_to_minutes).astype("Int64")
+    df_local.loc[df_local["Out_min"] < df_local["In_min"], "Out_min"] += 1440
+    return df_local
 
-# Current time in minutes (same day)
-current_min = now.hour * 60 + now.minute
+
+def _get_processed_schedule_df(df_any: pd.DataFrame) -> pd.DataFrame:
+    cache_key = _schedule_cache_key()
+    cached_key = st.session_state.get("schedule_df_cache_key")
+    cached_df = st.session_state.get("schedule_df_cache")
+    if cached_df is not None and cached_key == cache_key:
+        try:
+            return cached_df.copy(deep=False)
+        except Exception:
+            return cached_df
+    df_local = _prepare_schedule_df_static(df_any)
+    st.session_state.schedule_df_cache_key = cache_key
+    st.session_state.schedule_df_cache = df_local
+    return df_local
 
 # ================ Reminder Persistence Setup ================
 # Add stable row IDs and reminder columns if they don't exist
@@ -5734,25 +5747,10 @@ if 'REMINDER_DISMISSED' not in df_raw.columns:
     df_raw['REMINDER_DISMISSED'] = False
 
 # Refresh df with new columns
-df = df_raw.copy()
+df = _get_processed_schedule_df(df_raw)
 
-# Re-process time columns after df reassignment
-df["In Time Str"] = df["In Time"].apply(dec_to_time)
-df["Out Time Str"] = df["Out Time"].apply(dec_to_time)
-df["In Time Obj"] = df["In Time Str"].apply(safe_str_to_time_obj)
-df["Out Time Obj"] = df["Out Time Str"].apply(safe_str_to_time_obj)
-
-# Re-convert checkbox columns
-if "SUCTION" in df.columns:
-    df["SUCTION"] = df["SUCTION"].apply(str_to_checkbox)
-if "CLEANING" in df.columns:
-    df["CLEANING"] = df["CLEANING"].apply(str_to_checkbox)
-
-# Ensure In_min/Out_min exist
-df["In_min"] = df["In Time"].apply(time_to_minutes).astype('Int64')
-df["Out_min"] = df["Out Time"].apply(time_to_minutes).astype('Int64')
-# Handle possible overnight cases
-df.loc[df["Out_min"] < df["In_min"], "Out_min"] += 1440
+# Current time in minutes (same day)
+current_min = now.hour * 60 + now.minute
 
 # Mark ongoing
 df["Is_Ongoing"] = (df["In_min"] <= current_min) & (current_min <= df["Out_min"])
@@ -5851,6 +5849,10 @@ def _queue_unsaved_df(df_pending: pd.DataFrame, reason: str = "") -> None:
         st.session_state.unsaved_df = df_pending.copy(deep=False)
     except Exception:
         st.session_state.unsaved_df = df_pending
+    try:
+        st.session_state.unsaved_df_version = int(st.session_state.get("unsaved_df_version", 0)) + 1
+    except Exception:
+        st.session_state.unsaved_df_version = 1
     st.session_state.pending_changes = True
     st.session_state.pending_changes_reason = reason
 
@@ -5919,6 +5921,18 @@ def _build_schedule_backups(df_any: pd.DataFrame) -> tuple[bytes, bytes]:
         except Exception:
             pass
     xlsx_bytes = buf.getvalue()
+    return csv_bytes, xlsx_bytes
+
+
+def _get_cached_schedule_backups(df_any: pd.DataFrame) -> tuple[bytes, bytes]:
+    cache_key = _schedule_cache_key()
+    cached_key = st.session_state.get("schedule_backup_key")
+    cached_bytes = st.session_state.get("schedule_backup_cache")
+    if cached_bytes is not None and cached_key == cache_key:
+        return cached_bytes
+    csv_bytes, xlsx_bytes = _build_schedule_backups(df_any)
+    st.session_state.schedule_backup_key = cache_key
+    st.session_state.schedule_backup_cache = (csv_bytes, xlsx_bytes)
     return csv_bytes, xlsx_bytes
 
 
@@ -6095,7 +6109,7 @@ with st.sidebar:
 
     backup_name_base = f"tdb_allotment_backup_{now.strftime('%Y%m%d_%H%M')}"
     try:
-        csv_bytes, xlsx_bytes = _build_schedule_backups(df_raw)
+        csv_bytes, xlsx_bytes = _get_cached_schedule_backups(df_raw)
         st.download_button(
             "⬇️ Download backup (CSV)",
             data=csv_bytes,
