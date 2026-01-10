@@ -52,7 +52,7 @@ GSHEETS_AVAILABLE = _gsheets_available
 # pip install pandas openpyxl streamlit gspread google-auth
 
 # Page config
-st.set_page_config(page_title="THE DENTAL BOND", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="THE DENTAL BOND", layout="wide", initial_sidebar_state="expanded")
 
 # Session defaults for role/user (replace with real auth later)
 if "user_role" not in st.session_state:
@@ -1942,7 +1942,6 @@ st.markdown(
     [data-testid="stToolbar"] button[title*="View source"] {{
         display: none !important;
     }}
-    [data-testid="stToolbar"],
     [data-testid="stToolbarActions"],
     [data-testid="stMainMenu"] {{
         display: none !important;
@@ -2731,7 +2730,6 @@ header[data-testid="stHeader"] {{
     top: 0;
     z-index: 100;
 }}
-header[data-testid="stHeader"] .stAppToolbar,
 header[data-testid="stHeader"] [data-testid="stToolbarActions"],
 header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
     display: none !important;
