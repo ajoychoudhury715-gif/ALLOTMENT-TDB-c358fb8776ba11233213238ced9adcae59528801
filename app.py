@@ -246,10 +246,11 @@ def save_attendance_sheet(excel_path: str | None, att_df: pd.DataFrame):
     except Exception as e:
         st.error(f"Attendance save failed: {e}")
 
-def db_get_one_attendance(supabase, date_str: str, assistant: str):
+@st.cache_data(ttl=5)
+def db_get_one_attendance(_supabase, date_str: str, assistant: str):
     try:
         res = (
-            supabase.table("assistant_attendance")
+            _supabase.table("assistant_attendance")
             .select("date,assistant,punch_in,punch_out")
             .eq("date", date_str)
             .eq("assistant", assistant)
@@ -265,12 +266,20 @@ def db_punch_in(supabase, date_str: str, assistant: str, now_time: str):
     try:
         payload = {"date": date_str, "assistant": assistant, "punch_in": now_time}
         supabase.table("assistant_attendance").upsert(payload, on_conflict="date,assistant").execute()
+        try:
+            db_get_one_attendance.clear()
+        except Exception:
+            pass
     except Exception as e:
         st.error(f"Punch in failed: {e}")
 
 def db_punch_out(supabase, date_str: str, assistant: str, now_time: str):
     try:
         supabase.table("assistant_attendance").update({"punch_out": now_time}).eq("date", date_str).eq("assistant", assistant).execute()
+        try:
+            db_get_one_attendance.clear()
+        except Exception:
+            pass
     except Exception as e:
         st.error(f"Punch out failed: {e}")
 
@@ -375,12 +384,13 @@ def sidebar_punch_widget_supabase(schedule_df: pd.DataFrame, supabase):
 
 
 # ================= DUTY REMINDER (SUPABASE) =================
-def fetch_active_duty_assignments(supabase, assistant: str) -> list[dict[str, Any]]:
-    if not supabase or not assistant:
+@st.cache_data(ttl=5)
+def fetch_active_duty_assignments(_supabase, assistant: str) -> list[dict[str, Any]]:
+    if not _supabase or not assistant:
         return []
     try:
         res = (
-            supabase.table("duty_assignments")
+            _supabase.table("duty_assignments")
             .select("id,duty_id,assistant,op,est_minutes,active")
             .eq("assistant", assistant)
             .eq("active", True)
@@ -391,7 +401,7 @@ def fetch_active_duty_assignments(supabase, assistant: str) -> list[dict[str, An
         if not duty_ids:
             return []
         duty_res = (
-            supabase.table("duties_master")
+            _supabase.table("duties_master")
             .select("id,title,frequency,default_minutes,op,active")
             .in_("id", duty_ids)
             .eq("active", True)
@@ -420,12 +430,13 @@ def fetch_active_duty_assignments(supabase, assistant: str) -> list[dict[str, An
         return []
 
 
-def fetch_duty_runs_since(supabase, assistant: str, start_date_iso: str):
-    if not supabase or not assistant:
+@st.cache_data(ttl=5)
+def fetch_duty_runs_since(_supabase, assistant: str, start_date_iso: str):
+    if not _supabase or not assistant:
         return []
     try:
         res = (
-            supabase.table("duty_runs")
+            _supabase.table("duty_runs")
             .select("id,date,assistant,duty_id,status,started_at,due_at,ended_at,est_minutes,op")
             .eq("assistant", assistant)
             .gte("date", start_date_iso)
@@ -437,12 +448,13 @@ def fetch_duty_runs_since(supabase, assistant: str, start_date_iso: str):
         return []
 
 
-def fetch_active_duty_run(supabase, assistant: str):
-    if not supabase or not assistant:
+@st.cache_data(ttl=5)
+def fetch_active_duty_run(_supabase, assistant: str):
+    if not _supabase or not assistant:
         return None
     try:
         res = (
-            supabase.table("duty_runs")
+            _supabase.table("duty_runs")
             .select("id,date,assistant,duty_id,status,started_at,due_at,est_minutes,op")
             .eq("assistant", assistant)
             .eq("status", "IN_PROGRESS")
@@ -496,6 +508,11 @@ def start_duty_run_supabase(supabase, assistant: str, duty: dict[str, Any]):
     }
     try:
         res = supabase.table("duty_runs").insert(payload).execute()
+        try:
+            fetch_active_duty_run.clear()
+            fetch_duty_runs_since.clear()
+        except Exception:
+            pass
         run_id = res.data[0]["id"] if res.data else None
         return run_id, payload
     except Exception as e:
@@ -508,6 +525,11 @@ def mark_duty_done_supabase(supabase, run_id: str):
         return False
     try:
         supabase.table("duty_runs").update({"status": "DONE", "ended_at": now_ist().isoformat()}).eq("id", run_id).execute()
+        try:
+            fetch_active_duty_run.clear()
+            fetch_duty_runs_since.clear()
+        except Exception:
+            pass
         return True
     except Exception as e:
         st.error(f"Failed to close duty: {e}")
