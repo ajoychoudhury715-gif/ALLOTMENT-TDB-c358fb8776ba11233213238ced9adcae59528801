@@ -1762,7 +1762,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
 
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
-    st.session_state.auto_save_enabled = False
+    st.session_state.auto_save_enabled = True
 if "pending_changes" not in st.session_state:
     st.session_state.pending_changes = False
 if "pending_changes_reason" not in st.session_state:
@@ -1770,7 +1770,7 @@ if "pending_changes_reason" not in st.session_state:
 if "unsaved_df" not in st.session_state:
     st.session_state.unsaved_df = None
 if "save_debounce_seconds" not in st.session_state:
-    st.session_state.save_debounce_seconds = 2
+    st.session_state.save_debounce_seconds = 0
 if "last_save_at" not in st.session_state:
     st.session_state.last_save_at = 0.0
 if "last_saved_hash" not in st.session_state:
@@ -4470,7 +4470,6 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                 edited_df[col] = df_profiles[col].values
         save_profiles(edited_df, sheet_name)
         st.success("Profiles updated.")
-        st.rerun()
 
 
 # Auto-select backend for Streamlit Cloud:
@@ -7514,7 +7513,6 @@ if category == "Scheduling":
                 st.session_state.pending_changes = False
                 st.session_state.pending_changes_reason = ""
             st.session_state.manual_save_triggered = False
-            st.rerun()
     
         if edited_all is not None:
             editor_key = "full_schedule_editor"
@@ -7700,7 +7698,6 @@ if category == "Scheduling":
                         st.session_state.unsaved_df = None
                         st.session_state.pending_changes = False
                         st.session_state.pending_changes_reason = ""
-                        st.rerun()
                 except Exception as e:
                     st.error(f"Error saving: {e}")
                     st.session_state.manual_save_triggered = False
