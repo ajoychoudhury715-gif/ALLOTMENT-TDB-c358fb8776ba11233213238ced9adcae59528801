@@ -22,6 +22,9 @@
 - Storage backend selection
 - Supabase/GSheets load & save
 - Unified save pipeline
+- Consistent save behavior & debounce
+- Delta-based saving from data_editor
+- Concurrency protection
 - Profile management
 - Patient lookup
 - Doctor overview & statistics
