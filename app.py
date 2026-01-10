@@ -4194,6 +4194,11 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
     if USE_SUPABASE and supabase_client is not None:
         try:
             clean_df = _ensure_profile_df(df)
+            if "id" in clean_df.columns:
+                ids = clean_df["id"].astype(str)
+                missing = clean_df["id"].isna() | ids.str.strip().isin(["", "nan", "none"])
+                if missing.any():
+                    clean_df.loc[missing, "id"] = [str(uuid.uuid4()) for _ in range(int(missing.sum()))]
             clean_df["kind"] = sheet_name
             # Flatten weekly_off lists if present
             def _fmt_wo(val):
@@ -4220,6 +4225,11 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
             return
     try:
         clean_df = _ensure_profile_df(df)
+        if "id" in clean_df.columns:
+            ids = clean_df["id"].astype(str)
+            missing = clean_df["id"].isna() | ids.str.strip().isin(["", "nan", "none"])
+            if missing.any():
+                clean_df.loc[missing, "id"] = [str(uuid.uuid4()) for _ in range(int(missing.sum()))]
         try:
             wb = openpyxl.load_workbook(file_path)
         except zipfile.BadZipFile:
@@ -4329,6 +4339,107 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
 
     if st.button(f"Add {entity_label}", key=f"add_{sheet_name}_open", use_container_width=True):
         _render_add_profile_dialog()
+
+    def _render_delete_profile_dialog_body() -> None:
+        st.markdown(f"### Delete {entity_label} Profiles")
+        if df_profiles.empty:
+            st.caption("No profiles available to delete.")
+            return
+        option_meta: dict[str, dict[str, Any]] = {}
+        delete_options: list[str] = []
+
+        for idx, row in df_profiles.iterrows():
+            name = str(row.get("name", "")).strip()
+            dept = str(row.get("department", "")).strip()
+            rid = str(row.get("id", "")).strip()
+
+            label_parts = [name.title() if name else f"Row {idx + 1}"]
+            if dept:
+                label_parts.append(dept.title())
+            label = " - ".join(label_parts)
+            if rid:
+                label = f"{label} ({rid[-6:]})"
+            else:
+                label = f"{label} (row {idx + 1})"
+            if label in option_meta:
+                label = f"{label} #{idx + 1}"
+
+            option_meta[label] = {
+                "id": rid,
+                "index": idx,
+                "name": name.upper(),
+                "department": dept.upper(),
+            }
+            delete_options.append(label)
+
+        selected = st.multiselect(
+            f"Select {entity_label} profiles",
+            options=delete_options,
+            key=f"{sheet_name}_delete_select",
+        )
+        confirm = st.checkbox(
+            "Confirm delete",
+            key=f"{sheet_name}_delete_confirm",
+        )
+        if st.button(
+            f"Delete selected {entity_label} profiles",
+            key=f"{sheet_name}_delete_btn",
+            use_container_width=True,
+        ):
+            if not selected:
+                st.warning("Select at least one profile to delete.")
+            elif not confirm:
+                st.warning("Please confirm delete.")
+            else:
+                to_delete = [option_meta[label] for label in selected if label in option_meta]
+                if USE_SUPABASE and supabase_client is not None:
+                    try:
+                        ids = [item["id"] for item in to_delete if item.get("id")]
+                        if ids:
+                            supabase_client.table(PROFILE_SUPABASE_TABLE).delete().in_("id", ids).execute()
+                        for item in to_delete:
+                            if item.get("id"):
+                                continue
+                            if not item.get("name"):
+                                continue
+                            q = (
+                                supabase_client.table(PROFILE_SUPABASE_TABLE)
+                                .delete()
+                                .eq("kind", sheet_name)
+                                .eq("name", item["name"])
+                            )
+                            if item.get("department"):
+                                q = q.eq("department", item["department"])
+                            q.execute()
+                        try:
+                            _get_active_assistant_profile_names.clear()
+                        except Exception:
+                            pass
+                        try:
+                            _refresh_staff_options_from_supabase(supabase_client)
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        st.error(f"Failed to delete {entity_label} profiles: {e}")
+                        return
+                else:
+                    drop_idx = [item["index"] for item in to_delete]
+                    df_after = df_profiles.drop(index=drop_idx, errors="ignore").reset_index(drop=True)
+                    save_profiles(df_after, sheet_name)
+                st.success(f"Deleted {len(to_delete)} {entity_label} profile(s).")
+                st.rerun()
+
+    if _dialog_decorator:
+        @_dialog_decorator(f"Delete {entity_label}")
+        def _render_delete_profile_dialog() -> None:
+            _render_delete_profile_dialog_body()
+    else:
+        def _render_delete_profile_dialog() -> None:
+            st.warning("Popup delete requires a newer Streamlit version.")
+            _render_delete_profile_dialog_body()
+
+    if st.button(f"Delete {entity_label}", key=f"delete_{sheet_name}_open", use_container_width=True):
+        _render_delete_profile_dialog()
 
     st.markdown("#### Edit All Profiles")
     edited_df = st.data_editor(
