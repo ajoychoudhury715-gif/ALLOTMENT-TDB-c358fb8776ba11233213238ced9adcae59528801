@@ -1071,7 +1071,13 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             with b1:
                 st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", type="primary")
             with b2:
-                st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", type="secondary")
+                st.button(
+                    "?? Save Changes",
+                    use_container_width=True,
+                    key="compact_save_changes",
+                    type="secondary",
+                    disabled=bool(st.session_state.get("is_saving")),
+                )
             with b3:
                 st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
             st.markdown("</div>", unsafe_allow_html=True)
@@ -1623,6 +1629,22 @@ if "pending_changes_reason" not in st.session_state:
     st.session_state.pending_changes_reason = ""
 if "unsaved_df" not in st.session_state:
     st.session_state.unsaved_df = None
+if "save_debounce_seconds" not in st.session_state:
+    st.session_state.save_debounce_seconds = 2
+if "last_save_at" not in st.session_state:
+    st.session_state.last_save_at = 0.0
+if "last_saved_hash" not in st.session_state:
+    st.session_state.last_saved_hash = None
+if "loaded_save_version" not in st.session_state:
+    st.session_state.loaded_save_version = None
+if "loaded_save_at" not in st.session_state:
+    st.session_state.loaded_save_at = None
+if "enable_conflict_checks" not in st.session_state:
+    st.session_state.enable_conflict_checks = True
+if "save_conflict" not in st.session_state:
+    st.session_state.save_conflict = None
+if "is_saving" not in st.session_state:
+    st.session_state.is_saving = False
 if "active_duty_run_id" not in st.session_state:
     st.session_state.active_duty_run_id = None
 if "active_duty_due_at" not in st.session_state:
@@ -3338,8 +3360,11 @@ def _sync_time_blocks_from_meta(df_any: pd.DataFrame | None) -> None:
 
 def _apply_time_blocks_to_meta(meta: dict) -> dict:
     out = dict(meta or {})
-    out["time_blocks"] = _serialize_time_blocks(st.session_state.get("time_blocks", []))
-    out["time_blocks_updated_at"] = datetime.now(IST).isoformat()
+    serialized = _serialize_time_blocks(st.session_state.get("time_blocks", []))
+    prev = out.get("time_blocks")
+    out["time_blocks"] = serialized
+    if prev != serialized or not out.get("time_blocks_updated_at"):
+        out["time_blocks_updated_at"] = datetime.now(IST).isoformat()
     return out
 
 # ================ ASSISTANT AVAILABILITY TRACKING ================
@@ -5047,6 +5072,96 @@ def _data_editor_has_pending_edits(editor_key: str) -> bool:
         return False
 
 
+def _get_meta_save_version(meta: dict | None) -> int | None:
+    if not isinstance(meta, dict):
+        return None
+    try:
+        val = meta.get("save_version")
+        if val is None or str(val).strip() == "":
+            return None
+        return int(float(val))
+    except Exception:
+        return None
+
+
+def _meta_for_hash(meta: dict | None) -> dict:
+    if not isinstance(meta, dict):
+        return {}
+    skip = {"time_blocks_updated_at", "saved_at", "save_version"}
+    return {k: v for k, v in meta.items() if k not in skip}
+
+
+def _compute_save_hash(df_any: pd.DataFrame, meta: dict | None) -> str:
+    try:
+        data_hash = hashlib.md5(pd.util.hash_pandas_object(df_any, index=True).values.tobytes()).hexdigest()
+    except Exception:
+        data_hash = hashlib.md5(str(df_any).encode("utf-8")).hexdigest()
+    try:
+        meta_hash = hashlib.md5(
+            json.dumps(_meta_for_hash(meta), sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+    except Exception:
+        meta_hash = ""
+    return hashlib.md5(f"{data_hash}|{meta_hash}".encode("utf-8")).hexdigest()
+
+
+def _fetch_remote_save_version() -> int | None:
+    try:
+        if USE_SUPABASE:
+            sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
+            client = create_client(sup_url, sup_key)
+            resp = client.table(sup_table).select("payload").eq("id", sup_row).limit(1).execute()
+            data = getattr(resp, "data", None)
+            if not data:
+                return None
+            payload = data[0].get("payload") if isinstance(data, list) else None
+            meta = payload.get("meta") if isinstance(payload, dict) else None
+            return _get_meta_save_version(meta)
+        if USE_GOOGLE_SHEETS and gsheet_worksheet is not None:
+            try:
+                load_meta_from_gsheets.clear()
+            except Exception:
+                pass
+            meta = load_meta_from_gsheets(gsheet_worksheet)
+            return _get_meta_save_version(meta)
+    except Exception:
+        return None
+    return None
+
+
+def _get_editor_changed_rows(editor_key: str) -> tuple[list[int], bool]:
+    try:
+        state = st.session_state.get(editor_key)
+        if not isinstance(state, dict):
+            return [], False
+        if state.get("added_rows"):
+            return [], True
+        edited = state.get("edited_rows") or {}
+        return sorted(int(k) for k in edited.keys()), False
+    except Exception:
+        return [], False
+
+
+def _norm_cell(val) -> str:
+    if val is None:
+        return ""
+    if isinstance(val, float) and pd.isna(val):
+        return ""
+    s = str(val).strip()
+    if s.lower() in {"nan", "none"}:
+        return ""
+    return s
+
+
+def _row_has_changes(edited_row, base_row, compare_cols: list[str]) -> bool:
+    for col in compare_cols:
+        if col not in edited_row.index or col not in base_row.index:
+            continue
+        if _norm_cell(edited_row.get(col)) != _norm_cell(base_row.get(col)):
+            return True
+    return False
+
+
 # ================ Load Data ================
 df_raw = None
 
@@ -5065,6 +5180,17 @@ elif USE_GOOGLE_SHEETS:
 else:
     st.error("Excel backend disabled. Configure Supabase (recommended) or Google Sheets in secrets.")
     st.stop()
+
+# Track base save version/hash from storage unless we have local pending edits.
+loaded_meta = _get_meta_from_df(df_raw)
+if st.session_state.get("unsaved_df") is None:
+    loaded_version = _get_meta_save_version(loaded_meta)
+    if loaded_version is not None:
+        st.session_state.loaded_save_version = loaded_version
+        st.session_state.loaded_save_at = loaded_meta.get("saved_at")
+        st.session_state.last_saved_hash = _compute_save_hash(df_raw, loaded_meta)
+    elif st.session_state.get("last_saved_hash") is None:
+        st.session_state.last_saved_hash = _compute_save_hash(df_raw, loaded_meta)
 
 # Prefer in-session pending changes when auto-save is off
 if st.session_state.get("unsaved_df") is not None:
@@ -5268,31 +5394,64 @@ df.loc[df["Out_min"] < df["In_min"], "Out_min"] += 1440
 df["Is_Ongoing"] = (df["In_min"] <= current_min) & (current_min <= df["Out_min"])
 
 # ================ Unified Save Function ================
-def save_data(dataframe, show_toast=True, message="Data saved!"):
-    """Save dataframe to Google Sheets or Excel based on configuration"""
+def save_data(dataframe, show_toast=True, message="Data saved!", *, ignore_conflict=False):
+    """Save dataframe to Google Sheets or Excel based on configuration."""
+    if st.session_state.get("is_saving"):
+        return False
+    st.session_state.is_saving = True
     try:
-        # Ensure metadata is updated with current time blocks before saving
         if not hasattr(dataframe, 'attrs'):
             dataframe.attrs = {}
         meta = _get_meta_from_df(dataframe)
         meta = _apply_time_blocks_to_meta(meta)
+
+        loaded_version = st.session_state.get("loaded_save_version")
+        local_version = _get_meta_save_version(meta)
+        if local_version is None and loaded_version is not None:
+            local_version = _safe_int(loaded_version, 0)
+
+        remote_version = None
+        if (
+            st.session_state.get("enable_conflict_checks", True)
+            and not ignore_conflict
+            and (USE_SUPABASE or USE_GOOGLE_SHEETS)
+        ):
+            remote_version = _fetch_remote_save_version()
+            if remote_version is not None and loaded_version is not None:
+                if _safe_int(remote_version, -1) != _safe_int(loaded_version, -1):
+                    st.session_state.save_conflict = {
+                        "local_version": loaded_version,
+                        "remote_version": remote_version,
+                        "detected_at": now_ist().isoformat(),
+                    }
+                    st.error("Save blocked: newer data detected in storage.")
+                    return False
+
+        save_hash = _compute_save_hash(dataframe, meta)
+        if save_hash == st.session_state.get("last_saved_hash"):
+            return True
+
+        base_version = max(
+            _safe_int(loaded_version, 0),
+            _safe_int(remote_version, 0),
+            _safe_int(local_version, 0),
+        )
+        meta["save_version"] = int(base_version) + 1
+        meta["saved_at"] = now_ist().isoformat()
         dataframe.attrs["meta"] = meta
-        
+
         if USE_SUPABASE:
             sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
             success = save_data_to_supabase(sup_url, sup_key, sup_table, sup_row, dataframe)
             if success and show_toast:
-                st.toast(f"🗄️ {message}", icon="✅")
-            return success
+                st.toast(f"dY-,?,? {message}", icon="?o.")
         elif USE_GOOGLE_SHEETS:
             success = save_data_to_gsheets(gsheet_worksheet, dataframe)
             if success and show_toast:
-                st.toast(f"☁️ {message}", icon="✅")
-            return success
+                st.toast(f"?~??,? {message}", icon="?o.")
         else:
             with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
                 dataframe.to_excel(writer, sheet_name='Sheet1', index=False)
-                # Persist metadata (time blocks) into a separate sheet
                 try:
                     meta = _apply_time_blocks_to_meta(_get_meta_from_df(dataframe))
                     meta_rows = []
@@ -5304,36 +5463,75 @@ def save_data(dataframe, show_toast=True, message="Data saved!"):
                     pd.DataFrame(meta_rows).to_excel(writer, sheet_name='Meta', index=False)
                 except Exception:
                     pass
+            success = True
             if show_toast:
-                st.toast(f"💾 {message}", icon="✅")
-            return True
+                st.toast(f"dY'_ {message}", icon="?o.")
+
+        if success:
+            st.session_state.last_saved_hash = save_hash
+            st.session_state.loaded_save_version = meta.get("save_version")
+            st.session_state.loaded_save_at = meta.get("saved_at")
+            st.session_state.save_conflict = None
+            st.session_state.last_save_at = time_module.time()
+        return success
     except Exception as e:
         st.error(f"Error saving data: {e}")
         return False
+    finally:
+        st.session_state.is_saving = False
 
 
 def _queue_unsaved_df(df_pending: pd.DataFrame, reason: str = "") -> None:
-    """Keep changes in memory when auto-save is disabled."""
+    """Keep changes in memory when auto-save is disabled or delayed."""
     try:
-        st.session_state.unsaved_df = df_pending.copy()
+        st.session_state.unsaved_df = df_pending.copy(deep=False)
     except Exception:
         st.session_state.unsaved_df = df_pending
     st.session_state.pending_changes = True
     st.session_state.pending_changes_reason = reason
 
 
-def _maybe_save(dataframe, show_toast=True, message="Data saved!"):
-    """Respect auto-save toggle; queue changes if disabled."""
+def _maybe_save(dataframe, show_toast=True, message="Data saved!", force=False, ignore_conflict=False):
+    """Respect auto-save toggle; queue changes if disabled or debounced."""
+    if st.session_state.get("is_saving"):
+        _queue_unsaved_df(dataframe, reason=message)
+        return True
+
+    if force:
+        result = save_data(dataframe, show_toast=show_toast, message=message, ignore_conflict=ignore_conflict)
+        if result:
+            st.session_state.unsaved_df = None
+            st.session_state.pending_changes = False
+            st.session_state.pending_changes_reason = ""
+        else:
+            _queue_unsaved_df(dataframe, reason=message)
+        return result
+
     if st.session_state.get("auto_save_enabled", False):
-        result = save_data(dataframe, show_toast=show_toast, message=message)
-        st.session_state.unsaved_df = None
-        st.session_state.pending_changes = False
-        st.session_state.pending_changes_reason = ""
+        debounce_s = st.session_state.get("save_debounce_seconds", 0)
+        try:
+            debounce_s = float(debounce_s or 0)
+        except Exception:
+            debounce_s = 0.0
+        if debounce_s > 0:
+            now_ts = time_module.time()
+            last_at = float(st.session_state.get("last_save_at", 0.0) or 0.0)
+            if (now_ts - last_at) < debounce_s:
+                _queue_unsaved_df(dataframe, reason=message)
+                return True
+
+        result = save_data(dataframe, show_toast=show_toast, message=message, ignore_conflict=ignore_conflict)
+        if result:
+            st.session_state.unsaved_df = None
+            st.session_state.pending_changes = False
+            st.session_state.pending_changes_reason = ""
+        else:
+            _queue_unsaved_df(dataframe, reason=message)
         return result
 
     _queue_unsaved_df(dataframe, reason=message)
     if show_toast:
-        st.toast("⏸ Auto-save disabled. Click 'Save Changes' to persist.", icon="⏸")
+        st.toast("??, Auto-save disabled. Click 'Save Changes' to persist.", icon="??,")
     return True
 
 
@@ -5380,9 +5578,67 @@ with st.sidebar:
         value=st.session_state.get("auto_save_enabled", False),
         help="When off, changes stay in session until you click 'Save Changes'."
     )
+
+    debounce_options = [0, 1, 2, 3, 5, 10]
+    try:
+        debounce_index = debounce_options.index(int(st.session_state.get("save_debounce_seconds", 2)))
+    except Exception:
+        debounce_index = 2
+    st.session_state.save_debounce_seconds = st.selectbox(
+        "Auto-save debounce (seconds)",
+        options=debounce_options,
+        index=debounce_index,
+        help="Delay auto-save slightly to merge quick edits.",
+    )
+    st.session_state.enable_conflict_checks = st.checkbox(
+        "Block saves on external changes",
+        value=st.session_state.get("enable_conflict_checks", True),
+        help="Prevents overwriting if storage changed since you loaded.",
+    )
+    if st.session_state.get("loaded_save_at"):
+        st.caption(f"Last saved: {st.session_state.loaded_save_at}")
+    if st.session_state.get("is_saving"):
+        st.caption("Saving...")
+
+    if st.session_state.get("save_conflict"):
+        st.error("Save conflict: storage changed since you loaded.")
+        col_conflict_a, col_conflict_b = st.columns(2)
+        with col_conflict_a:
+            if st.button("Reload from storage", key="reload_storage_btn"):
+                st.session_state.unsaved_df = None
+                st.session_state.pending_changes = False
+                st.session_state.pending_changes_reason = ""
+                st.session_state.save_conflict = None
+                try:
+                    load_data_from_supabase.clear()
+                except Exception:
+                    pass
+                try:
+                    load_data_from_gsheets.clear()
+                except Exception:
+                    pass
+                st.rerun()
+        with col_conflict_b:
+            if st.button("Force Save", key="force_save_btn"):
+                df_to_save = st.session_state.get("unsaved_df")
+                if df_to_save is None:
+                    df_to_save = df_raw
+                _maybe_save(
+                    df_to_save,
+                    message="Force saved (conflict override)",
+                    force=True,
+                    ignore_conflict=True,
+                )
+                st.session_state.save_conflict = None
+                st.rerun()
+
     if st.session_state.get("pending_changes"):
         st.caption("Pending changes not yet saved. Click 'Save Changes'.")
-        if st.session_state.auto_save_enabled and st.session_state.get("unsaved_df") is not None:
+        if (
+            st.session_state.auto_save_enabled
+            and st.session_state.get("unsaved_df") is not None
+            and not st.session_state.get("save_conflict")
+        ):
             _maybe_save(
                 st.session_state.unsaved_df,
                 show_toast=False,
@@ -5423,7 +5679,7 @@ with st.sidebar:
                 st.warning("Please select an assistant")
             else:
                 add_time_block(block_assistant, block_start, block_end, block_reason)
-                save_data(df_raw, show_toast=True, message="Time block saved")
+                _maybe_save(df_raw, show_toast=False, message="Time block saved")
                 st.success(
                     f"✅ Blocked {block_assistant} from {block_start.strftime('%H:%M')} to {block_end.strftime('%H:%M')}"
                 )
@@ -5446,7 +5702,7 @@ with st.sidebar:
                     try:
                         actual_idx = st.session_state.time_blocks.index(block)
                         remove_time_block(actual_idx)
-                        save_data(df_raw, show_toast=True, message="Time block removed")
+                        _maybe_save(df_raw, show_toast=False, message="Time block removed")
                         st.success("Time block removed.")
                         st.rerun()
                     except Exception:
@@ -5521,7 +5777,7 @@ with st.sidebar:
         else:
             try:
                 df_cleared = _make_cleared_schedule(df_raw)
-                success = save_data(df_cleared, message="Schedule cleared")
+                success = _maybe_save(df_cleared, message="Schedule cleared")
                 if success:
                     # Clear local notification/reminder state so we don't toast old rows.
                     st.session_state.prev_hash = None
@@ -5556,7 +5812,7 @@ def _persist_reminder_to_storage(row_id, until, dismissed):
         df_raw.at[ix, 'REMINDER_SNOOZE_UNTIL'] = int(until) if until is not None else pd.NA
         df_raw.at[ix, 'REMINDER_DISMISSED'] = bool(dismissed)
         if st.session_state.get("auto_save_enabled", False):
-            return save_data(df_raw, show_toast=False)
+            return _maybe_save(df_raw, show_toast=False, message="Reminder updates pending")
         _queue_unsaved_df(df_raw, reason="Reminder updates pending")
         return True
     except Exception as e:
@@ -6048,13 +6304,19 @@ if category == "Scheduling":
             # Append to the original dataframe
             new_row_df = pd.DataFrame([new_row])
             df_raw_with_new = pd.concat([df_raw, new_row_df], ignore_index=True)
-            # Always save immediately when adding a new patient
-            save_data(df_raw_with_new, message="New patient row added!")
+            # Persist or queue the new patient row based on save mode
+            _maybe_save(df_raw_with_new, show_toast=False, message="New patient row added!")
             st.success("New patient row added!")
     
     with col_save:
         # Save button for the data editor
-        if st.button("💾 Save Changes", key="manual_save_full", use_container_width=True, type="primary"):
+        if st.button(
+            "?? Save Changes",
+            key="manual_save_full",
+            use_container_width=True,
+            type="primary",
+            disabled=bool(st.session_state.get("is_saving")) or bool(st.session_state.get("save_conflict")),
+        ):
             st.session_state.manual_save_triggered = True
     
     with col_del_pick:
@@ -6869,7 +7131,7 @@ if category == "Scheduling":
         pending_df = st.session_state.get("unsaved_df")
         if pending_df is not None:
             pending_msg = st.session_state.get("pending_changes_reason") or "Pending changes saved!"
-            if save_data(pending_df, message=pending_msg):
+            if _maybe_save(pending_df, message=pending_msg, force=True):
                 st.session_state.unsaved_df = None
                 st.session_state.pending_changes = False
                 st.session_state.pending_changes_reason = ""
@@ -6877,26 +7139,35 @@ if category == "Scheduling":
             st.rerun()
     
         if edited_all is not None:
-            # Compare non-time columns to detect changes (time columns need special handling due to object type)
-            has_changes = False
-            if not edited_all.equals(display_all):
-                # Check actual value differences (skip _orig_idx which is for internal tracking)
-                for col in edited_all.columns:
-                    if col not in ["In Time", "Out Time", "_orig_idx"]:
-                        if not (edited_all[col] == display_all[col]).all():
-                            has_changes = True
-                            break
-                # For time columns, compare the string representation
-                if not has_changes:
-                    for col in ["In Time", "Out Time"]:
-                        if col in edited_all.columns:
-                            edited_times = edited_all[col].astype(str)
-                            display_times = display_all[col].astype(str)
-                            if not (edited_times == display_times).all():
-                                has_changes = True
-                                break
-            
-            if has_changes:
+            editor_key = "full_schedule_editor"
+            changed_rows, has_additions = _get_editor_changed_rows(editor_key)
+            compare_cols = [
+                "Patient Name",
+                "In Time",
+                "Out Time",
+                "Procedure",
+                "DR.",
+                "FIRST",
+                "SECOND",
+                "Third",
+                "CASE PAPER",
+                "OP",
+                "SUCTION",
+                "CLEANING",
+                "STATUS",
+            ]
+            if has_additions:
+                changed_rows = list(edited_all.index)
+            else:
+                filtered_rows = []
+                for row_idx in changed_rows:
+                    if row_idx not in edited_all.index or row_idx not in display_all.index:
+                        continue
+                    if _row_has_changes(edited_all.loc[row_idx], display_all.loc[row_idx], compare_cols):
+                        filtered_rows.append(row_idx)
+                changed_rows = filtered_rows
+
+            if changed_rows:
                 try:
                     # Create a copy of the raw data to update
                     df_updated = df_raw.copy()
@@ -6905,7 +7176,8 @@ if category == "Scheduling":
                     allocation_candidates: set[int] = set()
                     
                     # Process edited data and convert back to original format
-                    for idx, row in edited_all.iterrows():
+                    for idx in changed_rows:
+                        row = edited_all.loc[idx]
                         # Use the preserved original index to map back to df_raw; append when new
                         orig_idx_raw = row.get("_orig_idx", idx)
                         if pd.isna(orig_idx_raw):
@@ -7044,12 +7316,13 @@ if category == "Scheduling":
                             _auto_fill_assistants_for_row(df_updated, ix, only_fill_empty=only_empty)
                     
                     # Write back to storage (manual save always persists)
-                    save_data(df_updated, message="Schedule updated!")
+                    save_ok = _maybe_save(df_updated, message="Schedule updated!", force=True)
                     st.session_state.manual_save_triggered = False
-                    st.session_state.unsaved_df = None
-                    st.session_state.pending_changes = False
-                    st.session_state.pending_changes_reason = ""
-                    st.rerun()
+                    if save_ok:
+                        st.session_state.unsaved_df = None
+                        st.session_state.pending_changes = False
+                        st.session_state.pending_changes_reason = ""
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Error saving: {e}")
                     st.session_state.manual_save_triggered = False
@@ -7170,27 +7443,41 @@ if category == "Scheduling":
         
                     # Persist edits from OP tabs
                     if edited_op is not None:
-                        op_has_changes = False
-                        if not edited_op.equals(display_op):
-                            for col in edited_op.columns:
-                                if col not in ["In Time", "Out Time", "_orig_idx"]:
-                                    if not (edited_op[col] == display_op[col]).all():
-                                        op_has_changes = True
-                                        break
-                            if not op_has_changes:
-                                for col in ["In Time", "Out Time"]:
-                                    if col in edited_op.columns:
-                                        edited_times = edited_op[col].astype(str)
-                                        display_times = display_op[col].astype(str)
-                                        if not (edited_times == display_times).all():
-                                            op_has_changes = True
-                                            break
-        
-                        if op_has_changes:
+                        editor_key = f"op_{str(op).replace(' ', '_')}_editor"
+                        changed_rows, has_additions = _get_editor_changed_rows(editor_key)
+                        compare_cols = [
+                            "Patient ID",
+                            "Patient Name",
+                            "In Time",
+                            "Out Time",
+                            "Procedure",
+                            "DR.",
+                            "OP",
+                            "FIRST",
+                            "SECOND",
+                            "Third",
+                            "CASE PAPER",
+                            "SUCTION",
+                            "CLEANING",
+                            "STATUS",
+                        ]
+                        if has_additions:
+                            changed_rows = list(edited_op.index)
+                        else:
+                            filtered_rows = []
+                            for row_idx in changed_rows:
+                                if row_idx not in edited_op.index or row_idx not in display_op.index:
+                                    continue
+                                if _row_has_changes(edited_op.loc[row_idx], display_op.loc[row_idx], compare_cols):
+                                    filtered_rows.append(row_idx)
+                            changed_rows = filtered_rows
+
+                        if changed_rows:
                             try:
                                 df_updated = df_raw.copy()
                                 allocation_candidates: set[int] = set()
-                                for _, row in edited_op.iterrows():
+                                for idx in changed_rows:
+                                    row = edited_op.loc[idx]
                                     orig_idx_raw = row.get("_orig_idx")
                                     if pd.isna(orig_idx_raw):
                                         orig_idx_raw = len(df_updated)
