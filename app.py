@@ -4068,40 +4068,39 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
     status_options = ["ACTIVE", "INACTIVE"]
     dept_options = [""] + sorted(DEPARTMENTS.keys())
     hidden_cols = ["id", "created_at", "updated_at", "created_by", "updated_by"]
+    is_editor = user_role in ("admin", "editor")
 
     st.markdown(f"### {entity_label} Profiles")
 
-    # Filters (applied to the read-only view)
-    f1, f2, f3 = st.columns([0.2, 0.2, 0.6])
-    with f1:
-        status_filter = st.multiselect(
-            "Status",
-            options=status_options,
-            default=["ACTIVE"],
-            key=f"{sheet_name}_status_filter",
-        )
-    with f2:
-        dept_filter = st.selectbox(
-            dept_label,
-            options=["All"] + dept_options[1:],
-            key=f"{sheet_name}_dept_filter",
-        )
-    with f3:
-        search_term = st.text_input("Search name", key=f"{sheet_name}_search")
-
-    filtered = df_profiles.copy()
-    if status_filter:
-        filtered = filtered[filtered["status"].isin(status_filter)]
-    if dept_filter and dept_filter != "All":
-        filtered = filtered[filtered["department"].str.upper() == dept_filter.upper()]
-    if search_term:
-        filtered = filtered[filtered["name"].str.contains(search_term, case=False, na=False)]
-
-    display_filtered = filtered.drop(columns=[c for c in hidden_cols if c in filtered.columns], errors="ignore")
-    st.dataframe(display_filtered, use_container_width=True, hide_index=True)
-
-    is_editor = user_role in ("admin", "editor")
     if not is_editor:
+        # Filters (applied to the read-only view)
+        f1, f2, f3 = st.columns([0.2, 0.2, 0.6])
+        with f1:
+            status_filter = st.multiselect(
+                "Status",
+                options=status_options,
+                default=["ACTIVE"],
+                key=f"{sheet_name}_status_filter",
+            )
+        with f2:
+            dept_filter = st.selectbox(
+                dept_label,
+                options=["All"] + dept_options[1:],
+                key=f"{sheet_name}_dept_filter",
+            )
+        with f3:
+            search_term = st.text_input("Search name", key=f"{sheet_name}_search")
+
+        filtered = df_profiles.copy()
+        if status_filter:
+            filtered = filtered[filtered["status"].isin(status_filter)]
+        if dept_filter and dept_filter != "All":
+            filtered = filtered[filtered["department"].str.upper() == dept_filter.upper()]
+        if search_term:
+            filtered = filtered[filtered["name"].str.contains(search_term, case=False, na=False)]
+
+        display_filtered = filtered.drop(columns=[c for c in hidden_cols if c in filtered.columns], errors="ignore")
+        st.dataframe(display_filtered, use_container_width=True, hide_index=True)
         st.info("You are in read-only mode. Switch to admin/editor to add or edit profiles.")
         return
 
