@@ -1942,6 +1942,12 @@ st.markdown(
     [data-testid="stToolbar"] button[title*="View source"] {{
         display: none !important;
     }}
+    [data-testid="stToolbar"],
+    [data-testid="stToolbarActions"],
+    [data-testid="stMainMenu"] {{
+        display: none !important;
+        visibility: hidden !important;
+    }}
     
     /* Professional main container */
     .main {{
@@ -2728,8 +2734,12 @@ header[data-testid="stHeader"] {{
 header[data-testid="stHeader"] .stAppToolbar,
 header[data-testid="stHeader"] [data-testid="stToolbarActions"],
 header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
-    opacity: 1 !important;
-    visibility: visible !important;
+    display: none !important;
+    visibility: hidden !important;
+}}
+header[data-testid="stHeader"] [data-testid="collapsedControl"] {{
+    display: none !important;
+    visibility: hidden !important;
 }}
 header[data-testid="stHeader"]::after {{
     content: "THE DENTAL BOND\\AReal-time Scheduling Management System";
@@ -5955,6 +5965,15 @@ with st.sidebar:
         value=st.session_state.get("auto_save_enabled", False),
         help="When off, changes stay in session until you click 'Save Changes'."
     )
+    save_now_disabled = bool(st.session_state.get("is_saving")) or bool(st.session_state.get("save_conflict"))
+    if st.button("Save Now", key="save_now_btn", use_container_width=True, disabled=save_now_disabled):
+        df_to_save = st.session_state.get("unsaved_df")
+        if df_to_save is None:
+            df_to_save = df_raw if "df_raw" in locals() else None
+        if df_to_save is not None:
+            _maybe_save(df_to_save, message="Saved", force=True)
+        else:
+            st.warning("Nothing to save yet.")
 
     debounce_options = [0, 1, 2, 3, 5, 10]
     try:
