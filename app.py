@@ -274,6 +274,10 @@ def save_attendance_sheet(excel_path: str | None, att_df: pd.DataFrame):
         clean_df = clean_df[ATTENDANCE_COLUMNS]
         with pd.ExcelWriter(path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
             clean_df.to_excel(writer, sheet_name=ATTENDANCE_SHEET, index=False)
+        try:
+            _load_attendance_today_excel.clear()
+        except Exception:
+            pass
     except Exception as e:
         st.error(f"Attendance save failed: {e}")
 
@@ -293,12 +297,91 @@ def db_get_one_attendance(_supabase, date_str: str, assistant: str):
         st.warning(f"Attendance fetch failed: {e}")
         return None
 
+@st.cache_data(ttl=5)
+def _load_attendance_today_supabase(_supabase, date_str: str) -> list[dict[str, Any]]:
+    try:
+        res = (
+            _supabase.table("assistant_attendance")
+            .select("assistant,punch_in,punch_out")
+            .eq("date", date_str)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=5)
+def _load_attendance_today_excel(_excel_path: str | None, date_str: str) -> list[dict[str, Any]]:
+    try:
+        att_df = load_attendance_sheet(_excel_path)
+        if att_df is None or att_df.empty:
+            return []
+        day_df = att_df[att_df["DATE"] == date_str]
+        if day_df.empty:
+            return []
+        return day_df.to_dict(orient="records")
+    except Exception:
+        return []
+
+
+def _build_punch_map_from_records(records: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    out: dict[str, dict[str, str]] = {}
+    for rec in records or []:
+        if not isinstance(rec, dict):
+            continue
+        name = str(rec.get("assistant") or rec.get("ASSISTANT") or "").strip().upper()
+        if not name:
+            continue
+        punch_in = str(rec.get("punch_in") or rec.get("PUNCH IN") or "").strip()
+        punch_out = str(rec.get("punch_out") or rec.get("PUNCH OUT") or "").strip()
+        out[name] = {"punch_in": punch_in, "punch_out": punch_out}
+    return out
+
+
+def _get_today_punch_map() -> dict[str, dict[str, str]]:
+    date_str, _ = ist_today_and_time()
+    if USE_SUPABASE and supabase_client is not None:
+        records = _load_attendance_today_supabase(supabase_client, date_str)
+        return _build_punch_map_from_records(records)
+    records = _load_attendance_today_excel(None, date_str)
+    return _build_punch_map_from_records(records)
+
+
+def _format_punch_time(val: str) -> str:
+    s = str(val or "").strip()
+    if len(s) >= 5:
+        return s[:5]
+    return s
+
+
+def _assistant_punch_state(
+    assistant_upper: str,
+    punch_map: dict[str, dict[str, str]] | None,
+) -> tuple[str, str, str]:
+    if not punch_map:
+        return "NONE", "", ""
+    rec = punch_map.get(assistant_upper)
+    if not rec:
+        return "NONE", "", ""
+    punch_in = str(rec.get("punch_in", "") or "").strip()
+    punch_out = str(rec.get("punch_out", "") or "").strip()
+    if punch_in and not punch_out:
+        return "IN", punch_in, ""
+    if punch_in and punch_out:
+        return "OUT", punch_in, punch_out
+    return "NONE", punch_in, punch_out
+
 def db_punch_in(supabase, date_str: str, assistant: str, now_time: str):
     try:
         payload = {"date": date_str, "assistant": assistant, "punch_in": now_time}
         supabase.table("assistant_attendance").upsert(payload, on_conflict="date,assistant").execute()
         try:
             db_get_one_attendance.clear()
+        except Exception:
+            pass
+        try:
+            _load_attendance_today_supabase.clear()
         except Exception:
             pass
     except Exception as e:
@@ -309,6 +392,10 @@ def db_punch_out(supabase, date_str: str, assistant: str, now_time: str):
         supabase.table("assistant_attendance").update({"punch_out": now_time}).eq("date", date_str).eq("assistant", assistant).execute()
         try:
             db_get_one_attendance.clear()
+        except Exception:
+            pass
+        try:
+            _load_attendance_today_supabase.clear()
         except Exception:
             pass
     except Exception as e:
@@ -3474,15 +3561,21 @@ def is_assistant_available(
         return False, "No assistant specified"
     
     assist_upper = str(assistant_name).strip().upper()
-    
-    # Check if today is the assistant's weekly off day
-    try:
-        today_weekday = now.weekday()  # 0=Monday, 6=Sunday
-        off_assistants = WEEKLY_OFF.get(today_weekday, [])
-        if any(str(a).strip().upper() == assist_upper for a in off_assistants):
-            return False, f"Weekly off on {now.strftime('%A')}"
-    except Exception:
-        pass
+
+    punch_map = _get_today_punch_map()
+    punch_state, _, punch_out = _assistant_punch_state(assist_upper, punch_map)
+    if punch_state != "IN":
+        try:
+            today_weekday = now.weekday()  # 0=Monday, 6=Sunday
+            off_assistants = WEEKLY_OFF.get(today_weekday, [])
+            if any(str(a).strip().upper() == assist_upper for a in off_assistants):
+                return False, f"Weekly off on {now.strftime('%A')}"
+        except Exception:
+            pass
+        if punch_state == "OUT":
+            out_label = _format_punch_time(punch_out)
+            return False, f"Punched out at {out_label}" if out_label else "Punched out"
+        return False, "Not punched in"
     
     # Convert check times to minutes
     check_in = _coerce_to_time_obj(check_in_time)
@@ -3718,12 +3811,25 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
     except Exception:
         return False
 
-def get_current_assistant_status(df_schedule: pd.DataFrame) -> dict[str, dict[str, str]]:
+def get_current_assistant_status(
+    df_schedule: pd.DataFrame,
+    assistants: list[str] | None = None,
+    punch_map: dict[str, dict[str, str]] | None = None,
+) -> dict[str, dict[str, str]]:
     """
     Get real-time status of all assistants.
     Returns dict with assistant name -> status info
     """
     status = {}
+    if df_schedule is None:
+        df_schedule = pd.DataFrame()
+    if assistants is None:
+        assistants = ALL_ASSISTANTS
+    if punch_map is None:
+        try:
+            punch_map = _get_today_punch_map()
+        except Exception:
+            punch_map = {}
     current_time = time_type(now.hour, now.minute)
     current_min = now.hour * 60 + now.minute
     today_weekday = now.weekday()
@@ -3739,14 +3845,21 @@ def get_current_assistant_status(df_schedule: pd.DataFrame) -> dict[str, dict[st
         if str(name).strip()
     }
     
-    for assistant in ALL_ASSISTANTS:
+    for assistant in assistants:
         assist_upper = assistant.upper()
 
-        # Weekly off overrides all other availability states
-        if assist_upper in weekly_off_set:
+        punch_state, punch_in, punch_out = _assistant_punch_state(assist_upper, punch_map)
+        if punch_state != "IN":
+            if assist_upper in weekly_off_set:
+                reason = f"Weekly off ({weekday_label})"
+            elif punch_state == "OUT":
+                out_label = _format_punch_time(punch_out)
+                reason = f"Punched out at {out_label}" if out_label else "Punched out"
+            else:
+                reason = "Not punched in"
             status[assist_upper] = {
                 "status": "BLOCKED",
-                "reason": f"Weekly off ({weekday_label})",
+                "reason": reason,
                 "department": get_department_for_assistant(assist_upper),
             }
             continue
@@ -7765,8 +7878,17 @@ if category == "Assistants" and assist_view == "Availability":
     st.markdown("### 👥 Assistant Availability Dashboard")
     st.markdown("---")
     
+    availability_df = df if 'df' in locals() else df_raw if 'df_raw' in locals() else pd.DataFrame()
+    assistants_for_view = get_assistants_list(availability_df)
+    if not assistants_for_view:
+        assistants_for_view = ALL_ASSISTANTS
+    punch_map = _get_today_punch_map()
     # Get current status of all assistants
-    assistant_status = get_current_assistant_status(df)
+    assistant_status = get_current_assistant_status(
+        availability_df,
+        assistants=assistants_for_view,
+        punch_map=punch_map,
+    )
     
     def _norm_status_value(value: Any) -> str:
         try:
@@ -7776,7 +7898,7 @@ if category == "Assistants" and assist_view == "Availability":
         return s if s else "UNKNOWN"
     
     assistant_entries: list[dict] = []
-    for assistant in ALL_ASSISTANTS:
+    for assistant in assistants_for_view:
         raw_name = assistant.strip().upper()
         info = dict(assistant_status.get(raw_name, {}))
         if not info:
