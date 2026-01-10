@@ -178,7 +178,38 @@ def _normalize_html(block: str) -> str:
         if line.strip()
     )
 
+@st.cache_data(ttl=30)
+def _get_active_assistant_profile_names() -> list[str]:
+    try:
+        df = load_profiles(PROFILE_ASSISTANT_SHEET)
+    except Exception:
+        return []
+    if df is None or df.empty or "name" not in df.columns:
+        return []
+    names = df["name"].astype(str).str.strip().str.upper()
+    if "status" in df.columns:
+        status = df["status"].astype(str).str.upper()
+        names = names[status == "ACTIVE"]
+    out = [n for n in names.tolist() if n]
+    seen = set()
+    deduped: list[str] = []
+    for name in out:
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped.append(name)
+    return deduped
+
+
 def get_assistants_list(schedule_df):
+    try:
+        profiles = _get_active_assistant_profile_names()
+        if profiles:
+            return profiles
+    except Exception:
+        pass
+    if schedule_df is None or schedule_df.empty:
+        return []
     cols = [c for c in ["FIRST", "SECOND", "Third"] if c in schedule_df.columns]
     names = set()
     for c in cols:
@@ -4065,6 +4096,10 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
                     supabase_client.table(PROFILE_SUPABASE_TABLE).upsert(row, on_conflict="id").execute()
                 else:
                     supabase_client.table(PROFILE_SUPABASE_TABLE).insert(row).execute()
+            try:
+                _get_active_assistant_profile_names.clear()
+            except Exception:
+                pass
             return
         except Exception as e:
             st.error(f"Error saving profiles to Supabase '{sheet_name}': {e}")
@@ -4087,6 +4122,10 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
             writer.sheets = {ws.title: ws for ws in wb.worksheets}
             clean_df.to_excel(writer, sheet_name=sheet_name, index=False)
             writer.save()
+        try:
+            _get_active_assistant_profile_names.clear()
+        except Exception:
+            pass
     except Exception as e:
         st.error(f"Error saving profiles '{sheet_name}': {e}")
 
