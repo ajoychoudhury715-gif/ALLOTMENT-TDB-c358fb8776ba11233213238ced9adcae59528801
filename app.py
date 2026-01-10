@@ -2737,10 +2737,6 @@ header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
     display: none !important;
     visibility: hidden !important;
 }}
-header[data-testid="stHeader"] [data-testid="collapsedControl"] {{
-    display: none !important;
-    visibility: hidden !important;
-}}
 header[data-testid="stHeader"]::after {{
     content: "THE DENTAL BOND\\AReal-time Scheduling Management System";
     white-space: pre;
