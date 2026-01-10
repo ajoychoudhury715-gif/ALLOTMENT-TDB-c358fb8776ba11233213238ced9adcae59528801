@@ -1098,7 +1098,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 "In Time": ["01:09 AM", "01:09 AM"],
                 "Out Time": ["01:14 AM", "01:14 AM"],
                 "Procedure": ["PLT/INE", "PSE/IENN"],
-                "Doctor": ["DR. HUSAIN", "DR. FARHATH"],
+                "Doctor": ["DR. FARHATH", "DR. SHRUTI"],
                 "FIRST": ["ANISHA", "LAWANA"],
                 "SECOND": ["ANISHA", "LAWANA"],
                 "THIRD": ["NITIN", "MUKHILA"],
@@ -2921,7 +2921,7 @@ def _unique_preserve_order(items: list[str]) -> list[str]:
 
 
 def _norm_staff_key(value: str) -> str:
-    """Normalize names like 'DR. HUSSAIN' vs 'DR.HUSSAIN' to a stable key."""
+    """Normalize names like 'DR. NAME' vs 'DR.NAME' to a stable key."""
     try:
         s = str(value or "").strip().upper()
         return re.sub(r"[^A-Z0-9]+", "", s)
@@ -3092,8 +3092,6 @@ def _is_blank_cell(value: Any) -> bool:
 DEPARTMENTS = {
     "PROSTHO": {
         "doctors": _unique_preserve_order([
-            "DR.HUSSAIN",  # preferred spelling
-            "DR.HUSAIN",   # legacy spelling (kept for compatibility with existing data)
             "DR.SHIFA",
         ]),
         "assistants": _unique_preserve_order([
