@@ -1,0 +1,27 @@
+# Feature Names
+
+- App bootstrap & session defaults
+- UI theming & dark mode
+- Main navigation
+- Summary widgets
+- Schedule schema & status options
+- Status log helpers
+- Schedule editing views
+- Status styling
+- Change detection & toasts
+- 15-minute reminders
+- Reminder persistence & backups
+- Attendance & punch system
+- Duty reminder system
+- Duty admin management
+- Assistant availability tracking
+- Auto allocation
+- Workload summary
+- Time blocking
+- Weekly off configuration & display
+- Storage backend selection
+- Supabase/GSheets load & save
+- Unified save pipeline
+- Profile management
+- Patient lookup
+- Doctor overview & statistics
