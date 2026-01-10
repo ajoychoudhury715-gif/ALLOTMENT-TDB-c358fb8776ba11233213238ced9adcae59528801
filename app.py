@@ -5805,11 +5805,11 @@ def save_data(dataframe, show_toast=True, message="Data saved!", *, ignore_confl
             sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
             success = save_data_to_supabase(sup_url, sup_key, sup_table, sup_row, dataframe)
             if success and show_toast:
-                st.toast(f"dY-,?,? {message}", icon="?o.")
+                st.toast(message, icon="✅")
         elif USE_GOOGLE_SHEETS:
             success = save_data_to_gsheets(gsheet_worksheet, dataframe)
             if success and show_toast:
-                st.toast(f"?~??,? {message}", icon="?o.")
+                st.toast(message, icon="✅")
         else:
             with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
                 dataframe.to_excel(writer, sheet_name='Sheet1', index=False)
@@ -5826,7 +5826,7 @@ def save_data(dataframe, show_toast=True, message="Data saved!", *, ignore_confl
                     pass
             success = True
             if show_toast:
-                st.toast(f"dY'_ {message}", icon="?o.")
+                st.toast(message, icon="✅")
 
         if success:
             st.session_state.last_saved_hash = save_hash
@@ -5896,7 +5896,7 @@ def _maybe_save(dataframe, show_toast=True, message="Data saved!", force=False, 
 
     _queue_unsaved_df(dataframe, reason=message)
     if show_toast:
-        st.toast("??, Auto-save disabled. Click 'Save Changes' to persist.", icon="??,")
+        st.toast("Auto-save disabled. Click 'Save Changes' to persist.", icon="⚠")
     return True
 
 
