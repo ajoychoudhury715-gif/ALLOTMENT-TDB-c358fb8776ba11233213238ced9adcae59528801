@@ -3820,10 +3820,11 @@ def get_assistant_schedule(assistant_name: str, df_schedule: pd.DataFrame) -> li
     
     assist_upper = str(assistant_name).strip().upper()
     appointments = []
+    third_col = _get_third_column_name(df_schedule.columns)
     
     for idx, row in df_schedule.iterrows():
         # Check FIRST, SECOND, Third columns
-        for col in ["FIRST", "SECOND", "Third"]:
+        for col in ["FIRST", "SECOND", third_col]:
             if col in row.index:
                 val = str(row.get(col, "")).strip().upper()
                 if val == assist_upper:
@@ -3970,6 +3971,17 @@ def _normalize_name_list(values: Any) -> list[str]:
     return _unique_preserve_order([str(x) for x in items if str(x).strip()])
 
 
+def _get_third_column_name(columns: Any) -> str:
+    try:
+        if "Third" in columns:
+            return "Third"
+        if "THIRD" in columns:
+            return "THIRD"
+    except Exception:
+        pass
+    return "Third"
+
+
 def _collect_time_overrides(time_overrides: Any) -> list[tuple[float, list[str]]]:
     overrides: list[tuple[float, list[str]]] = []
     if time_overrides is None:
@@ -4062,10 +4074,11 @@ def _assistant_loads(df_schedule: pd.DataFrame, exclude_row_id: str | None = Non
     counts: dict[str, int] = {}
     if df_schedule is None or df_schedule.empty:
         return counts
+    third_col = _get_third_column_name(df_schedule.columns)
     for _, row in df_schedule.iterrows():
         if exclude_row_id and str(row.get("REMINDER_ROW_ID", "")).strip() == str(exclude_row_id).strip():
             continue
-        for col in ["FIRST", "SECOND", "Third"]:
+        for col in ["FIRST", "SECOND", third_col]:
             name = str(row.get(col, "")).strip().upper()
             if not name:
                 continue
@@ -4288,6 +4301,8 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
 
         row = df_schedule.iloc[row_index]
         doctor = str(row.get("DR.", "")).strip()
+        if _is_blank_cell(doctor):
+            doctor = str(row.get("Doctor", "")).strip()
         in_time_val = row.get("In Time", None)
         out_time_val = row.get("Out Time", None)
         row_id = str(row.get("REMINDER_ROW_ID", "")).strip()
@@ -4301,7 +4316,8 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
 
         current_first = row.get("FIRST", "")
         current_second = row.get("SECOND", "")
-        current_third = row.get("Third", "")
+        third_col = _get_third_column_name(df_schedule.columns)
+        current_third = row.get(third_col, "")
 
         if only_fill_empty and (not _is_blank_cell(current_first)) and (not _is_blank_cell(current_second)) and (not _is_blank_cell(current_third)):
             return False
@@ -4327,8 +4343,12 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
             if _is_blank_cell(new_val):
                 continue
             if str(new_val).strip() != str(current_val).strip():
-                if role in df_schedule.columns:
-                    df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = new_val
+                if role == "Third":
+                    if third_col in df_schedule.columns:
+                        df_schedule.iloc[row_index, df_schedule.columns.get_loc(third_col)] = new_val
+                else:
+                    if role in df_schedule.columns:
+                        df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = new_val
                 changed = True
 
         return changed
