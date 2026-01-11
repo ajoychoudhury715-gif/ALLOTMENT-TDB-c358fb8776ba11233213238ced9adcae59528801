@@ -1340,8 +1340,14 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if out_time_value.upper() in {"N/A", "NONE", "NAT"}:
                 out_time_value = ""
             st.session_state[f"compact_popup_patient_{row_key}"] = str(context.get("patient", "") or "")
-            st.session_state[f"compact_popup_in_{row_key}"] = in_time_value
-            st.session_state[f"compact_popup_out_{row_key}"] = out_time_value
+            in_hour, in_minute, in_ampm = _time_to_picker_parts(in_time_value)
+            out_hour, out_minute, out_ampm = _time_to_picker_parts(out_time_value)
+            st.session_state[f"compact_popup_in_hour_{row_key}"] = in_hour
+            st.session_state[f"compact_popup_in_min_{row_key}"] = in_minute
+            st.session_state[f"compact_popup_in_ampm_{row_key}"] = in_ampm
+            st.session_state[f"compact_popup_out_hour_{row_key}"] = out_hour
+            st.session_state[f"compact_popup_out_min_{row_key}"] = out_minute
+            st.session_state[f"compact_popup_out_ampm_{row_key}"] = out_ampm
             st.session_state[f"compact_popup_status_{row_key}"] = str(context.get("status", "") or "")
             st.session_state[f"compact_popup_doctor_{row_key}"] = str(context.get("doctor", "") or "")
             st.session_state[f"compact_popup_procedure_{row_key}"] = str(context.get("procedure", "") or "")
@@ -1454,16 +1460,46 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                         "Patient Name",
                         key=f"compact_popup_patient_{row_key}",
                     )
-                    in_time_input = st.text_input(
-                        "In Time",
-                        key=f"compact_popup_in_{row_key}",
-                        placeholder="HH:MM or 09:30 AM",
-                    )
-                    out_time_input = st.text_input(
-                        "Out Time",
-                        key=f"compact_popup_out_{row_key}",
-                        placeholder="HH:MM or 10:30 AM",
-                    )
+                    st.markdown("In Time")
+                    in_time_cols = st.columns(3, gap="small")
+                    with in_time_cols[0]:
+                        in_hour = st.selectbox(
+                            "Hour",
+                            options=TIME_PICKER_HOURS,
+                            key=f"compact_popup_in_hour_{row_key}",
+                        )
+                    with in_time_cols[1]:
+                        in_minute = st.selectbox(
+                            "Minute",
+                            options=TIME_PICKER_MINUTES,
+                            key=f"compact_popup_in_min_{row_key}",
+                        )
+                    with in_time_cols[2]:
+                        in_ampm = st.selectbox(
+                            "AM/PM",
+                            options=TIME_PICKER_AMPM,
+                            key=f"compact_popup_in_ampm_{row_key}",
+                        )
+                    st.markdown("Out Time")
+                    out_time_cols = st.columns(3, gap="small")
+                    with out_time_cols[0]:
+                        out_hour = st.selectbox(
+                            "Hour",
+                            options=TIME_PICKER_HOURS,
+                            key=f"compact_popup_out_hour_{row_key}",
+                        )
+                    with out_time_cols[1]:
+                        out_minute = st.selectbox(
+                            "Minute",
+                            options=TIME_PICKER_MINUTES,
+                            key=f"compact_popup_out_min_{row_key}",
+                        )
+                    with out_time_cols[2]:
+                        out_ampm = st.selectbox(
+                            "AM/PM",
+                            options=TIME_PICKER_AMPM,
+                            key=f"compact_popup_out_ampm_{row_key}",
+                        )
                     status_current = st.session_state.get(f"compact_popup_status_{row_key}", "")
                     status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status_current)
                     status_input = st.selectbox(
@@ -1532,8 +1568,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 _close_compact_edit_dialog()
                 st.rerun()
             if save_clicked:
-                in_norm, in_err = _compact_normalize_time_input(in_time_input)
-                out_norm, out_err = _compact_normalize_time_input(out_time_input)
+                in_norm, in_err = _time_from_picker_parts(in_hour, in_minute, in_ampm)
+                out_norm, out_err = _time_from_picker_parts(out_hour, out_minute, out_ampm)
                 if in_err or out_err:
                     if in_err:
                         st.error(in_err)
@@ -3014,6 +3050,52 @@ def _coerce_to_time_obj(time_value: Any) -> time_type | None:
             return time_type(hours, minutes)
 
     return None
+
+TIME_PICKER_HOURS = [""] + [f"{i:02d}" for i in range(1, 13)]
+TIME_PICKER_MINUTES = [""] + [f"{i:02d}" for i in range(60)]
+TIME_PICKER_AMPM = ["AM", "PM"]
+
+def _time_to_picker_parts(time_value: Any) -> tuple[str, str, str]:
+    t = _coerce_to_time_obj(time_value)
+    if t is None:
+        return "", "", "AM"
+    hour = t.hour
+    if hour == 0:
+        hour_12 = 12
+        ampm = "AM"
+    elif hour < 12:
+        hour_12 = hour
+        ampm = "AM"
+    elif hour == 12:
+        hour_12 = 12
+        ampm = "PM"
+    else:
+        hour_12 = hour - 12
+        ampm = "PM"
+    return f"{hour_12:02d}", f"{t.minute:02d}", ampm
+
+def _time_from_picker_parts(hour_str: str, minute_str: str, ampm: str) -> tuple[str, str | None]:
+    hour_text = str(hour_str or "").strip()
+    minute_text = str(minute_str or "").strip()
+    if not hour_text and not minute_text:
+        return "", None
+    if not hour_text or not minute_text:
+        return "", "Select hour and minute."
+    try:
+        hour = int(hour_text)
+        minute = int(minute_text)
+    except ValueError:
+        return "", "Invalid time selection."
+    if hour < 1 or hour > 12 or minute < 0 or minute > 59:
+        return "", "Invalid time selection."
+    ampm_norm = str(ampm or "").strip().upper()
+    if ampm_norm not in ("AM", "PM"):
+        return "", "Select AM or PM."
+    if hour == 12:
+        hour_24 = 0 if ampm_norm == "AM" else 12
+    else:
+        hour_24 = hour if ampm_norm == "AM" else hour + 12
+    return f"{hour_24:02d}:{minute:02d}", None
 
 def dec_to_time(time_value: Any) -> str:
     """Convert various time formats to HH:MM string"""
@@ -7027,8 +7109,14 @@ if category == "Scheduling":
         if out_time_value.upper() in {"N/A", "NONE", "NAT"}:
             out_time_value = ""
         st.session_state[f"full_popup_patient_{row_key}"] = str(context.get("patient", "") or "")
-        st.session_state[f"full_popup_in_{row_key}"] = in_time_value
-        st.session_state[f"full_popup_out_{row_key}"] = out_time_value
+        in_hour, in_minute, in_ampm = _time_to_picker_parts(in_time_value)
+        out_hour, out_minute, out_ampm = _time_to_picker_parts(out_time_value)
+        st.session_state[f"full_popup_in_hour_{row_key}"] = in_hour
+        st.session_state[f"full_popup_in_min_{row_key}"] = in_minute
+        st.session_state[f"full_popup_in_ampm_{row_key}"] = in_ampm
+        st.session_state[f"full_popup_out_hour_{row_key}"] = out_hour
+        st.session_state[f"full_popup_out_min_{row_key}"] = out_minute
+        st.session_state[f"full_popup_out_ampm_{row_key}"] = out_ampm
         st.session_state[f"full_popup_status_{row_key}"] = str(context.get("status", "") or "")
         st.session_state[f"full_popup_doctor_{row_key}"] = str(context.get("doctor", "") or "")
         st.session_state[f"full_popup_procedure_{row_key}"] = str(context.get("procedure", "") or "")
@@ -7143,17 +7231,47 @@ if category == "Scheduling":
             )
             time_cols = st.columns(2, gap="small")
             with time_cols[0]:
-                in_time_input = st.text_input(
-                    "In Time",
-                    key=f"full_popup_in_{row_key}",
-                    placeholder="HH:MM or 09:30 AM",
-                )
+                st.markdown("In Time")
+                in_time_cols = st.columns(3, gap="small")
+                with in_time_cols[0]:
+                    in_hour = st.selectbox(
+                        "Hour",
+                        options=TIME_PICKER_HOURS,
+                        key=f"full_popup_in_hour_{row_key}",
+                    )
+                with in_time_cols[1]:
+                    in_minute = st.selectbox(
+                        "Minute",
+                        options=TIME_PICKER_MINUTES,
+                        key=f"full_popup_in_min_{row_key}",
+                    )
+                with in_time_cols[2]:
+                    in_ampm = st.selectbox(
+                        "AM/PM",
+                        options=TIME_PICKER_AMPM,
+                        key=f"full_popup_in_ampm_{row_key}",
+                    )
             with time_cols[1]:
-                out_time_input = st.text_input(
-                    "Out Time",
-                    key=f"full_popup_out_{row_key}",
-                    placeholder="HH:MM or 10:30 AM",
-                )
+                st.markdown("Out Time")
+                out_time_cols = st.columns(3, gap="small")
+                with out_time_cols[0]:
+                    out_hour = st.selectbox(
+                        "Hour",
+                        options=TIME_PICKER_HOURS,
+                        key=f"full_popup_out_hour_{row_key}",
+                    )
+                with out_time_cols[1]:
+                    out_minute = st.selectbox(
+                        "Minute",
+                        options=TIME_PICKER_MINUTES,
+                        key=f"full_popup_out_min_{row_key}",
+                    )
+                with out_time_cols[2]:
+                    out_ampm = st.selectbox(
+                        "AM/PM",
+                        options=TIME_PICKER_AMPM,
+                        key=f"full_popup_out_ampm_{row_key}",
+                    )
 
             top_cols = st.columns(2, gap="small")
             with top_cols[0]:
@@ -7243,8 +7361,8 @@ if category == "Scheduling":
             _close_full_edit_dialog()
             st.rerun()
         if save_clicked:
-            in_norm, in_err = _full_normalize_time_input(in_time_input)
-            out_norm, out_err = _full_normalize_time_input(out_time_input)
+            in_norm, in_err = _time_from_picker_parts(in_hour, in_minute, in_ampm)
+            out_norm, out_err = _time_from_picker_parts(out_hour, out_minute, out_ampm)
             if in_err or out_err:
                 if in_err:
                     st.error(in_err)
