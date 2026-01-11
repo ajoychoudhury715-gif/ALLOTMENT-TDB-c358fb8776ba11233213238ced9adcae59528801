@@ -4705,8 +4705,8 @@ def _open_spreadsheet(client, spreadsheet_ref: str):
 
 def _get_supabase_config_from_secrets_or_env():
     """Return (url, key, table, row_id, profile_table) from Streamlit secrets/env vars."""
-    url = SUPABASE_URL_DEFAULT
-    key = SUPABASE_KEY_DEFAULT
+    url = ""
+    key = ""
     service_key = ""
     table = supabase_table_name
     row_id = supabase_row_id
@@ -4714,9 +4714,19 @@ def _get_supabase_config_from_secrets_or_env():
 
     try:
         if hasattr(st, 'secrets'):
-            url = str(st.secrets.get("supabase_url", "") or "").strip()
-            key = str(st.secrets.get("supabase_key", "") or "").strip()
-            service_key = str(st.secrets.get("supabase_service_role_key", "") or "").strip()
+            supabase_section = st.secrets.get("supabase", None)
+            if isinstance(supabase_section, dict):
+                # Support [supabase] table in secrets for legacy configs.
+                url = str(supabase_section.get("url", "") or "").strip() or url
+                key = str(supabase_section.get("key", "") or "").strip() or key
+                service_key = str(supabase_section.get("service_role_key", "") or "").strip() or service_key
+                table = str(supabase_section.get("table", table) or table).strip() or table
+                row_id = str(supabase_section.get("row_id", row_id) or row_id).strip() or row_id
+                profile_table = str(supabase_section.get("profile_table", profile_table) or profile_table).strip() or profile_table
+
+            url = str(st.secrets.get("supabase_url", "") or "").strip() or url
+            key = str(st.secrets.get("supabase_key", "") or "").strip() or key
+            service_key = str(st.secrets.get("supabase_service_role_key", "") or "").strip() or service_key
             table = str(st.secrets.get("supabase_table", table) or table).strip() or table
             row_id = str(st.secrets.get("supabase_row_id", row_id) or row_id).strip() or row_id
             profile_table = str(st.secrets.get("supabase_profile_table", profile_table) or profile_table).strip() or profile_table
@@ -4735,6 +4745,11 @@ def _get_supabase_config_from_secrets_or_env():
         row_id = os.getenv("SUPABASE_ROW_ID", row_id).strip() or row_id
     if os.getenv("SUPABASE_PROFILE_TABLE"):
         profile_table = os.getenv("SUPABASE_PROFILE_TABLE", profile_table).strip() or profile_table
+
+    if not url:
+        url = SUPABASE_URL_DEFAULT
+    if not key:
+        key = SUPABASE_KEY_DEFAULT
 
     # Prefer service role key when present (avoids RLS setup for server-side app).
     effective_key = service_key or key
