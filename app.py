@@ -4369,6 +4369,7 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
     if USE_SUPABASE and supabase_client is not None:
         try:
             clean_df = _ensure_profile_df(df)
+            clean_df = clean_df.where(pd.notna(clean_df), None)
             if "id" in clean_df.columns:
                 ids = clean_df["id"].astype(str)
                 missing = clean_df["id"].isna() | ids.str.strip().isin(["", "nan", "none"])
@@ -4404,6 +4405,7 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
             return False
     try:
         clean_df = _ensure_profile_df(df)
+        clean_df = clean_df.where(pd.notna(clean_df), None)
         if "id" in clean_df.columns:
             ids = clean_df["id"].astype(str)
             missing = clean_df["id"].isna() | ids.str.strip().isin(["", "nan", "none"])
