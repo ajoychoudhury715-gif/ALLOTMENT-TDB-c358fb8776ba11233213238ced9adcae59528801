@@ -4712,6 +4712,8 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         if USE_SUPABASE and supabase_client is not None:
             st.session_state.supabase_staff_refreshed = False
         st.success("Profiles updated.")
+        if USE_SUPABASE and supabase_client is not None:
+            st.rerun()
 
 
 # Auto-select backend for Streamlit Cloud:
