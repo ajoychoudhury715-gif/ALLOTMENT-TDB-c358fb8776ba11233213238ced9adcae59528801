@@ -311,6 +311,28 @@ def _load_attendance_today_supabase(_supabase, date_str: str) -> list[dict[str, 
         return []
 
 
+@st.cache_data(ttl=30)
+def _load_attendance_range_supabase(
+    _supabase,
+    start_date: str,
+    end_date: str,
+) -> list[dict[str, Any]]:
+    if not _supabase or not start_date or not end_date:
+        return []
+    try:
+        res = (
+            _supabase.table("assistant_attendance")
+            .select("date,assistant,punch_in,punch_out")
+            .gte("date", start_date)
+            .lte("date", end_date)
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        st.warning(f"Attendance fetch failed: {e}")
+        return []
+
+
 @st.cache_data(ttl=5)
 def _load_attendance_today_excel(_excel_path: str | None, date_str: str) -> list[dict[str, Any]]:
     try:
@@ -371,6 +393,25 @@ def _assistant_punch_state(
     if punch_in and punch_out:
         return "OUT", punch_in, punch_out
     return "NONE", punch_in, punch_out
+
+
+def _calc_worked_minutes(punch_in: str, punch_out: str) -> int | None:
+    in_min = time_to_minutes(punch_in)
+    out_min = time_to_minutes(punch_out)
+    if in_min is None or out_min is None:
+        return None
+    worked = out_min - in_min
+    if worked < 0:
+        worked += 1440
+    return worked
+
+
+def _attendance_status(punch_in: str, punch_out: str) -> str:
+    if punch_in and punch_out:
+        return "COMPLETE"
+    if punch_in and not punch_out:
+        return "IN PROGRESS"
+    return "MISSING"
 
 def db_punch_in(supabase, date_str: str, assistant: str, now_time: str):
     try:
@@ -8398,6 +8439,109 @@ if category == "Assistants" and assist_view == "Attendance":
     # ================ ASSISTANTS ATTENDANCE (EXPERIMENTAL) ================
     if USE_SUPABASE:
         st.info("Attendance editor (sheet-based) is disabled in Supabase mode. Use the sidebar Punch widget instead.")
+        if supabase_client is None:
+            st.warning("Supabase is not configured. Configure Supabase to view attendance reports.")
+        else:
+            with st.expander("Monthly Attendance Report", expanded=True):
+                month_base = datetime.now(IST).date().replace(day=1)
+                month_options = []
+                for i in range(0, 12):
+                    idx = (month_base.year * 12 + (month_base.month - 1)) - i
+                    year = idx // 12
+                    month = idx % 12 + 1
+                    month_options.append(datetime(year, month, 1).date())
+
+                selected_month = st.selectbox(
+                    "Report month",
+                    options=month_options,
+                    index=0,
+                    format_func=lambda d: d.strftime("%Y-%m"),
+                    key="attendance_report_month",
+                )
+                next_idx = (selected_month.year * 12 + (selected_month.month - 1)) + 1
+                next_year = next_idx // 12
+                next_month = next_idx % 12 + 1
+                start_date = selected_month.isoformat()
+                end_date = (datetime(next_year, next_month, 1).date() - timedelta(days=1)).isoformat()
+                st.caption(f"Range: {start_date} to {end_date}")
+
+                records = _load_attendance_range_supabase(supabase_client, start_date, end_date)
+                if not records:
+                    st.info("No attendance records for selected month.")
+                else:
+                    df_att = pd.DataFrame(records)
+                    for col in ["date", "assistant", "punch_in", "punch_out"]:
+                        if col not in df_att.columns:
+                            df_att[col] = ""
+                    df_att["date"] = df_att["date"].astype(str)
+                    df_att["assistant"] = df_att["assistant"].astype(str).str.strip().str.upper()
+                    df_att["punch_in"] = df_att["punch_in"].astype(str).str.strip()
+                    df_att["punch_out"] = df_att["punch_out"].astype(str).str.strip()
+                    df_att["STATUS"] = df_att.apply(
+                        lambda row: _attendance_status(row["punch_in"], row["punch_out"]),
+                        axis=1,
+                    )
+                    df_att["WORKED MINS"] = df_att.apply(
+                        lambda row: _calc_worked_minutes(row["punch_in"], row["punch_out"]),
+                        axis=1,
+                    )
+                    df_att["WORKED HH:MM"] = df_att["WORKED MINS"].apply(mins_to_hhmm)
+
+                    assistant_options = ["All"] + sorted(
+                        [a for a in df_att["assistant"].unique().tolist() if a]
+                    )
+                    selected_assistant = st.selectbox(
+                        "Assistant filter",
+                        options=assistant_options,
+                        index=0,
+                        key="attendance_report_assistant",
+                    )
+                    if selected_assistant != "All":
+                        df_att = df_att[df_att["assistant"] == selected_assistant]
+
+                    if df_att.empty:
+                        st.info("No attendance records for this assistant in the selected month.")
+                    else:
+                        df_summary = df_att.copy()
+                        df_summary["WORKED MINS FILLED"] = df_summary["WORKED MINS"].fillna(0).astype(int)
+                        summary = (
+                            df_summary.groupby("assistant", dropna=False)
+                            .agg(
+                                Days=("date", "nunique"),
+                                Completed=("STATUS", lambda s: (s == "COMPLETE").sum()),
+                                In_Progress=("STATUS", lambda s: (s == "IN PROGRESS").sum()),
+                                Worked_Minutes=("WORKED MINS FILLED", "sum"),
+                            )
+                            .reset_index()
+                        )
+                        summary["Worked HH:MM"] = summary["Worked_Minutes"].apply(mins_to_hhmm)
+                        summary_display = summary.rename(columns={"assistant": "ASSISTANT"})
+                        summary_display = summary_display.sort_values("ASSISTANT")
+
+                        st.markdown("**Summary**")
+                        st.dataframe(summary_display, use_container_width=True, hide_index=True)
+
+                        details = df_att[
+                            ["date", "assistant", "punch_in", "punch_out", "STATUS", "WORKED MINS", "WORKED HH:MM"]
+                        ].copy()
+                        details = details.rename(
+                            columns={
+                                "date": "DATE",
+                                "assistant": "ASSISTANT",
+                                "punch_in": "PUNCH IN",
+                                "punch_out": "PUNCH OUT",
+                            }
+                        )
+                        details = details.sort_values(["DATE", "ASSISTANT"])
+                        st.markdown("**Details**")
+                        st.dataframe(details, use_container_width=True, hide_index=True)
+                        csv = details.to_csv(index=False)
+                        st.download_button(
+                            "Download CSV",
+                            data=csv,
+                            file_name=f"attendance_{selected_month.strftime('%Y_%m')}.csv",
+                            mime="text/csv",
+                        )
     else:
         with st.expander("🕒 Assistants Attendance", expanded=False):
             try:
