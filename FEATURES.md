@@ -12,6 +12,7 @@
 - 15-minute reminders
 - Reminder persistence & backups
 - Attendance & punch system
+- Supabase attendance uses sidebar Punch widget (sheet editor disabled)
 - Duty reminder system
 - Duty admin management
 - Assistant availability tracking
