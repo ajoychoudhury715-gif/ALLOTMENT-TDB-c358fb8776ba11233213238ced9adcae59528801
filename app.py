@@ -4142,7 +4142,7 @@ def _allocate_assistants_for_slot(
             val = current_assignments.get(role, "")
             result[role] = "" if _is_blank_cell(val) else str(val).strip()
 
-    if not doctor or not department:
+    if not doctor:
         return result
 
     in_obj = _coerce_to_time_obj(in_time)
@@ -4268,8 +4268,6 @@ def auto_allocate_assistants(
     Returns dict with FIRST, SECOND, Third assignments.
     """
     department = get_department_for_doctor(doctor)
-    if not department:
-        return {"FIRST": "", "SECOND": "", "Third": ""}
     return _allocate_assistants_for_slot(
         doctor,
         department,
@@ -4300,8 +4298,6 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
             return False
 
         department = get_department_for_doctor(doctor)
-        if not department:
-            return False
 
         current_first = row.get("FIRST", "")
         current_second = row.get("SECOND", "")
