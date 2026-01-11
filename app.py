@@ -64,6 +64,10 @@ if "nav_category" not in st.session_state:
 if "nav_sched" not in st.session_state:
     st.session_state.nav_sched = "Full Schedule"
 
+def _get_profiles_cache_snapshot() -> dict[str, Any]:
+    cached = st.session_state.get("profiles_cache")
+    return cached if isinstance(cached, dict) else {}
+
 # -----------------------------
 # Premium sidebar CSS (white pastel)
 # -----------------------------
@@ -2919,7 +2923,7 @@ if st.session_state.get("nav_category") != "Dashboard":
     weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_idx = now.weekday()
     tomorrow_idx = (today_idx + 1) % 7
-    weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
+    weekly_off_map = _get_profiles_cache_snapshot().get("weekly_off_map", WEEKLY_OFF)
 
     def _render_off_card(title: str, off_list: list[str]):
         has_off = bool(off_list)
@@ -4363,7 +4367,7 @@ def get_current_assistant_status(
         if isinstance(weekday_name_list, list) and 0 <= today_weekday < len(weekday_name_list)
         else now.strftime("%A")
     )
-    weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
+    weekly_off_map = _get_profiles_cache_snapshot().get("weekly_off_map", WEEKLY_OFF)
     weekly_off_set = {
         str(name).strip().upper()
         for name in weekly_off_map.get(today_weekday, [])
@@ -4565,7 +4569,7 @@ with st.sidebar:
     today_weekday = now.weekday()  # 0=Monday, 6=Sunday
     weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_name = weekday_names[today_weekday]
-    weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
+    weekly_off_map = _get_profiles_cache_snapshot().get("weekly_off_map", WEEKLY_OFF)
     
     # TODAY'S OFF
     today_off = weekly_off_map.get(today_weekday, [])
