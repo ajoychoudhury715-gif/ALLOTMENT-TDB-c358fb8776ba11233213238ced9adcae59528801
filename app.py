@@ -4364,8 +4364,8 @@ def load_profiles(sheet_name: str) -> pd.DataFrame:
         return _ensure_profile_df(pd.DataFrame())
 
 
-def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
-    """Persist assistant/doctor profiles (Supabase-first)."""
+def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
+    """Persist assistant/doctor profiles (Supabase-first). Returns True on success."""
     if USE_SUPABASE and supabase_client is not None:
         try:
             clean_df = _ensure_profile_df(df)
@@ -4386,19 +4386,22 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
             for row in rows:
                 rid = row.get("id")
                 if rid:
-                    supabase_client.table(PROFILE_SUPABASE_TABLE).upsert(row, on_conflict="id").execute()
+                    res = supabase_client.table(PROFILE_SUPABASE_TABLE).upsert(row, on_conflict="id").execute()
                 else:
-                    supabase_client.table(PROFILE_SUPABASE_TABLE).insert(row).execute()
+                    res = supabase_client.table(PROFILE_SUPABASE_TABLE).insert(row).execute()
+                err = getattr(res, "error", None)
+                if err:
+                    raise RuntimeError(str(err))
             try:
                 _get_active_assistant_profile_names.clear()
             except Exception:
                 pass
-            return
+            return True
         except Exception as e:
             st.error(f"Error saving profiles to Supabase '{sheet_name}': {e}")
             st.info("Ensure the profiles table exists and has all required columns.")
             st.code(_profiles_table_setup_sql(PROFILE_SUPABASE_TABLE), language="sql")
-            return
+            return False
     try:
         clean_df = _ensure_profile_df(df)
         if "id" in clean_df.columns:
@@ -4425,8 +4428,10 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
             _get_active_assistant_profile_names.clear()
         except Exception:
             pass
+        return True
     except Exception as e:
         st.error(f"Error saving profiles '{sheet_name}': {e}")
+        return False
 
 
 def _restore_profile_hidden_columns(
@@ -4539,7 +4544,7 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
 
     def _render_add_profile_dialog_body() -> None:
         st.markdown(f"### Add {entity_label}")
-        with st.form(f"add_{sheet_name}_form", clear_on_submit=True):
+        with st.form(f"add_{sheet_name}_form", clear_on_submit=False):
             name = st.text_input(f"{entity_label} Name")
             dept = st.selectbox(dept_label, options=dept_options, key=f"{sheet_name}_dept_new")
             contact_email = st.text_input("Contact Email", key=f"{sheet_name}_email_new")
@@ -4563,7 +4568,10 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                         "updated_by": user_name,
                     }
                     df_profiles_local = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
-                    save_profiles(df_profiles_local, sheet_name)
+                    ok = save_profiles(df_profiles_local, sheet_name)
+                    if not ok:
+                        st.error(f"Failed to save {entity_label}.")
+                        return
                     if USE_SUPABASE and supabase_client is not None:
                         st.session_state.supabase_staff_refreshed = False
                     st.success(f"{entity_label} added.")
@@ -4667,7 +4675,10 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                 else:
                     drop_idx = [item["index"] for item in to_delete]
                     df_after = df_profiles.drop(index=drop_idx, errors="ignore").reset_index(drop=True)
-                    save_profiles(df_after, sheet_name)
+                    ok = save_profiles(df_after, sheet_name)
+                    if not ok:
+                        st.error(f"Failed to delete {entity_label} profiles.")
+                        return
                 if USE_SUPABASE and supabase_client is not None:
                     st.session_state.supabase_staff_refreshed = False
                 st.success(f"Deleted {len(to_delete)} {entity_label} profile(s).")
@@ -4708,7 +4719,10 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         edited_df = _restore_profile_hidden_columns(edited_df, df_profiles, hidden_cols, user_name)
         edited_df["updated_at"] = _now_iso()
         edited_df["updated_by"] = user_name
-        save_profiles(edited_df, sheet_name)
+        ok = save_profiles(edited_df, sheet_name)
+        if not ok:
+            st.error("Failed to save profile changes.")
+            return
         if USE_SUPABASE and supabase_client is not None:
             st.session_state.supabase_staff_refreshed = False
         st.success("Profiles updated.")
