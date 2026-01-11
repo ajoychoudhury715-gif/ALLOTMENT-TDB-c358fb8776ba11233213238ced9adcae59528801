@@ -4267,6 +4267,52 @@ def _now_iso():
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _profiles_table_setup_sql(table_name: str) -> str:
+    table = table_name or "profiles"
+    return (
+        f"create table if not exists {table} (\n"
+        "  id text primary key,\n"
+        "  kind text not null,\n"
+        "  name text not null,\n"
+        "  department text,\n"
+        "  contact_email text,\n"
+        "  contact_phone text,\n"
+        "  status text,\n"
+        "  weekly_off text,\n"
+        "  pref_first text,\n"
+        "  pref_second text,\n"
+        "  pref_third text,\n"
+        "  created_at timestamptz,\n"
+        "  updated_at timestamptz,\n"
+        "  created_by text,\n"
+        "  updated_by text\n"
+        ");\n"
+    )
+
+
+@st.cache_data(ttl=30)
+def _profiles_table_ready(_supabase, table_name: str) -> tuple[bool, str]:
+    if not _supabase or not table_name:
+        return False, "Supabase client is not available."
+    try:
+        _supabase.table(table_name).select("id,kind,name").limit(1).execute()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def _render_profiles_setup_help(table_name: str, err: str | None = None) -> None:
+    st.error("Supabase profiles table is missing or misconfigured.")
+    if err:
+        st.caption(f"Details: {err}")
+    st.markdown("Create the table in Supabase SQL Editor:")
+    st.code(_profiles_table_setup_sql(table_name), language="sql")
+    st.markdown(
+        "If you use an anon key, add RLS policies that allow read and write, "
+        "or use a service role key."
+    )
+
+
 def load_profiles(sheet_name: str) -> pd.DataFrame:
     """Load assistant/doctor profiles (Supabase-first)."""
     if USE_SUPABASE and supabase_client is not None:
@@ -4350,7 +4396,8 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
             return
         except Exception as e:
             st.error(f"Error saving profiles to Supabase '{sheet_name}': {e}")
-            st.info("If you see column errors, add columns weekly_off, pref_first, pref_second, pref_third to the profiles table.")
+            st.info("Ensure the profiles table exists and has all required columns.")
+            st.code(_profiles_table_setup_sql(PROFILE_SUPABASE_TABLE), language="sql")
             return
     try:
         clean_df = _ensure_profile_df(df)
@@ -4382,10 +4429,74 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
         st.error(f"Error saving profiles '{sheet_name}': {e}")
 
 
+def _restore_profile_hidden_columns(
+    edited_df: pd.DataFrame,
+    base_df: pd.DataFrame,
+    hidden_cols: list[str],
+    user_name: str,
+) -> pd.DataFrame:
+    out = edited_df.copy()
+    for col in hidden_cols:
+        if col not in out.columns:
+            out[col] = ""
+    if "id" not in out.columns:
+        out["id"] = ""
+
+    base_id_map: dict[str, dict[str, Any]] = {}
+    if "id" in base_df.columns:
+        for _, row in base_df.iterrows():
+            rid = str(row.get("id", "")).strip()
+            if not rid or rid.lower() in {"nan", "none"}:
+                continue
+            base_id_map[rid] = row.to_dict()
+
+    if base_id_map and "name" in out.columns and "department" in out.columns:
+        base_key = (
+            base_df["name"].astype(str).str.strip().str.upper()
+            + "|"
+            + base_df["department"].astype(str).str.strip().str.upper()
+        )
+        base_keys = dict(zip(base_key, base_df["id"].astype(str)))
+        missing_id = out["id"].apply(_is_blank_cell)
+        if missing_id.any():
+            out_key = (
+                out["name"].astype(str).str.strip().str.upper()
+                + "|"
+                + out["department"].astype(str).str.strip().str.upper()
+            )
+            out.loc[missing_id, "id"] = out_key[missing_id].map(base_keys).fillna("")
+
+    if base_id_map:
+        for col in hidden_cols:
+            mask = out[col].apply(_is_blank_cell)
+            if not mask.any():
+                continue
+            out.loc[mask, col] = out.loc[mask, "id"].map(
+                lambda rid: base_id_map.get(str(rid).strip(), {}).get(col, "")
+            )
+
+    now_iso = _now_iso()
+    if "created_at" in out.columns:
+        mask = out["created_at"].apply(_is_blank_cell)
+        if mask.any():
+            out.loc[mask, "created_at"] = now_iso
+    if "created_by" in out.columns:
+        mask = out["created_by"].apply(_is_blank_cell)
+        if mask.any():
+            out.loc[mask, "created_by"] = user_name
+
+    return out
+
+
 def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) -> None:
     """UI to add/edit assistant/doctor profiles with simple role guard."""
     user_role = st.session_state.get("user_role", "viewer")
     user_name = st.session_state.get("current_user", "user")
+    if USE_SUPABASE and supabase_client is not None:
+        ready, err = _profiles_table_ready(supabase_client, PROFILE_SUPABASE_TABLE)
+        if not ready:
+            _render_profiles_setup_help(PROFILE_SUPABASE_TABLE, err)
+            return
     df_profiles = load_profiles(sheet_name)
     status_options = ["ACTIVE", "INACTIVE"]
     dept_options = [""] + sorted(DEPARTMENTS.keys())
@@ -4453,6 +4564,8 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                     }
                     df_profiles_local = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
                     save_profiles(df_profiles_local, sheet_name)
+                    if USE_SUPABASE and supabase_client is not None:
+                        st.session_state.supabase_staff_refreshed = False
                     st.success(f"{entity_label} added.")
                     st.rerun()
 
@@ -4555,6 +4668,8 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                     drop_idx = [item["index"] for item in to_delete]
                     df_after = df_profiles.drop(index=drop_idx, errors="ignore").reset_index(drop=True)
                     save_profiles(df_after, sheet_name)
+                if USE_SUPABASE and supabase_client is not None:
+                    st.session_state.supabase_staff_refreshed = False
                 st.success(f"Deleted {len(to_delete)} {entity_label} profile(s).")
                 st.rerun()
 
@@ -4590,12 +4705,12 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         },
     )
     if st.button("Save profile changes", key=f"{sheet_name}_save_btn"):
+        edited_df = _restore_profile_hidden_columns(edited_df, df_profiles, hidden_cols, user_name)
         edited_df["updated_at"] = _now_iso()
         edited_df["updated_by"] = user_name
-        for col in hidden_cols:
-            if col not in edited_df.columns and col in df_profiles.columns:
-                edited_df[col] = df_profiles[col].values
         save_profiles(edited_df, sheet_name)
+        if USE_SUPABASE and supabase_client is not None:
+            st.session_state.supabase_staff_refreshed = False
         st.success("Profiles updated.")
 
 
