@@ -1181,8 +1181,9 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             today_idx = now_ist().weekday()
             tomorrow_idx = (today_idx + 1) % 7
             weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            today_off = WEEKLY_OFF.get(today_idx, [])
-            tomorrow_off = WEEKLY_OFF.get(tomorrow_idx, [])
+            weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
+            today_off = weekly_off_map.get(today_idx, [])
+            tomorrow_off = weekly_off_map.get(tomorrow_idx, [])
 
             if today_off:
                 st.markdown(
@@ -1872,6 +1873,8 @@ if "supabase_profiles_seeded" not in st.session_state:
     st.session_state.supabase_profiles_seeded = False
 if "supabase_staff_refreshed" not in st.session_state:
     st.session_state.supabase_staff_refreshed = False
+if "profiles_cache_bust" not in st.session_state:
+    st.session_state.profiles_cache_bust = 0
 if "active_duty_run_id" not in st.session_state:
     st.session_state.active_duty_run_id = None
 if "active_duty_due_at" not in st.session_state:
@@ -2916,6 +2919,7 @@ if st.session_state.get("nav_category") != "Dashboard":
     weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_idx = now.weekday()
     tomorrow_idx = (today_idx + 1) % 7
+    weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
 
     def _render_off_card(title: str, off_list: list[str]):
         has_off = bool(off_list)
@@ -2954,12 +2958,12 @@ if st.session_state.get("nav_category") != "Dashboard":
     with col_today:
         _render_off_card(
             f"Today ({weekday_names[today_idx]})",
-            WEEKLY_OFF.get(today_idx, []),
+            weekly_off_map.get(today_idx, []),
         )
     with col_tomorrow:
         _render_off_card(
             f"Tomorrow ({weekday_names[tomorrow_idx]})",
-            WEEKLY_OFF.get(tomorrow_idx, []),
+            weekly_off_map.get(tomorrow_idx, []),
         )
 
 
@@ -3274,6 +3278,117 @@ def _weekly_off_str_from_list(lst: list[str]) -> str:
     return ",".join(out)
 
 
+ALLOCATION_RULES_PATH = Path(__file__).with_name("allocation_rules.json")
+
+
+def _config_bool(val: Any, default: bool = False) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return default
+    s = str(val).strip().lower()
+    if s in {"1", "true", "yes", "on"}:
+        return True
+    if s in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+@st.cache_data(ttl=30)
+def _load_allocation_config_cached(path_str: str, mtime: float) -> dict[str, Any]:
+    try:
+        with open(path_str, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _get_allocation_config() -> dict[str, Any]:
+    try:
+        if ALLOCATION_RULES_PATH.exists():
+            mtime = ALLOCATION_RULES_PATH.stat().st_mtime
+            payload = _load_allocation_config_cached(str(ALLOCATION_RULES_PATH), mtime)
+            return payload if isinstance(payload, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
+def _get_allocation_department_config(department: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    dept_upper = str(department).strip().upper()
+    if not dept_upper:
+        return {}
+    cfg = config or _get_allocation_config()
+    if not isinstance(cfg, dict):
+        return {}
+    depts = cfg.get("departments", {})
+    if isinstance(depts, dict):
+        for key, val in depts.items():
+            if str(key).strip().upper() == dept_upper:
+                return val if isinstance(val, dict) else {}
+    return {}
+
+
+def _get_global_allocation_config(config: dict[str, Any] | None = None) -> dict[str, bool]:
+    cfg = config or _get_allocation_config()
+    if not isinstance(cfg, dict):
+        return {
+            "cross_department_fallback": False,
+            "use_profile_role_flags": False,
+            "load_balance": False,
+        }
+    global_cfg = cfg.get("global", {}) if isinstance(cfg.get("global", {}), dict) else {}
+    return {
+        "cross_department_fallback": _config_bool(global_cfg.get("cross_department_fallback", False)),
+        "use_profile_role_flags": _config_bool(global_cfg.get("use_profile_role_flags", False)),
+        "load_balance": _config_bool(global_cfg.get("load_balance", False)),
+    }
+
+
+def _get_config_department_maps(config: dict[str, Any] | None = None) -> dict[str, Any]:
+    cfg = config or _get_allocation_config()
+    doctor_map: dict[str, str] = {}
+    assistant_map: dict[str, str] = {}
+    dept_list: list[str] = []
+    depts = cfg.get("departments") if isinstance(cfg, dict) else None
+    if isinstance(depts, dict) and depts:
+        for dept, data in depts.items():
+            dept_upper = str(dept).strip().upper()
+            if dept_upper and dept_upper not in dept_list:
+                dept_list.append(dept_upper)
+            if not isinstance(data, dict):
+                continue
+            for name in data.get("doctors", []) or []:
+                key = _norm_staff_key(name)
+                if key and key not in doctor_map:
+                    doctor_map[key] = dept_upper
+            for name in data.get("assistants", []) or []:
+                key = _norm_staff_key(name)
+                if key and key not in assistant_map:
+                    assistant_map[key] = dept_upper
+    if not dept_list:
+        for dept, data in DEPARTMENTS.items():
+            dept_upper = str(dept).strip().upper()
+            if dept_upper and dept_upper not in dept_list:
+                dept_list.append(dept_upper)
+            if not isinstance(data, dict):
+                continue
+            for name in data.get("doctors", []) or []:
+                key = _norm_staff_key(name)
+                if key and key not in doctor_map:
+                    doctor_map[key] = dept_upper
+            for name in data.get("assistants", []) or []:
+                key = _norm_staff_key(name)
+                if key and key not in assistant_map:
+                    assistant_map[key] = dept_upper
+    return {
+        "departments": dept_list,
+        "doctors": doctor_map,
+        "assistants": assistant_map,
+    }
+
+
 def _seed_supabase_profiles_if_needed(client) -> None:
     """Ensure all configured assistants/doctors exist in Supabase profiles table."""
     if client is None:
@@ -3306,10 +3421,17 @@ def _seed_supabase_profiles_if_needed(client) -> None:
             "kind": kind,
         })
 
-    for dept, data in DEPARTMENTS.items():
-        for a in data.get("assistants", []):
+    config = _get_allocation_config()
+    dept_source = config.get("departments", {}) if isinstance(config, dict) else {}
+    if not isinstance(dept_source, dict) or not dept_source:
+        dept_source = DEPARTMENTS
+
+    for dept, data in dept_source.items():
+        if not isinstance(data, dict):
+            continue
+        for a in data.get("assistants", []) or []:
             _add(a, dept, PROFILE_ASSISTANT_SHEET)
-        for d in data.get("doctors", []):
+        for d in data.get("doctors", []) or []:
             _add(d, dept, PROFILE_DOCTOR_SHEET)
 
     if to_insert:
@@ -3451,6 +3573,20 @@ def get_department_for_doctor(doctor_name: str) -> str:
     doc_key = _norm_staff_key(doctor_name)
     if not doc_key:
         return ""
+    try:
+        cache = _get_profiles_cache()
+        dept = cache.get("doctor_dept_map", {}).get(doc_key, "")
+        if dept:
+            return dept
+    except Exception:
+        pass
+    try:
+        config_maps = _get_config_department_maps()
+        dept = config_maps.get("doctors", {}).get(doc_key, "")
+        if dept:
+            return dept
+    except Exception:
+        pass
     for dept, config in DEPARTMENTS.items():
         for d in config["doctors"]:
             d_key = _norm_staff_key(d)
@@ -3463,9 +3599,26 @@ def get_department_for_doctor(doctor_name: str) -> str:
 def get_assistants_for_department(department: str) -> list[str]:
     """Get list of assistants for a specific department"""
     dept_upper = str(department).strip().upper()
+    if not dept_upper:
+        return _get_all_assistants()
+    try:
+        cache = _get_profiles_cache()
+        dept_list = cache.get("assistants_by_dept", {}).get(dept_upper, [])
+        if dept_list:
+            return dept_list
+    except Exception:
+        pass
+    try:
+        cfg = _get_allocation_config()
+        dept_cfg = _get_allocation_department_config(dept_upper, cfg)
+        assistants = dept_cfg.get("assistants", []) if isinstance(dept_cfg, dict) else []
+        if assistants:
+            return _unique_preserve_order(assistants)
+    except Exception:
+        pass
     if dept_upper in DEPARTMENTS:
         return DEPARTMENTS[dept_upper]["assistants"]
-    return ALL_ASSISTANTS
+    return _get_all_assistants()
 
 def get_department_for_assistant(assistant_name: str) -> str:
     """Get the department an assistant belongs to"""
@@ -3474,6 +3627,20 @@ def get_department_for_assistant(assistant_name: str) -> str:
     assist_key = _norm_staff_key(assistant_name)
     if not assist_key:
         return ""
+    try:
+        cache = _get_profiles_cache()
+        dept = cache.get("assistant_dept_map", {}).get(assist_key, "")
+        if dept:
+            return dept
+    except Exception:
+        pass
+    try:
+        config_maps = _get_config_department_maps()
+        dept = config_maps.get("assistants", {}).get(assist_key, "")
+        if dept:
+            return dept
+    except Exception:
+        pass
     for dept, config in DEPARTMENTS.items():
         for a in config["assistants"]:
             a_key = _norm_staff_key(a)
@@ -3481,7 +3648,6 @@ def get_department_for_assistant(assistant_name: str) -> str:
                 continue
             if assist_key == a_key or assist_key.endswith(a_key) or a_key.endswith(assist_key):
                 return dept
-    # ANSHIKA is shared between departments
     return "SHARED"
 
 # ================ TIME BLOCKING SYSTEM ================
@@ -3696,7 +3862,8 @@ def is_assistant_available(
     if punch_state != "IN":
         try:
             today_weekday = now.weekday()  # 0=Monday, 6=Sunday
-            off_assistants = WEEKLY_OFF.get(today_weekday, [])
+            weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
+            off_assistants = weekly_off_map.get(today_weekday, [])
             if any(str(a).strip().upper() == assist_upper for a in off_assistants):
                 return False, f"Weekly off on {now.strftime('%A')}"
         except Exception:
@@ -3767,18 +3934,312 @@ def is_assistant_available(
     
     return True, ""
 
+
+def _pref_allows_role(value: Any) -> bool:
+    try:
+        s = str(value or "").strip().lower()
+    except Exception:
+        return True
+    if not s:
+        return True
+    if s in {"no", "n", "false", "0", "off"}:
+        return False
+    if s in {"yes", "y", "true", "1", "on"}:
+        return True
+    return True
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _normalize_name_list(values: Any) -> list[str]:
+    if values is None:
+        return []
+    if isinstance(values, (list, tuple, set)):
+        items = list(values)
+    else:
+        items = [values]
+    return _unique_preserve_order([str(x) for x in items if str(x).strip()])
+
+
+def _collect_time_overrides(time_overrides: Any) -> list[tuple[float, list[str]]]:
+    overrides: list[tuple[float, list[str]]] = []
+    if time_overrides is None:
+        return overrides
+    if isinstance(time_overrides, dict):
+        if "after_hour" in time_overrides:
+            after = _to_float(time_overrides.get("after_hour"))
+            assistants = _normalize_name_list(
+                time_overrides.get("assistant") or time_overrides.get("assistants")
+            )
+            if after is not None and assistants:
+                overrides.append((after, assistants))
+        else:
+            for key, val in time_overrides.items():
+                after = _to_float(key)
+                assistants = _normalize_name_list(val)
+                if after is not None and assistants:
+                    overrides.append((after, assistants))
+    elif isinstance(time_overrides, list):
+        for item in time_overrides:
+            if isinstance(item, dict):
+                after = _to_float(item.get("after_hour"))
+                assistants = _normalize_name_list(item.get("assistant") or item.get("assistants"))
+                if after is not None and assistants:
+                    overrides.append((after, assistants))
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                after = _to_float(item[0])
+                assistants = _normalize_name_list(item[1])
+                if after is not None and assistants:
+                    overrides.append((after, assistants))
+    return overrides
+
+
+def _time_override_candidates(time_overrides: Any, appt_hour: float) -> list[str]:
+    overrides = _collect_time_overrides(time_overrides)
+    matched = [(after, names) for after, names in overrides if appt_hour >= after]
+    matched.sort(key=lambda item: item[0], reverse=True)
+    out: list[str] = []
+    for _, names in matched:
+        out.extend(names)
+    return _unique_preserve_order(out)
+
+
+def _rule_candidates_for_role(
+    role: str,
+    rule: dict[str, Any],
+    doctor: str,
+    appt_hour: float,
+    first_assistant: str,
+) -> list[str]:
+    if not isinstance(rule, dict):
+        return []
+    candidates: list[str] = []
+
+    if role == "SECOND":
+        when_map = rule.get("when_first_is", {})
+        if isinstance(when_map, dict) and first_assistant:
+            first_key = _norm_staff_key(first_assistant)
+            for key, val in when_map.items():
+                if _norm_staff_key(key) == first_key:
+                    candidates.extend(_normalize_name_list(val))
+                    break
+
+    doctor_key = _norm_staff_key(doctor)
+    doc_list = None
+    doctor_overrides = rule.get("doctor_overrides", {})
+    if isinstance(doctor_overrides, dict):
+        for key, val in doctor_overrides.items():
+            if _norm_staff_key(key) == doctor_key:
+                doc_list = val
+                break
+    if doc_list is None:
+        for key, val in rule.items():
+            if key in {"default", "time_override", "when_first_is", "doctor_overrides"}:
+                continue
+            if _norm_staff_key(key) == doctor_key:
+                doc_list = val
+                break
+    if doc_list is not None:
+        candidates.extend(_normalize_name_list(doc_list))
+
+    if "time_override" in rule:
+        candidates.extend(_time_override_candidates(rule.get("time_override"), appt_hour))
+
+    candidates.extend(_normalize_name_list(rule.get("default", [])))
+    return _unique_preserve_order(candidates)
+
+
+def _assistant_loads(df_schedule: pd.DataFrame, exclude_row_id: str | None = None) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    if df_schedule is None or df_schedule.empty:
+        return counts
+    for _, row in df_schedule.iterrows():
+        if exclude_row_id and str(row.get("REMINDER_ROW_ID", "")).strip() == str(exclude_row_id).strip():
+            continue
+        for col in ["FIRST", "SECOND", "Third"]:
+            name = str(row.get(col, "")).strip().upper()
+            if not name:
+                continue
+            counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def _order_by_load(names: list[str], load_map: dict[str, int]) -> list[str]:
+    if not names:
+        return names
+    order = {name: idx for idx, name in enumerate(names)}
+    return sorted(names, key=lambda n: (load_map.get(n, 0), order.get(n, 0)))
+
+
+def _select_assistant_from_candidates(
+    role: str,
+    candidates: list[str],
+    available_map: dict[str, str],
+    available_order: list[str],
+    already: set[str],
+    pref_map: dict[str, dict[str, Any]],
+    use_role_flags: bool,
+    load_map: dict[str, int],
+    load_balance: bool,
+) -> str:
+    filtered: list[str] = []
+    for name in candidates:
+        key = str(name).strip().upper()
+        if not key or key in already:
+            continue
+        if key not in available_map:
+            continue
+        if use_role_flags:
+            pref_val = pref_map.get(_norm_staff_key(key), {}).get(role, "")
+            if not _pref_allows_role(pref_val):
+                continue
+        filtered.append(key)
+    if filtered and load_balance:
+        filtered = _order_by_load(filtered, load_map)
+    if filtered:
+        return available_map[filtered[0]]
+
+    fallback: list[str] = []
+    for name in available_order:
+        key = str(name).strip().upper()
+        if not key or key in already:
+            continue
+        if use_role_flags:
+            pref_val = pref_map.get(_norm_staff_key(key), {}).get(role, "")
+            if not _pref_allows_role(pref_val):
+                continue
+        if key in available_map:
+            fallback.append(key)
+    if fallback and load_balance:
+        fallback = _order_by_load(fallback, load_map)
+    if fallback:
+        return available_map[fallback[0]]
+    return ""
+
+
+def _allocate_assistants_for_slot(
+    doctor: str,
+    department: str,
+    in_time: Any,
+    out_time: Any,
+    df_schedule: pd.DataFrame,
+    exclude_row_id: str | None = None,
+    current_assignments: dict[str, Any] | None = None,
+    only_fill_empty: bool = False,
+) -> dict[str, str]:
+    result = {"FIRST": "", "SECOND": "", "Third": ""}
+    if current_assignments:
+        for role in result:
+            val = current_assignments.get(role, "")
+            result[role] = "" if _is_blank_cell(val) else str(val).strip()
+
+    if not doctor or not department:
+        return result
+
+    in_obj = _coerce_to_time_obj(in_time)
+    out_obj = _coerce_to_time_obj(out_time)
+    if in_obj is None or out_obj is None:
+        return result
+
+    appt_hour = in_obj.hour + in_obj.minute / 60.0
+    config = _get_allocation_config()
+    global_cfg = _get_global_allocation_config(config)
+    dept_cfg = _get_allocation_department_config(department, config)
+    rules = dept_cfg.get("allocation_rules", {}) if isinstance(dept_cfg, dict) else {}
+
+    dept_assistants = get_assistants_for_department(department)
+    all_assistants = _get_all_assistants()
+
+    avail_dept = get_available_assistants(
+        department,
+        in_time,
+        out_time,
+        df_schedule,
+        exclude_row_id,
+        assistants_override=dept_assistants,
+    )
+    available_dept_order = [a["name"] for a in avail_dept if a.get("available")]
+    available_dept_map = {name.upper(): name for name in available_dept_order}
+
+    if global_cfg.get("cross_department_fallback", False):
+        avail_all = get_available_assistants(
+            department,
+            in_time,
+            out_time,
+            df_schedule,
+            exclude_row_id,
+            assistants_override=all_assistants,
+        )
+        available_all_order = [a["name"] for a in avail_all if a.get("available")]
+        available_all_map = {name.upper(): name for name in available_all_order}
+    else:
+        available_all_order = available_dept_order
+        available_all_map = available_dept_map
+
+    cache = _get_profiles_cache()
+    pref_map = cache.get("assistant_prefs", {})
+    load_map = _assistant_loads(df_schedule, exclude_row_id) if global_cfg.get("load_balance", False) else {}
+
+    already = {
+        str(x).strip().upper()
+        for x in [result["FIRST"], result["SECOND"], result["Third"]]
+        if x
+    }
+
+    for role in ["FIRST", "SECOND", "Third"]:
+        if only_fill_empty and role in result and result[role]:
+            continue
+        rule = rules.get(role, {}) if isinstance(rules, dict) else {}
+        candidates = _rule_candidates_for_role(role, rule, doctor, appt_hour, result.get("FIRST", ""))
+        chosen = _select_assistant_from_candidates(
+            role,
+            candidates,
+            available_dept_map,
+            available_dept_order,
+            already,
+            pref_map,
+            global_cfg.get("use_profile_role_flags", False),
+            load_map,
+            global_cfg.get("load_balance", False),
+        )
+        if not chosen and global_cfg.get("cross_department_fallback", False):
+            chosen = _select_assistant_from_candidates(
+                role,
+                candidates,
+                available_all_map,
+                available_all_order,
+                already,
+                pref_map,
+                global_cfg.get("use_profile_role_flags", False),
+                load_map,
+                global_cfg.get("load_balance", False),
+            )
+        if chosen:
+            result[role] = chosen
+            already.add(chosen.strip().upper())
+    return result
+
 def get_available_assistants(
     department: str,
     check_in_time: Any,
     check_out_time: Any,
     df_schedule: pd.DataFrame,
     exclude_row_id: str | None = None,
+    assistants_override: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Get list of available assistants for a department at a specific time.
     Returns list of dicts with assistant name and availability status.
     """
-    assistants = get_assistants_for_department(department)
+    if assistants_override is not None:
+        assistants = _unique_preserve_order(assistants_override)
+    else:
+        assistants = get_assistants_for_department(department)
     available = []
     
     for assistant in assistants:
@@ -3802,24 +4263,19 @@ def auto_allocate_assistants(
     Automatically allocate assistants based on department and availability.
     Returns dict with FIRST, SECOND, Third assignments.
     """
-    result = {"FIRST": "", "SECOND": "", "Third": ""}
-    
     department = get_department_for_doctor(doctor)
     if not department:
-        return result
-    
-    available_list = get_available_assistants(department, in_time, out_time, df_schedule, exclude_row_id)
-    
-    # Filter to only available assistants
-    free_assistants = [a["name"] for a in available_list if a["available"]]
-    
-    # Assign up to 3 assistants
-    roles = ["FIRST", "SECOND", "Third"]
-    for i, role in enumerate(roles):
-        if i < len(free_assistants):
-            result[role] = free_assistants[i]
-    
-    return result
+        return {"FIRST": "", "SECOND": "", "Third": ""}
+    return _allocate_assistants_for_slot(
+        doctor,
+        department,
+        in_time,
+        out_time,
+        df_schedule,
+        exclude_row_id=exclude_row_id,
+        current_assignments=None,
+        only_fill_empty=False,
+    )
 
 
 def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, only_fill_empty: bool = True) -> bool:
@@ -3847,94 +4303,33 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
         current_second = row.get("SECOND", "")
         current_third = row.get("Third", "")
 
-        # If all 3 are truly filled, nothing to do.
         if only_fill_empty and (not _is_blank_cell(current_first)) and (not _is_blank_cell(current_second)) and (not _is_blank_cell(current_third)):
             return False
 
-        already = {
-            str(x).strip().upper()
-            for x in [current_first, current_second, current_third]
-            if not _is_blank_cell(x)
-        }
-
-        # Get appointment time in hours (decimal format for comparison)
-        in_time_obj = _coerce_to_time_obj(in_time_val)
-        appt_hour = in_time_obj.hour + in_time_obj.minute / 60.0 if in_time_obj else 0
-
-        # Compute free assistants for this time window, excluding this same row.
-        avail = get_available_assistants(department, in_time_val, out_time_val, df_schedule, exclude_row_id=row_id)
-        free_assistants = {a["name"].upper(): a["name"] for a in avail if a.get("available")}
+        allocations = _allocate_assistants_for_slot(
+            doctor,
+            department,
+            in_time_val,
+            out_time_val,
+            df_schedule,
+            exclude_row_id=row_id,
+            current_assignments={
+                "FIRST": current_first,
+                "SECOND": current_second,
+                "Third": current_third,
+            },
+            only_fill_empty=only_fill_empty,
+        )
 
         changed = False
-        
-        # Get allocation rules for this department
-        dept_config = DEPARTMENTS.get(department, {})
-        allocation_rules = dept_config.get("allocation_rules", {})
-
-        roles = [("FIRST", current_first), ("SECOND", current_second), ("Third", current_third)]
-        for role, current_val in roles:
-            if only_fill_empty and (not _is_blank_cell(current_val)):
+        for role, current_val in [("FIRST", current_first), ("SECOND", current_second), ("Third", current_third)]:
+            new_val = allocations.get(role, "")
+            if _is_blank_cell(new_val):
                 continue
-            
-            # Get preferred assistants for this role based on doctor, time, and other roles
-            preferred_assistants = []
-            
-            if role in allocation_rules:
-                rule = allocation_rules[role]
-                
-                # Try default rules first (unless there are conditional rules for SECOND)
-                default_list = rule.get("default", [])
-                for assistant_name in default_list:
-                    if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
-                        preferred_assistants.append(free_assistants[assistant_name.upper()])
-                
-                # If we found from default, use them
-                if preferred_assistants:
-                    pass  # We have preferred assistants from default rules
-                else:
-                    # Only use doctor-specific rules if we're short of assistants (fallback)
-                    doctor_assistant_list = rule.get(doctor, [])
-                    for assistant_name in doctor_assistant_list:
-                        if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
-                            preferred_assistants.append(free_assistants[assistant_name.upper()])
-                    
-                    # If still no preferred assistants and conditional rules exist, try those
-                    if not preferred_assistants and "when_first_is" in rule and role == "SECOND":
-                        first_assistant = df_schedule.iloc[row_index, df_schedule.columns.get_loc("FIRST")] if "FIRST" in df_schedule.columns else ""
-                        first_assistant = str(first_assistant).strip()
-                        if first_assistant and first_assistant in rule["when_first_is"]:
-                            conditional_list = rule["when_first_is"][first_assistant]
-                            for assistant_name in conditional_list:
-                                if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
-                                    preferred_assistants.append(free_assistants[assistant_name.upper()])
-                    
-                    # Last resort: check time overrides (for FIRST role)
-                    if not preferred_assistants and role == "FIRST" and "time_override" in rule:
-                        time_overrides = rule["time_override"]
-                        if isinstance(time_overrides, list):
-                            for item in time_overrides:
-                                if isinstance(item, tuple):
-                                    start_hour, assistant_name = item
-                                    if appt_hour >= start_hour:
-                                        if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
-                                            preferred_assistants.append(free_assistants[assistant_name.upper()])
-
-            # If we have preferred assistants from rules, use the first available
-            if preferred_assistants:
-                chosen = preferred_assistants[0]
+            if str(new_val).strip() != str(current_val).strip():
                 if role in df_schedule.columns:
-                    df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = chosen
-                already.add(chosen.upper())
+                    df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = new_val
                 changed = True
-            else:
-                # Fallback: use any free assistant not already assigned
-                for free_name in free_assistants.values():
-                    if free_name.upper() not in already:
-                        if role in df_schedule.columns:
-                            df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = free_name
-                        already.add(free_name.upper())
-                        changed = True
-                        break
 
         return changed
     except Exception:
@@ -3953,7 +4348,7 @@ def get_current_assistant_status(
     if df_schedule is None:
         df_schedule = pd.DataFrame()
     if assistants is None:
-        assistants = ALL_ASSISTANTS
+        assistants = _get_all_assistants()
     if punch_map is None:
         try:
             punch_map = _get_today_punch_map()
@@ -3968,9 +4363,10 @@ def get_current_assistant_status(
         if isinstance(weekday_name_list, list) and 0 <= today_weekday < len(weekday_name_list)
         else now.strftime("%A")
     )
+    weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
     weekly_off_set = {
         str(name).strip().upper()
-        for name in WEEKLY_OFF.get(today_weekday, [])
+        for name in weekly_off_map.get(today_weekday, [])
         if str(name).strip()
     }
     
@@ -4169,9 +4565,10 @@ with st.sidebar:
     today_weekday = now.weekday()  # 0=Monday, 6=Sunday
     weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_name = weekday_names[today_weekday]
+    weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
     
     # TODAY'S OFF
-    today_off = WEEKLY_OFF.get(today_weekday, [])
+    today_off = weekly_off_map.get(today_weekday, [])
     st.markdown("**Today:**")
     if today_off:
         off_text = ", ".join(today_off)
@@ -4183,7 +4580,7 @@ with st.sidebar:
     # TOMORROW'S OFF
     tomorrow_weekday = (today_weekday + 1) % 7  # Next day, wrap around if Sunday
     tomorrow_name = weekday_names[tomorrow_weekday]
-    tomorrow_off = WEEKLY_OFF.get(tomorrow_weekday, [])
+    tomorrow_off = weekly_off_map.get(tomorrow_weekday, [])
     
     st.markdown("**Tomorrow:**")
     if tomorrow_off:
@@ -4442,6 +4839,228 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
         return False
 
 
+@st.cache_data(ttl=30)
+def _load_profiles_cached(sheet_name: str, cache_bust: int) -> pd.DataFrame:
+    return load_profiles(sheet_name)
+
+
+def _is_active_status(value: Any) -> bool:
+    try:
+        s = str(value or "").strip().upper()
+    except Exception:
+        return True
+    return (not s) or s == "ACTIVE"
+
+
+def _get_profiles_cache() -> dict[str, Any]:
+    cache_bust = int(st.session_state.get("profiles_cache_bust", 0))
+    cached = st.session_state.get("profiles_cache", {})
+    if isinstance(cached, dict) and cached.get("cache_bust") == cache_bust:
+        return cached
+
+    assistants_df = _load_profiles_cached(PROFILE_ASSISTANT_SHEET, cache_bust)
+    doctors_df = _load_profiles_cached(PROFILE_DOCTOR_SHEET, cache_bust)
+
+    if assistants_df is None:
+        assistants_df = _ensure_profile_df(pd.DataFrame())
+    if doctors_df is None:
+        doctors_df = _ensure_profile_df(pd.DataFrame())
+
+    assistants_df = _ensure_profile_df(assistants_df)
+    doctors_df = _ensure_profile_df(doctors_df)
+
+    config = _get_allocation_config()
+    config_maps = _get_config_department_maps(config)
+    config_doctor_map = config_maps.get("doctors", {})
+    config_assistant_map = config_maps.get("assistants", {})
+
+    assistants_list: list[str] = []
+    assistant_dept_map: dict[str, str] = {}
+    assistant_pref_map: dict[str, dict[str, Any]] = {}
+    weekly_off_map: dict[int, list[str]] = {i: [] for i in range(7)}
+
+    for _, row in assistants_df.iterrows():
+        name = str(row.get("name", "")).strip().upper()
+        if not name:
+            continue
+        if "status" in assistants_df.columns and not _is_active_status(row.get("status", "")):
+            continue
+        assistants_list.append(name)
+        key = _norm_staff_key(name)
+        dept = str(row.get("department", "")).strip().upper()
+        if not dept:
+            dept = config_assistant_map.get(key, "")
+        if not dept:
+            dept = "SHARED"
+        assistant_dept_map[key] = dept
+        assistant_pref_map[key] = {
+            "FIRST": row.get("pref_first", ""),
+            "SECOND": row.get("pref_second", ""),
+            "Third": row.get("pref_third", ""),
+        }
+        try:
+            for idx in _parse_weekly_off_days(row.get("weekly_off", "")):
+                weekly_off_map[idx].append(name)
+        except Exception:
+            pass
+
+    doctors_list: list[str] = []
+    doctor_dept_map: dict[str, str] = {}
+    for _, row in doctors_df.iterrows():
+        name = str(row.get("name", "")).strip().upper()
+        if not name:
+            continue
+        if "status" in doctors_df.columns and not _is_active_status(row.get("status", "")):
+            continue
+        doctors_list.append(name)
+        key = _norm_staff_key(name)
+        dept = str(row.get("department", "")).strip().upper()
+        if not dept:
+            dept = config_doctor_map.get(key, "")
+        if dept:
+            doctor_dept_map[key] = dept
+
+    assistants_list = _unique_preserve_order(assistants_list)
+    doctors_list = _unique_preserve_order(doctors_list)
+
+    dept_set = set(config_maps.get("departments", []) or [])
+    dept_set.update([d for d in assistant_dept_map.values() if d])
+    dept_set.update([d for d in doctor_dept_map.values() if d])
+    if not dept_set:
+        dept_set.update([str(d).strip().upper() for d in DEPARTMENTS.keys()])
+
+    def _build_config_lists(key: str) -> dict[str, list[str]]:
+        out: dict[str, list[str]] = {}
+        depts = config.get("departments", {}) if isinstance(config, dict) else {}
+        if isinstance(depts, dict):
+            for dept_name, data in depts.items():
+                if not isinstance(data, dict):
+                    continue
+                dept_upper = str(dept_name).strip().upper()
+                if not dept_upper:
+                    continue
+                raw_list = data.get(key, []) or []
+                out[dept_upper] = _unique_preserve_order(raw_list)
+        return out
+
+    config_assistant_lists = _build_config_lists("assistants")
+    config_doctor_lists = _build_config_lists("doctors")
+
+    assistants_by_dept: dict[str, list[str]] = {dept: [] for dept in dept_set}
+    if config_assistant_lists:
+        for dept, ordered in config_assistant_lists.items():
+            for name in ordered:
+                if name in assistants_list and name not in assistants_by_dept.setdefault(dept, []):
+                    assistants_by_dept[dept].append(name)
+    for name in assistants_list:
+        dept = assistant_dept_map.get(_norm_staff_key(name), "")
+        if not dept:
+            continue
+        if name not in assistants_by_dept.setdefault(dept, []):
+            assistants_by_dept[dept].append(name)
+
+    doctors_by_dept: dict[str, list[str]] = {dept: [] for dept in dept_set}
+    if config_doctor_lists:
+        for dept, ordered in config_doctor_lists.items():
+            for name in ordered:
+                if name in doctors_list and name not in doctors_by_dept.setdefault(dept, []):
+                    doctors_by_dept[dept].append(name)
+    for name in doctors_list:
+        dept = doctor_dept_map.get(_norm_staff_key(name), "")
+        if not dept:
+            continue
+        if name not in doctors_by_dept.setdefault(dept, []):
+            doctors_by_dept[dept].append(name)
+
+    global ALL_ASSISTANTS, ALL_DOCTORS, WEEKLY_OFF
+    if assistants_list:
+        ALL_ASSISTANTS = assistants_list
+    if doctors_list:
+        ALL_DOCTORS = doctors_list
+    if assistants_list:
+        WEEKLY_OFF = weekly_off_map
+
+    cache = {
+        "cache_bust": cache_bust,
+        "assistants": assistants_list,
+        "doctors": doctors_list,
+        "assistant_dept_map": assistant_dept_map,
+        "doctor_dept_map": doctor_dept_map,
+        "assistant_prefs": assistant_pref_map,
+        "weekly_off_map": weekly_off_map,
+        "departments": sorted([d for d in dept_set if d]),
+        "assistants_by_dept": assistants_by_dept,
+        "doctors_by_dept": doctors_by_dept,
+    }
+    st.session_state.profiles_cache = cache
+    return cache
+
+
+def _get_known_departments() -> list[str]:
+    try:
+        cache = _get_profiles_cache()
+        depts = cache.get("departments", [])
+        if depts:
+            return depts
+    except Exception:
+        pass
+    config = _get_allocation_config()
+    dept_list = []
+    depts = config.get("departments", {}) if isinstance(config, dict) else {}
+    if isinstance(depts, dict):
+        for dept in depts.keys():
+            dept_upper = str(dept).strip().upper()
+            if dept_upper and dept_upper not in dept_list:
+                dept_list.append(dept_upper)
+    if dept_list:
+        return sorted(dept_list)
+    return sorted([str(d).strip().upper() for d in DEPARTMENTS.keys() if str(d).strip()])
+
+
+def _get_all_doctors() -> list[str]:
+    try:
+        cache = _get_profiles_cache()
+        doctors = cache.get("doctors", [])
+        if doctors:
+            return doctors
+    except Exception:
+        pass
+    config = _get_allocation_config()
+    out: list[str] = []
+    depts = config.get("departments", {}) if isinstance(config, dict) else {}
+    if isinstance(depts, dict):
+        for data in depts.values():
+            if not isinstance(data, dict):
+                continue
+            out.extend(data.get("doctors", []) or [])
+    out = _unique_preserve_order(out)
+    if out:
+        return out
+    return ALL_DOCTORS
+
+
+def _get_all_assistants() -> list[str]:
+    try:
+        cache = _get_profiles_cache()
+        assistants = cache.get("assistants", [])
+        if assistants:
+            return assistants
+    except Exception:
+        pass
+    config = _get_allocation_config()
+    out: list[str] = []
+    depts = config.get("departments", {}) if isinstance(config, dict) else {}
+    if isinstance(depts, dict):
+        for data in depts.values():
+            if not isinstance(data, dict):
+                continue
+            out.extend(data.get("assistants", []) or [])
+    out = _unique_preserve_order(out)
+    if out:
+        return out
+    return ALL_ASSISTANTS
+
+
 def _restore_profile_hidden_columns(
     edited_df: pd.DataFrame,
     base_df: pd.DataFrame,
@@ -4512,7 +5131,7 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
             return
     df_profiles = load_profiles(sheet_name)
     status_options = ["ACTIVE", "INACTIVE"]
-    dept_options = [""] + sorted(DEPARTMENTS.keys())
+    dept_options = [""] + _get_known_departments()
     hidden_cols = ["id", "created_at", "updated_at", "created_by", "updated_by"]
     is_editor = user_role in ("admin", "editor")
 
@@ -4580,6 +5199,7 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                     if not ok:
                         st.error(f"Failed to save {entity_label}.")
                         return
+                    st.session_state.profiles_cache_bust += 1
                     if USE_SUPABASE and supabase_client is not None:
                         st.session_state.supabase_staff_refreshed = False
                     st.success(f"{entity_label} added.")
@@ -4689,6 +5309,7 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
                         return
                 if USE_SUPABASE and supabase_client is not None:
                     st.session_state.supabase_staff_refreshed = False
+                st.session_state.profiles_cache_bust += 1
                 st.success(f"Deleted {len(to_delete)} {entity_label} profile(s).")
                 st.rerun()
 
@@ -4731,6 +5352,7 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         if not ok:
             st.error("Failed to save profile changes.")
             return
+        st.session_state.profiles_cache_bust += 1
         if USE_SUPABASE and supabase_client is not None:
             st.session_state.supabase_staff_refreshed = False
         st.success("Profiles updated.")
@@ -5915,12 +6537,12 @@ def _collect_unique_upper(df_any: pd.DataFrame, col_name: str) -> list[str]:
 
 # Dropdown options: keep configured lists + include any existing values from data
 _extra_doctors = _collect_unique_upper(df_raw, "DR.")
-DOCTOR_OPTIONS = _unique_preserve_order(ALL_DOCTORS + _extra_doctors)
+DOCTOR_OPTIONS = _unique_preserve_order(_get_all_doctors() + _extra_doctors)
 
 _extra_assistants: list[str] = []
 for _c in ["FIRST", "SECOND", "Third", "CASE PAPER"]:
     _extra_assistants.extend(_collect_unique_upper(df_raw, _c))
-ASSISTANT_OPTIONS = _unique_preserve_order(ALL_ASSISTANTS + _extra_assistants)
+ASSISTANT_OPTIONS = _unique_preserve_order(_get_all_assistants() + _extra_assistants)
 
 # Status options: configured set + any existing values in data
 _extra_statuses = _collect_unique_upper(df_raw, "STATUS")
@@ -6341,7 +6963,7 @@ with st.sidebar:
     with st.expander("➕ Add Time Block", expanded=False):
         block_assistant = st.selectbox(
             "Assistant",
-            options=[""] + ALL_ASSISTANTS,
+            options=[""] + _get_all_assistants(),
             key="block_assistant_select",
         )
 
@@ -8364,7 +8986,7 @@ if category == "Assistants" and assist_view == "Availability":
     availability_df = df if 'df' in locals() else df_raw if 'df_raw' in locals() else pd.DataFrame()
     assistants_for_view = get_assistants_list(availability_df)
     if not assistants_for_view:
-        assistants_for_view = ALL_ASSISTANTS
+        assistants_for_view = _get_all_assistants()
     punch_map = _get_today_punch_map()
     # Get current status of all assistants
     assistant_status = get_current_assistant_status(
@@ -8481,7 +9103,7 @@ if category == "Assistants" and assist_view == "Availability":
     with dept_tabs[1]:
         st.markdown("#### PROSTHO Department Assistants")
         prostho_entries: list[dict] = []
-        for assistant in DEPARTMENTS["PROSTHO"]["assistants"]:
+        for assistant in get_assistants_for_department("PROSTHO"):
             entry = assistant_lookup.get(assistant.upper())
             if entry is None:
                 fallback_info = {
@@ -8510,7 +9132,7 @@ if category == "Assistants" and assist_view == "Availability":
     with dept_tabs[2]:
         st.markdown("#### ENDO Department Assistants")
         endo_entries: list[dict] = []
-        for assistant in DEPARTMENTS["ENDO"]["assistants"]:
+        for assistant in get_assistants_for_department("ENDO"):
             entry = assistant_lookup.get(assistant.upper())
             if entry is None:
                 fallback_info = {
@@ -8545,7 +9167,7 @@ if category == "Assistants" and assist_view == "Auto Allocation":
         with col_doc:
             alloc_doctor = st.selectbox(
                 "Select Doctor",
-                options=[""] + ALL_DOCTORS,
+                options=[""] + _get_all_doctors(),
                 key="alloc_doctor_select"
             )
         
@@ -8592,7 +9214,7 @@ if category == "Assistants" and assist_view == "Workload":
     
     # Count appointments per assistant
     assistant_workload = {}
-    for assistant in ALL_ASSISTANTS:
+    for assistant in _get_all_assistants():
         schedule = get_assistant_schedule(assistant.upper(), df)
         assistant_workload[assistant] = len(schedule)
     
