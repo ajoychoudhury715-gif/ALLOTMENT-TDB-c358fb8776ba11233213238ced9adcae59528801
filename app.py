@@ -1624,7 +1624,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 flag_cols = st.columns(2, gap="small")
                 with flag_cols[0]:
                     case_paper_input = st.checkbox(
-                        "Case Paper",
+                        "QTRAQ",
                         key=f"compact_popup_case_{row_key}",
                     )
                 with flag_cols[1]:
@@ -1760,7 +1760,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 st.warning("Unable to locate row for update.")
                 return
             if "CASE PAPER" not in df_updated.columns:
-                st.warning("No CASE PAPER column to update.")
+                st.warning("No QTRAQ column to update.")
                 return
             df_updated.at[idx, "CASE PAPER"] = "Yes" if case_checked else ""
 
@@ -1853,7 +1853,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 with case_cols[0]:
                                     case_active = _truthy(row.get("CASE PAPER"))
                                     case_checked = st.checkbox(
-                                        "Case Paper",
+                                        "QTRAQ",
                                         value=case_active,
                                         key=f"card_case_{row_key}",
                                     )
@@ -1942,7 +1942,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
                                 st.markdown(f"**Status:** {status}")
                                 if show_case:
-                                    st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
+                                    st.markdown(f"**QTRAQ:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
 
             if st.session_state.get("compact_edit_open"):
                 _render_compact_edit_dialog()
@@ -8388,7 +8388,7 @@ if category == "Scheduling":
             flag_cols = st.columns(3, gap="small")
             with flag_cols[0]:
                 case_paper_input = st.checkbox(
-                    "Case Paper",
+                    "QTRAQ",
                     key=f"full_popup_case_{row_key}",
                 )
             with flag_cols[1]:
@@ -8537,7 +8537,7 @@ if category == "Scheduling":
             st.warning("Unable to locate row for update.")
             return
         if "CASE PAPER" not in df_updated.columns:
-            st.warning("No CASE PAPER column to update.")
+            st.warning("No QTRAQ column to update.")
             return
         df_updated.at[idx, "CASE PAPER"] = "Yes" if case_checked else ""
 
@@ -8586,7 +8586,7 @@ if category == "Scheduling":
                     required=False,
                 ),
                 "CASE PAPER": st.column_config.SelectboxColumn(
-                    label="CASE PAPER",
+                    label="QTRAQ",
                     options=ASSISTANT_OPTIONS,
                     required=False,
                 ),
@@ -8681,7 +8681,7 @@ if category == "Scheduling":
                                 case_cols = st.columns([1, 4], gap="small")
                                 with case_cols[0]:
                                     case_active = _truthy(row.get("CASE PAPER"))
-                                    case_checked = st.checkbox("Case Paper", value=case_active, key=f"full_card_case_{row_key}_{start}")
+                                    case_checked = st.checkbox("QTRAQ", value=case_active, key=f"full_card_case_{row_key}_{start}")
                                     if case_checked != case_active:
                                         _update_row_case_paper(row_id, patient, in_time, case_checked)
                                 with case_cols[1]:
@@ -8716,7 +8716,7 @@ if category == "Scheduling":
                                 st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
                                 st.markdown(f"**Status:** {status}")
                                 if show_case:
-                                    st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
+                                    st.markdown(f"**QTRAQ:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
             if st.session_state.get("full_edit_open"):
                 _render_full_edit_dialog()
     # ================ Manual save
@@ -9019,7 +9019,7 @@ if category == "Scheduling":
                                 required=False
                             ),
                             "CASE PAPER": st.column_config.SelectboxColumn(
-                                label="CASE PAPER",
+                                label="QTRAQ",
                                 options=ASSISTANT_OPTIONS,
                                 required=False
                             ),
