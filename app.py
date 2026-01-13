@@ -1152,10 +1152,10 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .card-shell-marker {display:none;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14); overflow:hidden;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:0 18px 18px 18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center; justify-content:flex-start;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stButton"] > button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 34px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 80px; padding: 0 10px !important; font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 32px !important; border-radius: 10px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 84px; padding: 0 10px !important; font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button *,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] * {white-space: nowrap;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: wrap; row-gap: 0.5rem;}
@@ -1864,7 +1864,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                     if case_checked != case_active:
                                         _update_row_case_paper(row_id, patient, in_time, case_checked)
                                 with case_cols[1]:
-                                    action_cols = st.columns([1.5, 1.1, 1.5], gap="small")
+                                    action_cols = st.columns([1.4, 1.0, 1.4], gap="small")
                                     with action_cols[0]:
                                         st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                         if st.button("✓ Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
@@ -1902,7 +1902,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                         if st.button("✕ Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
                                             _update_row_status(row_id, patient, in_time, "CANCELLED")
                             else:
-                                action_cols = st.columns([1.5, 1.1, 1.5], gap="small")
+                                action_cols = st.columns([1.4, 1.0, 1.4], gap="small")
                                 with action_cols[0]:
                                     st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                     if st.button("✓ Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
@@ -8065,10 +8065,10 @@ if category == "Scheduling":
         .card-shell-marker {display:none;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14); overflow:hidden;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:0 18px 18px 18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center; justify-content:flex-start;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stButton"] > button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 34px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 80px; padding: 0 10px !important; font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 32px !important; border-radius: 10px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 84px; padding: 0 10px !important; font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button *,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] * {white-space: nowrap;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: wrap; row-gap: 0.5rem;}
@@ -8693,7 +8693,7 @@ if category == "Scheduling":
                                     if case_checked != case_active:
                                         _update_row_case_paper(row_id, patient, in_time, case_checked)
                                 with case_cols[1]:
-                                    action_cols = st.columns([1.5, 1.1, 1.5], gap="small")
+                                    action_cols = st.columns([1.4, 1.0, 1.4], gap="small")
                                     with action_cols[0]:
                                         st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                         if st.button("✓ Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
@@ -8706,7 +8706,7 @@ if category == "Scheduling":
                                         if st.button("✕ Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
                                             _update_row_status(row_id, patient, in_time, "CANCELLED")
                             else:
-                                action_cols = st.columns([1.5, 1.1, 1.5], gap="small")
+                                action_cols = st.columns([1.4, 1.0, 1.4], gap="small")
                                 with action_cols[0]:
                                     st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                     if st.button("✓ Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
