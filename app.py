@@ -1155,9 +1155,11 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stButton"] > button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 38px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; min-width: 88px; padding: 0 12px !important; font-size: 12px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 38px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 88px; padding: 0 12px !important; font-size: 12px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button *,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] * {white-space: nowrap;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: wrap; row-gap: 0.5rem;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) > div {min-width: 110px; flex: 1 1 110px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px; font-weight: 600; color:#3b322a; white-space: nowrap;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
@@ -8062,9 +8064,11 @@ if category == "Scheduling":
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stButton"] > button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 38px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; min-width: 88px; padding: 0 12px !important; font-size: 12px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 38px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 88px; padding: 0 12px !important; font-size: 12px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button *,
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] * {white-space: nowrap;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: wrap; row-gap: 0.5rem;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) > div {min-width: 110px; flex: 1 1 110px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px; font-weight: 600; color:#3b322a; white-space: nowrap;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
