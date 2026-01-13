@@ -1152,6 +1152,10 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .card-shell-marker {display:none;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; box-shadow:0 10px 20px rgba(20,17,15,0.08);}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:14px; display:flex; flex-direction:column; gap:10px; min-height:220px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 36px !important; border-radius: 12px !important; font-weight: 700;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-baseweb="select"] > div {min-height: 38px !important; border-radius: 12px !important;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px;}
         .card-head {display:flex; align-items:center; gap:10px;}
         .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
         .card-name {font-size:15px; font-weight:800; color:#14110f;}
@@ -1171,6 +1175,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .status-pill.arrived {background:#7e7f83; color:#f3f3f4;}
         .status-pill.completed {background:#14110f; color:#f3f3f4;}
         .status-pill.cancelled {background:#7e7f83; color:#f3f3f4;}
+        .card-divider {height:1px; background:#e3d8cd; margin: 6px 0;}
+        .card-quick-title {font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color:#7e7f83;}
         .card-expand {font-size:12px; color:#7e7f83; border-top:1px solid #d9c5b2; padding-top:8px; display:flex; align-items:center; justify-content:space-between;}
         </style>
         """,
@@ -1761,7 +1767,6 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             st.data_editor(df_table, use_container_width=True, height=280, key="compact_schedule_editor")
         else:
             show_case = "CASE PAPER" in df_display.columns
-            show_suction = "SUCTION" in df_display.columns
             show_status = ("STATUS" in df_display.columns) or ("Status" in df_display.columns)
             cards_per_row = 4
             card_rows = [
@@ -1816,18 +1821,12 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                             )
 
                             if not (show_case or show_status):
-                                flag_html = ""
-                                if show_suction:
-                                    suction_active = _truthy(row.get("SUCTION"))
-                                    flag_html += f"<span class='flag{' active' if suction_active else ''}'>Suction</span>"
-                                status_html = ""
-                                if not show_status:
-                                    status_html = f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>"
+                                status_html = f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>"
                                 st.markdown(
                                     _normalize_html(
                                         f"""
                                         <div class="card-footer">
-                                            <div>{flag_html}</div>
+                                            <div></div>
                                             {status_html}
                                         </div>
                                         """
@@ -1836,11 +1835,9 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 )
 
                             if show_case or show_status:
-                                columns_count = (
-                                    (1 if show_case else 0)
-                                    + (1 if show_status else 0)
-                                    + (1 if show_suction else 0)
-                                )
+                                st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
+                                st.markdown("<div class='card-quick-title'>Quick actions</div>", unsafe_allow_html=True)
+                                columns_count = (1 if show_case else 0) + (1 if show_status else 0)
                                 inline_cols = st.columns(columns_count, gap="small")
                                 col_idx = 0
                                 if show_case:
@@ -1865,15 +1862,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                         )
                                         if status_value != status:
                                             _update_row_status(row_id, patient, in_time, status_value)
-                                    col_idx += 1
-                                if show_suction:
-                                    suction_active = _truthy(row.get("SUCTION"))
-                                    with inline_cols[col_idx]:
-                                        st.markdown(
-                                            f"<span class='flag{' active' if suction_active else ''}'>Suction</span>",
-                                            unsafe_allow_html=True,
-                                        )
 
+                            st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
                             action_cols = st.columns(3, gap="small")
                             with action_cols[0]:
                                 st.button(
@@ -1916,8 +1906,6 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 st.markdown(f"**Status:** {status}")
                                 if show_case:
                                     st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
-                                if show_suction:
-                                    st.markdown(f"**Suction:** {'Yes' if _truthy(row.get('SUCTION')) else 'No'}")
 
             if st.session_state.get("compact_edit_open"):
                 _render_compact_edit_dialog()
@@ -8036,6 +8024,10 @@ if category == "Scheduling":
         .card-shell-marker {display:none;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; box-shadow:0 10px 20px rgba(20,17,15,0.08);}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:14px; display:flex; flex-direction:column; gap:10px; min-height:220px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 36px !important; border-radius: 12px !important; font-weight: 700;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-baseweb="select"] > div {min-height: 38px !important; border-radius: 12px !important;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px;}
         .card-head {display:flex; align-items:center; gap:10px;}
         .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
         .card-name {font-size:15px; font-weight:800; color:#14110f;}
@@ -8055,6 +8047,8 @@ if category == "Scheduling":
         .status-pill.arrived {background:#7e7f83; color:#f3f3f4;}
         .status-pill.completed {background:#14110f; color:#f3f3f4;}
         .status-pill.cancelled {background:#7e7f83; color:#f3f3f4;}
+        .card-divider {height:1px; background:#e3d8cd; margin: 6px 0;}
+        .card-quick-title {font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color:#7e7f83;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -8567,7 +8561,6 @@ if category == "Scheduling":
             df_cards = df_cards[mask]
 
         show_case = "CASE PAPER" in df_cards.columns
-        show_suction = "SUCTION" in df_cards.columns
         show_status = ("STATUS" in df_cards.columns) or ("Status" in df_cards.columns)
         if df_cards.empty:
             st.info("No patients found.")
@@ -8624,9 +8617,7 @@ if category == "Scheduling":
                                     _normalize_html(
                                         f"""
                                         <div class="card-footer">
-                                            <div>
-                                                {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
-                                            </div>
+                                            <div></div>
                                             {f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>" if not show_status else ""}
                                         </div>
                                         """
@@ -8634,11 +8625,9 @@ if category == "Scheduling":
                                     unsafe_allow_html=True,
                                 )
                             if show_case or show_status:
-                                columns_count = (
-                                    (1 if show_case else 0)
-                                    + (1 if show_status else 0)
-                                    + (1 if show_suction else 0)
-                                )
+                                st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
+                                st.markdown("<div class='card-quick-title'>Quick actions</div>", unsafe_allow_html=True)
+                                columns_count = (1 if show_case else 0) + (1 if show_status else 0)
                                 inline_cols = st.columns(columns_count, gap="small")
                                 col_idx = 0
                                 if show_case:
@@ -8664,14 +8653,8 @@ if category == "Scheduling":
                                         if status_value != status:
                                             _update_row_status(row_id, patient, in_time, status_value)
                                     col_idx += 1
-                                if show_suction:
-                                    suction_active = _truthy(row.get("SUCTION"))
-                                    with inline_cols[col_idx]:
-                                        st.markdown(
-                                            f"<span class='flag{' active' if suction_active else ''}'>Suction</span>",
-                                            unsafe_allow_html=True,
-                                        )
 
+                            st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
                             action_cols = st.columns(3, gap="small")
                             with action_cols[0]:
                                 st.button(
@@ -8716,8 +8699,6 @@ if category == "Scheduling":
                                 st.markdown(f"**Status:** {status}")
                                 if show_case:
                                     st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
-                                if show_suction:
-                                    st.markdown(f"**Suction:** {'Yes' if _truthy(row.get('SUCTION')) else 'No'}")
             if st.session_state.get("full_edit_open"):
                 _render_full_edit_dialog()
     # ================ Manual save
