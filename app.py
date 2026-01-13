@@ -1155,12 +1155,12 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.7rem; align-items:center;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 38px !important; border-radius: 12px !important; font-weight: 700;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 13px; font-weight: 600; color:#3b322a;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 13px; font-weight: 600; color:#3b322a; white-space: nowrap;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="secondary"] {background:#ffffff !important; border:1px solid #d8c9b8 !important; color:#3a3129 !important;}
         div[data-testid="stVerticalBlock"]:has(.card-action-cancel) button {border-color:#e0b1b1 !important; color:#a94a4a !important; background:#fff7f7 !important;}
         .card-action-marker {display:none;}
-        .card-status-banner {display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:4px;}
+        .card-status-banner {display:flex; align-items:center; gap:8px; padding:10px 18px; border-radius:18px 18px 12px 12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin:-18px -18px 12px -18px;}
         .card-status-banner.waiting {background:linear-gradient(90deg, #f7e6b7, #fff2d6); color:#6d5a44;}
         .card-status-banner.ongoing {background:linear-gradient(90deg, #d5e2ff, #eef3ff); color:#2d4d86;}
         .card-status-banner.arrived {background:linear-gradient(90deg, #e0e0e0, #f2f2f2); color:#4e4e4e;}
@@ -1184,7 +1184,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
         .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:8px 12px; font-weight:600; color:#5b5147;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:10px 12px; font-weight:600; color:#5b5147; display:flex; align-items:center; gap:10px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::after {content:"..."; margin-left:auto; color:#8c8176; font-size:16px;}
         .card-expand {font-size:12px; color:#7e7f83; border-top:1px solid #d9c5b2; padding-top:8px; display:flex; align-items:center; justify-content:space-between;}
         </style>
         """,
@@ -1841,7 +1842,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
 
                             st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
                             if show_case:
-                                case_cols = st.columns([1, 2.2], gap="large")
+                                case_cols = st.columns([1, 3.2], gap="small")
                                 with case_cols[0]:
                                     case_active = _truthy(row.get("CASE PAPER"))
                                     case_checked = st.checkbox(
@@ -1852,7 +1853,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                     if case_checked != case_active:
                                         _update_row_case_paper(row_id, patient, in_time, case_checked)
                                 with case_cols[1]:
-                                    action_cols = st.columns([1.2, 1, 1], gap="small")
+                                    action_cols = st.columns([1.4, 1.1, 1.2], gap="small")
                                     with action_cols[0]:
                                         st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                         if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
@@ -1890,7 +1891,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                         if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
                                             _update_row_status(row_id, patient, in_time, "CANCELLED")
                             else:
-                                action_cols = st.columns([1.2, 1, 1], gap="small")
+                                action_cols = st.columns([1.4, 1.1, 1.2], gap="small")
                                 with action_cols[0]:
                                     st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                     if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
@@ -8056,12 +8057,12 @@ if category == "Scheduling":
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.7rem; align-items:center;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 38px !important; border-radius: 12px !important; font-weight: 700;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 13px; font-weight: 600; color:#3b322a;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 13px; font-weight: 600; color:#3b322a; white-space: nowrap;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="secondary"] {background:#ffffff !important; border:1px solid #d8c9b8 !important; color:#3a3129 !important;}
         div[data-testid="stVerticalBlock"]:has(.card-action-cancel) button {border-color:#e0b1b1 !important; color:#a94a4a !important; background:#fff7f7 !important;}
         .card-action-marker {display:none;}
-        .card-status-banner {display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:4px;}
+        .card-status-banner {display:flex; align-items:center; gap:8px; padding:10px 18px; border-radius:18px 18px 12px 12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin:-18px -18px 12px -18px;}
         .card-status-banner.waiting {background:linear-gradient(90deg, #f7e6b7, #fff2d6); color:#6d5a44;}
         .card-status-banner.ongoing {background:linear-gradient(90deg, #d5e2ff, #eef3ff); color:#2d4d86;}
         .card-status-banner.arrived {background:linear-gradient(90deg, #e0e0e0, #f2f2f2); color:#4e4e4e;}
@@ -8085,7 +8086,8 @@ if category == "Scheduling":
         .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
         .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:8px 12px; font-weight:600; color:#5b5147;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:10px 12px; font-weight:600; color:#5b5147; display:flex; align-items:center; gap:10px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::after {content:"..."; margin-left:auto; color:#8c8176; font-size:16px;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -8662,14 +8664,14 @@ if category == "Scheduling":
                             )
                             st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
                             if show_case:
-                                case_cols = st.columns([1, 2.2], gap="large")
+                                case_cols = st.columns([1, 3.2], gap="small")
                                 with case_cols[0]:
                                     case_active = _truthy(row.get("CASE PAPER"))
                                     case_checked = st.checkbox("Case Paper", value=case_active, key=f"full_card_case_{row_key}_{start}")
                                     if case_checked != case_active:
                                         _update_row_case_paper(row_id, patient, in_time, case_checked)
                                 with case_cols[1]:
-                                    action_cols = st.columns([1.2, 1, 1], gap="small")
+                                    action_cols = st.columns([1.4, 1.1, 1.2], gap="small")
                                     with action_cols[0]:
                                         st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                         if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
@@ -8682,7 +8684,7 @@ if category == "Scheduling":
                                         if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
                                             _update_row_status(row_id, patient, in_time, "CANCELLED")
                             else:
-                                action_cols = st.columns([1.2, 1, 1], gap="small")
+                                action_cols = st.columns([1.4, 1.1, 1.2], gap="small")
                                 with action_cols[0]:
                                     st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
                                     if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
