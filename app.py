@@ -3867,23 +3867,8 @@ def is_assistant_available(
     assist_upper = str(assistant_name).strip().upper()
 
     punch_map = _get_today_punch_map()
-    punch_tracking = bool(punch_map)
-    if punch_tracking:
-        punch_state, _, punch_out = _assistant_punch_state(assist_upper, punch_map)
-        if punch_state != "IN":
-            try:
-                today_weekday = now.weekday()  # 0=Monday, 6=Sunday
-                weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
-                off_assistants = weekly_off_map.get(today_weekday, [])
-                if any(str(a).strip().upper() == assist_upper for a in off_assistants):
-                    return False, f"Weekly off on {now.strftime('%A')}"
-            except Exception:
-                pass
-            if punch_state == "OUT":
-                out_label = _format_punch_time(punch_out)
-                return False, f"Punched out at {out_label}" if out_label else "Punched out"
-            return False, "Not punched in"
-    else:
+    punch_state, _, punch_out = _assistant_punch_state(assist_upper, punch_map)
+    if punch_state != "IN":
         try:
             today_weekday = now.weekday()  # 0=Monday, 6=Sunday
             weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
@@ -3892,6 +3877,10 @@ def is_assistant_available(
                 return False, f"Weekly off on {now.strftime('%A')}"
         except Exception:
             pass
+        if punch_state == "OUT":
+            out_label = _format_punch_time(punch_out)
+            return False, f"Punched out at {out_label}" if out_label else "Punched out"
+        return False, "Not punched in"
     
     # Convert check times to minutes
     check_in = _coerce_to_time_obj(check_in_time)
