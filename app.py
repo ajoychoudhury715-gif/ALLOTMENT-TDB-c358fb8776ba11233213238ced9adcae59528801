@@ -1150,38 +1150,41 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .schedule-cards {display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-top: 8px;}
         .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
         .card-shell-marker {display:none;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; box-shadow:0 10px 20px rgba(20,17,15,0.08);}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:16px; display:flex; flex-direction:column; gap:12px; min-height:230px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 36px !important; border-radius: 12px !important; font-weight: 700;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-baseweb="select"] > div {min-height: 38px !important; border-radius: 12px !important;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px;}
-        .card-head {display:flex; align-items:center; gap:10px;}
-        .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
-        .card-name {font-size:15px; font-weight:800; color:#14110f;}
-        .card-time {font-size:12px; color:#7e7f83;}
-        .card-menu {margin-left:auto; color:#7e7f83; font-weight:700;}
-        .doctor-pill {display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#d9c5b2; color:#34312d; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;}
-        .procedure-text {font-size:12px; color:#7e7f83;}
-        .staff-row {display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
-        .staff-label {font-size:12px; color:#7e7f83;}
-        .staff-chip {padding:4px 8px; border-radius:999px; background:#f3f3f4; border:1px solid #d9c5b2; font-size:11px; color:#34312d;}
-        .card-footer {display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:auto;}
-        .flag {display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#34312d; border:1px solid #d9c5b2; background:#f3f3f4; padding:4px 8px; border-radius:10px;}
-        .flag.active {background:#d9c5b2; border-color:#7e7f83;}
-        .status-pill {padding:4px 12px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;}
-        .status-pill.waiting {background:#d9c5b2; color:#34312d;}
-        .status-pill.ongoing {background:#34312d; color:#f3f3f4;}
-        .status-pill.arrived {background:#7e7f83; color:#f3f3f4;}
-        .status-pill.completed {background:#14110f; color:#f3f3f4;}
-        .status-pill.cancelled {background:#7e7f83; color:#f3f3f4;}
-        .card-divider {height:1px; background:#e3d8cd; margin: 10px 0;}
-        .card-quick-wrap {background:#f8f4ef; border:1px solid #eadfd3; border-radius:14px; padding:10px 12px; display:flex; flex-direction:column; gap:8px;}
-        .card-quick-wrap [data-testid="stHorizontalBlock"] {gap: 0.8rem; align-items:flex-start;}
-        .card-quick-title {font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; color:#7e7f83; font-weight:700;}
-        .card-field-label {font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color:#7e7f83; margin-bottom:2px;}
-        .card-actions-wrap {margin-top: 2px;}
-        .card-actions-wrap [data-testid="stHorizontalBlock"] {gap: 0.7rem;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14);}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.7rem; align-items:center;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 38px !important; border-radius: 12px !important; font-weight: 700;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 13px; font-weight: 600; color:#3b322a;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="secondary"] {background:#ffffff !important; border:1px solid #d8c9b8 !important; color:#3a3129 !important;}
+        div[data-testid="stVerticalBlock"]:has(.card-action-cancel) button {border-color:#e0b1b1 !important; color:#a94a4a !important; background:#fff7f7 !important;}
+        .card-action-marker {display:none;}
+        .card-status-banner {display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:4px;}
+        .card-status-banner.waiting {background:linear-gradient(90deg, #f7e6b7, #fff2d6); color:#6d5a44;}
+        .card-status-banner.ongoing {background:linear-gradient(90deg, #d5e2ff, #eef3ff); color:#2d4d86;}
+        .card-status-banner.arrived {background:linear-gradient(90deg, #e0e0e0, #f2f2f2); color:#4e4e4e;}
+        .card-status-banner.completed {background:linear-gradient(90deg, #cfead6, #e7f6ec); color:#2f5b3a;}
+        .card-status-banner.cancelled {background:linear-gradient(90deg, #f5d1d1, #fde8e8); color:#8a3e3e;}
+        .status-dot {width:10px; height:10px; border-radius:50%;}
+        .card-status-banner.waiting .status-dot {background:#f1b400; box-shadow:0 0 0 3px rgba(241,180,0,0.2);}
+        .card-status-banner.ongoing .status-dot {background:#3b6fd8; box-shadow:0 0 0 3px rgba(59,111,216,0.2);}
+        .card-status-banner.arrived .status-dot {background:#6f6f6f; box-shadow:0 0 0 3px rgba(111,111,111,0.2);}
+        .card-status-banner.completed .status-dot {background:#4caf6b; box-shadow:0 0 0 3px rgba(76,175,107,0.2);}
+        .card-status-banner.cancelled .status-dot {background:#d45c5c; box-shadow:0 0 0 3px rgba(212,92,92,0.2);}
+        .card-head {display:flex; align-items:center; gap:12px;}
+        .card-title {display:flex; flex-direction:column; gap:2px;}
+        .card-avatar {width:48px; height:48px; border-radius:50%; background:#e9dcc8; color:#3b2f22; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px;}
+        .card-name {font-size:17px; font-weight:800; color:#1f1a15; letter-spacing:0.2px;}
+        .card-time {font-size:12px; color:#7a7168;}
+        .card-info {display:flex; flex-direction:column; gap:6px;}
+        .info-row {display:flex; align-items:center; gap:8px;}
+        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+        .info-text {font-size:13px; color:#514840; font-weight:600;}
+        .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
+        .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:8px 12px; font-weight:600; color:#5b5147;}
         .card-expand {font-size:12px; color:#7e7f83; border-top:1px solid #d9c5b2; padding-top:8px; display:flex; align-items:center; justify-content:space-between;}
         </style>
         """,
@@ -1772,7 +1775,6 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             st.data_editor(df_table, use_container_width=True, height=280, key="compact_schedule_editor")
         else:
             show_case = "CASE PAPER" in df_display.columns
-            show_status = ("STATUS" in df_display.columns) or ("Status" in df_display.columns)
             cards_per_row = 4
             card_rows = [
                 df_cards.iloc[i:i + cards_per_row]
@@ -1797,7 +1799,17 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                     ]
                     staff = [name for name in staff if name]
                     time_text = " - ".join([t for t in [in_time, out_time] if t])
-                    staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
+                    status_text = (status or "WAITING").strip().upper()
+                    if not status_text:
+                        status_text = "WAITING"
+                    status_class = _status_class(status_text)
+                    staff_html = " &bull; ".join(html.escape(name) for name in staff) if staff else "Unassigned"
+                    doctor_line = (
+                        f"<div class='info-row'><span class='info-icon'>DR</span><span class='info-text'>{html.escape(doctor)}</span></div>"
+                        if doctor
+                        else ""
+                    )
+                    staff_line = f"<div class='info-row'><span class='info-icon'>ST</span><span class='info-text'>{staff_html}</span></div>"
                     row_key = row_id if row_id else f"compact_{row_index}"
 
                     with col:
@@ -1806,113 +1818,115 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                             st.markdown(
                                 _normalize_html(
                                     f"""
+                                    <div class="card-status-banner {status_class}">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">{html.escape(status_text)}</span>
+                                    </div>
                                     <div class="card-head">
                                         <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                        <div>
+                                        <div class="card-title">
                                             <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
                                             <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
                                         </div>
-                                        <div class="card-menu">...</div>
                                     </div>
-                                    {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
-                                    {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
-                                    <div class="staff-row">
-                                        <span class="staff-label">Staff:</span>
-                                        {staff_html}
+                                    <div class="card-subdivider"></div>
+                                    <div class="card-info">
+                                        {doctor_line}
+                                        {staff_line}
                                     </div>
                                     """
                                 ),
                                 unsafe_allow_html=True,
                             )
 
-                            if not (show_case or show_status):
-                                status_html = f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>"
-                                st.markdown(
-                                    _normalize_html(
-                                        f"""
-                                        <div class="card-footer">
-                                            <div></div>
-                                            {status_html}
-                                        </div>
-                                        """
-                                    ),
-                                    unsafe_allow_html=True,
-                                )
-
-                            if show_case or show_status:
-                                st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
-                                st.markdown("<div class='card-quick-wrap'>", unsafe_allow_html=True)
-                                st.markdown("<div class='card-quick-title'>Quick actions</div>", unsafe_allow_html=True)
-                                if show_case and show_status:
-                                    inline_cols = st.columns([1, 1.4], gap="medium")
-                                else:
-                                    inline_cols = st.columns(1)
-                                col_idx = 0
-                                if show_case:
-                                    case_active = _truthy(row.get("CASE PAPER"))
-                                    with inline_cols[col_idx]:
-                                        st.markdown("<div class='card-field-label'>Case Paper</div>", unsafe_allow_html=True)
-                                        case_checked = st.checkbox(
-                                            "Case Paper",
-                                            value=case_active,
-                                            key=f"card_case_{row_key}",
-                                            label_visibility="collapsed",
-                                        )
-                                        if case_checked != case_active:
-                                            _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                    col_idx += 1
-                                if show_status:
-                                    status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status)
-                                    with inline_cols[col_idx]:
-                                        st.markdown("<div class='card-field-label'>Status</div>", unsafe_allow_html=True)
-                                        status_value = st.selectbox(
-                                            "Status",
-                                            status_options,
-                                            index=status_index,
-                                            key=f"card_status_{row_key}",
-                                            label_visibility="collapsed",
-                                        )
-                                        if status_value != status:
-                                            _update_row_status(row_id, patient, in_time, status_value)
-                                st.markdown("</div>", unsafe_allow_html=True)
-
                             st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
-                            st.markdown("<div class='card-actions-wrap'>", unsafe_allow_html=True)
-                            action_cols = st.columns(3, gap="small")
-                            with action_cols[0]:
-                                st.button(
-                                    "Edit",
-                                    key=f"card_edit_{row_key}",
-                                    on_click=_open_compact_edit_dialog,
-                                    args=(
-                                        {
-                                            "row_key": row_key,
-                                            "row_id": row_id,
-                                            "lookup_patient": patient,
-                                            "lookup_in_time": in_time,
-                                            "patient": patient,
-                                            "in_time": in_time,
-                                            "out_time": out_time,
-                                            "doctor": doctor,
-                                            "procedure": procedure,
-                                            "status": status,
-                                            "staff_first": _clean_text(row.get("FIRST")),
-                                            "staff_second": _clean_text(row.get("SECOND")),
-                                            "staff_third": _clean_text(row.get("Third") or row.get("THIRD")),
-                                            "case_paper": _truthy(row.get("CASE PAPER")),
-                                            "suction": _truthy(row.get("SUCTION")),
-                                        },
-                                    ),
-                                    use_container_width=True,
-                                    type="secondary",
-                                )
-                            with action_cols[1]:
-                                if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
-                                    _update_row_status(row_id, patient, in_time, "DONE")
-                            with action_cols[2]:
-                                if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
-                                    _update_row_status(row_id, patient, in_time, "CANCELLED")
-                            st.markdown("</div>", unsafe_allow_html=True)
+                            if show_case:
+                                case_cols = st.columns([1, 2.2], gap="large")
+                                with case_cols[0]:
+                                    case_active = _truthy(row.get("CASE PAPER"))
+                                    case_checked = st.checkbox(
+                                        "Case Paper",
+                                        value=case_active,
+                                        key=f"card_case_{row_key}",
+                                    )
+                                    if case_checked != case_active:
+                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                with case_cols[1]:
+                                    action_cols = st.columns([1.2, 1, 1], gap="small")
+                                    with action_cols[0]:
+                                        st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
+                                        if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
+                                            _update_row_status(row_id, patient, in_time, "DONE")
+                                    with action_cols[1]:
+                                        st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
+                                        st.button(
+                                            "Edit",
+                                            key=f"card_edit_{row_key}",
+                                            on_click=_open_compact_edit_dialog,
+                                            args=(
+                                                {
+                                                    "row_key": row_key,
+                                                    "row_id": row_id,
+                                                    "lookup_patient": patient,
+                                                    "lookup_in_time": in_time,
+                                                    "patient": patient,
+                                                    "in_time": in_time,
+                                                    "out_time": out_time,
+                                                    "doctor": doctor,
+                                                    "procedure": procedure,
+                                                    "status": status,
+                                                    "staff_first": _clean_text(row.get("FIRST")),
+                                                    "staff_second": _clean_text(row.get("SECOND")),
+                                                    "staff_third": _clean_text(row.get("Third") or row.get("THIRD")),
+                                                    "case_paper": _truthy(row.get("CASE PAPER")),
+                                                    "suction": _truthy(row.get("SUCTION")),
+                                                },
+                                            ),
+                                            use_container_width=True,
+                                            type="secondary",
+                                        )
+                                    with action_cols[2]:
+                                        st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
+                                        if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
+                                            _update_row_status(row_id, patient, in_time, "CANCELLED")
+                            else:
+                                action_cols = st.columns([1.2, 1, 1], gap="small")
+                                with action_cols[0]:
+                                    st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
+                                    if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
+                                        _update_row_status(row_id, patient, in_time, "DONE")
+                                with action_cols[1]:
+                                    st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
+                                    st.button(
+                                        "Edit",
+                                        key=f"card_edit_{row_key}",
+                                        on_click=_open_compact_edit_dialog,
+                                        args=(
+                                            {
+                                                "row_key": row_key,
+                                                "row_id": row_id,
+                                                "lookup_patient": patient,
+                                                "lookup_in_time": in_time,
+                                                "patient": patient,
+                                                "in_time": in_time,
+                                                "out_time": out_time,
+                                                "doctor": doctor,
+                                                "procedure": procedure,
+                                                "status": status,
+                                                "staff_first": _clean_text(row.get("FIRST")),
+                                                "staff_second": _clean_text(row.get("SECOND")),
+                                                "staff_third": _clean_text(row.get("Third") or row.get("THIRD")),
+                                                "case_paper": _truthy(row.get("CASE PAPER")),
+                                                "suction": _truthy(row.get("SUCTION")),
+                                            },
+                                        ),
+                                        use_container_width=True,
+                                        type="secondary",
+                                    )
+                                with action_cols[2]:
+                                    st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
+                                    if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
+                                        _update_row_status(row_id, patient, in_time, "CANCELLED")
 
                             with st.expander("View Details", expanded=False):
                                 st.markdown(f"**Doctor:** {doctor or '—'}")
@@ -8037,38 +8051,41 @@ if category == "Scheduling":
         .full-schedule-cards {margin-top: 8px;}
         .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
         .card-shell-marker {display:none;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; box-shadow:0 10px 20px rgba(20,17,15,0.08);}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:16px; display:flex; flex-direction:column; gap:12px; min-height:230px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 36px !important; border-radius: 12px !important; font-weight: 700;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-baseweb="select"] > div {min-height: 38px !important; border-radius: 12px !important;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px;}
-        .card-head {display:flex; align-items:center; gap:10px;}
-        .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
-        .card-name {font-size:15px; font-weight:800; color:#14110f;}
-        .card-time {font-size:12px; color:#7e7f83;}
-        .card-menu {margin-left:auto; color:#7e7f83; font-weight:700;}
-        .doctor-pill {display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:#d9c5b2; color:#34312d; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;}
-        .procedure-text {font-size:12px; color:#7e7f83;}
-        .staff-row {display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
-        .staff-label {font-size:12px; color:#7e7f83;}
-        .staff-chip {padding:4px 8px; border-radius:999px; background:#f3f3f4; border:1px solid #d9c5b2; font-size:11px; color:#34312d;}
-        .card-footer {display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:auto;}
-        .flag {display:inline-flex; align-items:center; gap:6px; font-size:11px; color:#34312d; border:1px solid #d9c5b2; background:#f3f3f4; padding:4px 8px; border-radius:10px;}
-        .flag.active {background:#d9c5b2; border-color:#7e7f83;}
-        .status-pill {padding:4px 12px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:0.4px; text-transform:uppercase;}
-        .status-pill.waiting {background:#d9c5b2; color:#34312d;}
-        .status-pill.ongoing {background:#34312d; color:#f3f3f4;}
-        .status-pill.arrived {background:#7e7f83; color:#f3f3f4;}
-        .status-pill.completed {background:#14110f; color:#f3f3f4;}
-        .status-pill.cancelled {background:#7e7f83; color:#f3f3f4;}
-        .card-divider {height:1px; background:#e3d8cd; margin: 10px 0;}
-        .card-quick-wrap {background:#f8f4ef; border:1px solid #eadfd3; border-radius:14px; padding:10px 12px; display:flex; flex-direction:column; gap:8px;}
-        .card-quick-wrap [data-testid="stHorizontalBlock"] {gap: 0.8rem; align-items:flex-start;}
-        .card-quick-title {font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; color:#7e7f83; font-weight:700;}
-        .card-field-label {font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color:#7e7f83; margin-bottom:2px;}
-        .card-actions-wrap {margin-top: 2px;}
-        .card-actions-wrap [data-testid="stHorizontalBlock"] {gap: 0.7rem;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14);}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.7rem; align-items:center;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 38px !important; border-radius: 12px !important; font-weight: 700;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 13px; font-weight: 600; color:#3b322a;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="secondary"] {background:#ffffff !important; border:1px solid #d8c9b8 !important; color:#3a3129 !important;}
+        div[data-testid="stVerticalBlock"]:has(.card-action-cancel) button {border-color:#e0b1b1 !important; color:#a94a4a !important; background:#fff7f7 !important;}
+        .card-action-marker {display:none;}
+        .card-status-banner {display:flex; align-items:center; gap:8px; padding:7px 12px; border-radius:12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin-bottom:4px;}
+        .card-status-banner.waiting {background:linear-gradient(90deg, #f7e6b7, #fff2d6); color:#6d5a44;}
+        .card-status-banner.ongoing {background:linear-gradient(90deg, #d5e2ff, #eef3ff); color:#2d4d86;}
+        .card-status-banner.arrived {background:linear-gradient(90deg, #e0e0e0, #f2f2f2); color:#4e4e4e;}
+        .card-status-banner.completed {background:linear-gradient(90deg, #cfead6, #e7f6ec); color:#2f5b3a;}
+        .card-status-banner.cancelled {background:linear-gradient(90deg, #f5d1d1, #fde8e8); color:#8a3e3e;}
+        .status-dot {width:10px; height:10px; border-radius:50%;}
+        .card-status-banner.waiting .status-dot {background:#f1b400; box-shadow:0 0 0 3px rgba(241,180,0,0.2);}
+        .card-status-banner.ongoing .status-dot {background:#3b6fd8; box-shadow:0 0 0 3px rgba(59,111,216,0.2);}
+        .card-status-banner.arrived .status-dot {background:#6f6f6f; box-shadow:0 0 0 3px rgba(111,111,111,0.2);}
+        .card-status-banner.completed .status-dot {background:#4caf6b; box-shadow:0 0 0 3px rgba(76,175,107,0.2);}
+        .card-status-banner.cancelled .status-dot {background:#d45c5c; box-shadow:0 0 0 3px rgba(212,92,92,0.2);}
+        .card-head {display:flex; align-items:center; gap:12px;}
+        .card-title {display:flex; flex-direction:column; gap:2px;}
+        .card-avatar {width:48px; height:48px; border-radius:50%; background:#e9dcc8; color:#3b2f22; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px;}
+        .card-name {font-size:17px; font-weight:800; color:#1f1a15; letter-spacing:0.2px;}
+        .card-time {font-size:12px; color:#7a7168;}
+        .card-info {display:flex; flex-direction:column; gap:6px;}
+        .info-row {display:flex; align-items:center; gap:8px;}
+        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+        .info-text {font-size:13px; color:#514840; font-weight:600;}
+        .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
+        .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:8px 12px; font-weight:600; color:#5b5147;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -8581,7 +8598,6 @@ if category == "Scheduling":
             df_cards = df_cards[mask]
 
         show_case = "CASE PAPER" in df_cards.columns
-        show_status = ("STATUS" in df_cards.columns) or ("Status" in df_cards.columns)
         if df_cards.empty:
             st.info("No patients found.")
         else:
@@ -8605,7 +8621,17 @@ if category == "Scheduling":
                     staff = [name for name in staff if name]
                     time_parts = [t for t in [_fmt_time(in_time), _fmt_time(out_time)] if t]
                     time_text = " - ".join(time_parts)
-                    staff_html = "".join(f"<span class='staff-chip'>{html.escape(name)}</span>" for name in staff) or "<span class='staff-chip'>Unassigned</span>"
+                    status_text = (status or "WAITING").strip().upper()
+                    if not status_text:
+                        status_text = "WAITING"
+                    status_class = _status_class(status_text)
+                    staff_html = " &bull; ".join(html.escape(name) for name in staff) if staff else "Unassigned"
+                    doctor_line = (
+                        f"<div class='info-row'><span class='info-icon'>DR</span><span class='info-text'>{html.escape(doctor)}</span></div>"
+                        if doctor
+                        else ""
+                    )
+                    staff_line = f"<div class='info-row'><span class='info-icon'>ST</span><span class='info-text'>{staff_html}</span></div>"
                     row_key = row_id if row_id else f"full_{start}_{row_index}"
 
                     with col:
@@ -8614,113 +8640,60 @@ if category == "Scheduling":
                             st.markdown(
                                 _normalize_html(
                                     f"""
+                                    <div class="card-status-banner {status_class}">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">{html.escape(status_text)}</span>
+                                    </div>
                                     <div class="card-head">
                                         <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                        <div>
+                                        <div class="card-title">
                                             <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
                                             <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
                                         </div>
-                                        <div class="card-menu">...</div>
                                     </div>
-                                    {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
-                                    {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
-                                    <div class="staff-row">
-                                        <span class="staff-label">Staff:</span>
-                                        {staff_html}
+                                    <div class="card-subdivider"></div>
+                                    <div class="card-info">
+                                        {doctor_line}
+                                        {staff_line}
                                     </div>
                                     """
                                 ),
                                 unsafe_allow_html=True,
                             )
-                            if not (show_case or show_status):
-                                st.markdown(
-                                    _normalize_html(
-                                        f"""
-                                        <div class="card-footer">
-                                            <div></div>
-                                            {f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>" if not show_status else ""}
-                                        </div>
-                                        """
-                                    ),
-                                    unsafe_allow_html=True,
-                                )
-                            if show_case or show_status:
-                                st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
-                                st.markdown("<div class='card-quick-wrap'>", unsafe_allow_html=True)
-                                st.markdown("<div class='card-quick-title'>Quick actions</div>", unsafe_allow_html=True)
-                                if show_case and show_status:
-                                    inline_cols = st.columns([1, 1.4], gap="medium")
-                                else:
-                                    inline_cols = st.columns(1)
-                                col_idx = 0
-                                if show_case:
-                                    case_active = _truthy(row.get("CASE PAPER"))
-                                    with inline_cols[col_idx]:
-                                        st.markdown("<div class='card-field-label'>Case Paper</div>", unsafe_allow_html=True)
-                                        case_checked = st.checkbox(
-                                            "Case Paper",
-                                            value=case_active,
-                                            key=f"full_card_case_{row_key}_{start}",
-                                            label_visibility="collapsed",
-                                        )
-                                        if case_checked != case_active:
-                                            _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                    col_idx += 1
-                                if show_status:
-                                    status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
-                                    with inline_cols[col_idx]:
-                                        st.markdown("<div class='card-field-label'>Status</div>", unsafe_allow_html=True)
-                                        status_value = st.selectbox(
-                                            "Status",
-                                            status_options,
-                                            index=status_index,
-                                            key=f"full_card_status_{row_key}_{start}",
-                                            label_visibility="collapsed",
-                                        )
-                                        if status_value != status:
-                                            _update_row_status(row_id, patient, in_time, status_value)
-                                st.markdown("</div>", unsafe_allow_html=True)
-
                             st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
-                            st.markdown("<div class='card-actions-wrap'>", unsafe_allow_html=True)
-                            action_cols = st.columns(3, gap="small")
-                            with action_cols[0]:
-                                st.button(
-                                    "Edit",
-                                    key=f"full_card_edit_{row_key}_{start}",
-                                    on_click=_open_full_edit_dialog,
-                                    args=(
-                                        {
-                                            "row_key": row_key,
-                                            "row_id": row_id,
-                                            "lookup_patient": patient,
-                                            "lookup_in_time": _fmt_time(in_time),
-                                            "patient": patient,
-                                            "in_time": _fmt_time(in_time),
-                                            "out_time": _fmt_time(out_time),
-                                            "doctor": doctor,
-                                            "procedure": procedure,
-                                            "status": status,
-                                            "op": _clean_text(row.get("OP")),
-                                            "staff_first": _clean_text(row.get("FIRST")),
-                                            "staff_second": _clean_text(row.get("SECOND")),
-                                            "staff_third": _clean_text(row.get("Third")),
-                                            "case_paper": _truthy(row.get("CASE PAPER")),
-                                            "suction": _truthy(row.get("SUCTION")),
-                                            "cleaning": _truthy(row.get("CLEANING")),
-                                        },
-                                    ),
-                                    use_container_width=True,
-                                    type="secondary",
-                                )
-                            with action_cols[1]:
-                                if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
-                                    _update_row_status(row_id, patient, in_time, "DONE")
-                            with action_cols[2]:
-                                if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
-                                    _update_row_status(row_id, patient, in_time, "CANCELLED")
-                            st.markdown("</div>", unsafe_allow_html=True)
-
+                            if show_case:
+                                case_cols = st.columns([1, 2.2], gap="large")
+                                with case_cols[0]:
+                                    case_active = _truthy(row.get("CASE PAPER"))
+                                    case_checked = st.checkbox("Case Paper", value=case_active, key=f"full_card_case_{row_key}_{start}")
+                                    if case_checked != case_active:
+                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                with case_cols[1]:
+                                    action_cols = st.columns([1.2, 1, 1], gap="small")
+                                    with action_cols[0]:
+                                        st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
+                                        if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
+                                            _update_row_status(row_id, patient, in_time, "DONE")
+                                    with action_cols[1]:
+                                        st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
+                                        st.button("Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))}), use_container_width=True, type="secondary")
+                                    with action_cols[2]:
+                                        st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
+                                        if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
+                                            _update_row_status(row_id, patient, in_time, "CANCELLED")
+                            else:
+                                action_cols = st.columns([1.2, 1, 1], gap="small")
+                                with action_cols[0]:
+                                    st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
+                                    if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
+                                        _update_row_status(row_id, patient, in_time, "DONE")
+                                with action_cols[1]:
+                                    st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
+                                    st.button("Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))}), use_container_width=True, type="secondary")
+                                with action_cols[2]:
+                                    st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
+                                    if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
+                                        _update_row_status(row_id, patient, in_time, "CANCELLED")
                             with st.expander("View Details", expanded=False):
                                 st.markdown(f"**Doctor:** {doctor or '--'}")
                                 st.markdown(f"**Procedure:** {procedure or '--'}")
