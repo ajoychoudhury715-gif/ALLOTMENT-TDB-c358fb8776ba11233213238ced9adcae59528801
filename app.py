@@ -1811,24 +1811,64 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                 unsafe_allow_html=True,
                             )
 
-                            flag_html = ""
-                            if show_case:
-                                case_active = _truthy(row.get("CASE PAPER"))
-                                flag_html += f"<span class='flag{' active' if case_active else ''}'>Case Paper</span>"
-                            if show_suction:
-                                suction_active = _truthy(row.get("SUCTION"))
-                                flag_html += f"<span class='flag{' active' if suction_active else ''}'>Suction</span>"
-                            st.markdown(
-                                _normalize_html(
-                                    f"""
-                                    <div class="card-footer">
-                                        <div>{flag_html}</div>
-                                        <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
-                                    </div>
-                                    """
-                                ),
-                                unsafe_allow_html=True,
-                            )
+                            if not (show_case or show_status):
+                                flag_html = ""
+                                if show_suction:
+                                    suction_active = _truthy(row.get("SUCTION"))
+                                    flag_html += f"<span class='flag{' active' if suction_active else ''}'>Suction</span>"
+                                status_html = ""
+                                if not show_status:
+                                    status_html = f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>"
+                                st.markdown(
+                                    _normalize_html(
+                                        f"""
+                                        <div class="card-footer">
+                                            <div>{flag_html}</div>
+                                            {status_html}
+                                        </div>
+                                        """
+                                    ),
+                                    unsafe_allow_html=True,
+                                )
+
+                            if show_case or show_status:
+                                columns_count = (
+                                    (1 if show_case else 0)
+                                    + (1 if show_status else 0)
+                                    + (1 if show_suction else 0)
+                                )
+                                inline_cols = st.columns(columns_count, gap="small")
+                                col_idx = 0
+                                if show_case:
+                                    case_active = _truthy(row.get("CASE PAPER"))
+                                    with inline_cols[col_idx]:
+                                        case_checked = st.checkbox(
+                                            "Case Paper",
+                                            value=case_active,
+                                            key=f"card_case_{row_key}",
+                                        )
+                                        if case_checked != case_active:
+                                            _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                    col_idx += 1
+                                if show_status:
+                                    status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status)
+                                    with inline_cols[col_idx]:
+                                        status_value = st.selectbox(
+                                            "Status",
+                                            status_options,
+                                            index=status_index,
+                                            key=f"card_status_{row_key}",
+                                        )
+                                        if status_value != status:
+                                            _update_row_status(row_id, patient, in_time, status_value)
+                                    col_idx += 1
+                                if show_suction:
+                                    suction_active = _truthy(row.get("SUCTION"))
+                                    with inline_cols[col_idx]:
+                                        st.markdown(
+                                            f"<span class='flag{' active' if suction_active else ''}'>Suction</span>",
+                                            unsafe_allow_html=True,
+                                        )
 
                             action_cols = st.columns(3, gap="small")
                             with action_cols[0]:
@@ -1864,32 +1904,6 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                             with action_cols[2]:
                                 if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
                                     _update_row_status(row_id, patient, in_time, "CANCELLED")
-
-                            if show_case or show_status:
-                                inline_cols = st.columns(2 if (show_case and show_status) else 1, gap="small")
-                                col_idx = 0
-                                if show_case:
-                                    case_active = _truthy(row.get("CASE PAPER"))
-                                    with inline_cols[col_idx]:
-                                        case_checked = st.checkbox(
-                                            "Case Paper",
-                                            value=case_active,
-                                            key=f"card_case_{row_key}",
-                                        )
-                                        if case_checked != case_active:
-                                            _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                    col_idx += 1
-                                if show_status:
-                                    status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status)
-                                    with inline_cols[col_idx]:
-                                        status_value = st.selectbox(
-                                            "Status",
-                                            status_options,
-                                            index=status_index,
-                                            key=f"card_status_{row_key}",
-                                        )
-                                        if status_value != status:
-                                            _update_row_status(row_id, patient, in_time, status_value)
 
                             with st.expander("View Details", expanded=False):
                                 st.markdown(f"**Doctor:** {doctor or '—'}")
@@ -8575,6 +8589,16 @@ if category == "Scheduling":
                     row_key = row_id if row_id else f"full_{start}_{row_index}"
 
                     with col:
+                        footer_html = ""
+                        if not (show_case or show_status):
+                            footer_html = f"""
+                                <div class="card-footer">
+                                    <div>
+                                        {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
+                                    </div>
+                                    {f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>" if not show_status else ""}
+                                </div>
+                            """
                         card_html = _normalize_html(
                             f"""
                             <div class="schedule-card">
@@ -8592,17 +8616,50 @@ if category == "Scheduling":
                                     <span class="staff-label">Staff:</span>
                                     {staff_html}
                                 </div>
-                                <div class="card-footer">
-                                    <div>
-                                        {f"<span class='flag{' active' if _truthy(row.get('CASE PAPER')) else ''}'>Case Paper</span>" if show_case else ""}
-                                        {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
-                                    </div>
-                                    <span class="status-pill {_status_class(status)}">{html.escape(status)}</span>
-                                </div>
+                                {footer_html}
                             </div>
                             """
                         )
                         st.markdown(card_html, unsafe_allow_html=True)
+                        if show_case or show_status:
+                            columns_count = (
+                                (1 if show_case else 0)
+                                + (1 if show_status else 0)
+                                + (1 if show_suction else 0)
+                            )
+                            inline_cols = st.columns(columns_count, gap="small")
+                            col_idx = 0
+                            if show_case:
+                                case_active = _truthy(row.get("CASE PAPER"))
+                                with inline_cols[col_idx]:
+                                    case_checked = st.checkbox(
+                                        "Case Paper",
+                                        value=case_active,
+                                        key=f"full_card_case_{row_key}_{start}",
+                                    )
+                                    if case_checked != case_active:
+                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                col_idx += 1
+                            if show_status:
+                                status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
+                                with inline_cols[col_idx]:
+                                    status_value = st.selectbox(
+                                        "Status",
+                                        status_options,
+                                        index=status_index,
+                                        key=f"full_card_status_{row_key}_{start}",
+                                    )
+                                    if status_value != status:
+                                        _update_row_status(row_id, patient, in_time, status_value)
+                                col_idx += 1
+                            if show_suction:
+                                suction_active = _truthy(row.get("SUCTION"))
+                                with inline_cols[col_idx]:
+                                    st.markdown(
+                                        f"<span class='flag{' active' if suction_active else ''}'>Suction</span>",
+                                        unsafe_allow_html=True,
+                                    )
+
                         action_cols = st.columns(3, gap="small")
                         with action_cols[0]:
                             st.button(
@@ -8639,32 +8696,6 @@ if category == "Scheduling":
                         with action_cols[2]:
                             if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
                                 _update_row_status(row_id, patient, in_time, "CANCELLED")
-
-                        if show_case or show_status:
-                            inline_cols = st.columns(2 if (show_case and show_status) else 1, gap="small")
-                            col_idx = 0
-                            if show_case:
-                                case_active = _truthy(row.get("CASE PAPER"))
-                                with inline_cols[col_idx]:
-                                    case_checked = st.checkbox(
-                                        "Case Paper",
-                                        value=case_active,
-                                        key=f"full_card_case_{row_key}_{start}",
-                                    )
-                                    if case_checked != case_active:
-                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                col_idx += 1
-                            if show_status:
-                                status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
-                                with inline_cols[col_idx]:
-                                    status_value = st.selectbox(
-                                        "Status",
-                                        status_options,
-                                        index=status_index,
-                                        key=f"full_card_status_{row_key}_{start}",
-                                    )
-                                    if status_value != status:
-                                        _update_row_status(row_id, patient, in_time, status_value)
 
                         with st.expander("View Details", expanded=False):
                             st.markdown(f"**Doctor:** {doctor or '--'}")
