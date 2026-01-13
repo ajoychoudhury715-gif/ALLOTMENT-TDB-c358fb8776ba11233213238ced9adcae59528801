@@ -1150,7 +1150,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .schedule-cards {display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-top: 8px;}
         .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
         .card-shell-marker {display:none;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14);}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14); overflow:hidden;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:0 18px 18px 18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.7rem; align-items:center;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 38px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; min-width: 96px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;}
@@ -1179,12 +1179,13 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .card-time {font-size:12px; color:#7a7168;}
         .card-info {display:flex; flex-direction:column; gap:6px;}
         .info-row {display:flex; align-items:center; gap:8px;}
-        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:14px; font-weight:600; display:flex; align-items:center; justify-content:center;}
         .info-text {font-size:13px; color:#514840; font-weight:600;}
         .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
         .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:10px 12px; font-weight:600; color:#5b5147; display:flex; align-items:center; gap:10px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::before {content:"›"; color:#8c8176; font-size:18px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::after {content:"..."; margin-left:auto; color:#8c8176; font-size:16px;}
         .card-expand {font-size:12px; color:#7e7f83; border-top:1px solid #d9c5b2; padding-top:8px; display:flex; align-items:center; justify-content:space-between;}
         </style>
@@ -1806,11 +1807,11 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                     status_class = _status_class(status_text)
                     staff_html = " &bull; ".join(html.escape(name) for name in staff) if staff else "Unassigned"
                     doctor_line = (
-                        f"<div class='info-row'><span class='info-icon'>DR</span><span class='info-text'>{html.escape(doctor)}</span></div>"
+                        f"<div class='info-row'><span class='info-icon'>👩‍⚕️</span><span class='info-text'>{html.escape(doctor)}</span></div>"
                         if doctor
                         else ""
                     )
-                    staff_line = f"<div class='info-row'><span class='info-icon'>ST</span><span class='info-text'>{staff_html}</span></div>"
+                    staff_line = f"<div class='info-row'><span class='info-icon'>👥</span><span class='info-text'>{staff_html}</span></div>"
                     row_key = row_id if row_id else f"compact_{row_index}"
 
                     with col:
@@ -1856,12 +1857,12 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                     action_cols = st.columns([1.6, 1.1, 1.1], gap="small")
                                     with action_cols[0]:
                                         st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                        if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
+                                        if st.button("✓ Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
                                             _update_row_status(row_id, patient, in_time, "DONE")
                                     with action_cols[1]:
                                         st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
                                         st.button(
-                                            "Edit",
+                                            "✎ Edit",
                                             key=f"card_edit_{row_key}",
                                             on_click=_open_compact_edit_dialog,
                                             args=(
@@ -1888,18 +1889,18 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                         )
                                     with action_cols[2]:
                                         st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                        if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
+                                        if st.button("✕ Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
                                             _update_row_status(row_id, patient, in_time, "CANCELLED")
                             else:
                                 action_cols = st.columns([1.6, 1.1, 1.1], gap="small")
                                 with action_cols[0]:
                                     st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                    if st.button("Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
+                                    if st.button("✓ Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
                                         _update_row_status(row_id, patient, in_time, "DONE")
                                 with action_cols[1]:
                                     st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
                                     st.button(
-                                        "Edit",
+                                        "✎ Edit",
                                         key=f"card_edit_{row_key}",
                                         on_click=_open_compact_edit_dialog,
                                         args=(
@@ -1926,7 +1927,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                                     )
                                 with action_cols[2]:
                                     st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                    if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
+                                    if st.button("✕ Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
                                         _update_row_status(row_id, patient, in_time, "CANCELLED")
 
                             with st.expander("View Details", expanded=False):
@@ -8052,7 +8053,7 @@ if category == "Scheduling":
         .full-schedule-cards {margin-top: 8px;}
         .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
         .card-shell-marker {display:none;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14);}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14); overflow:hidden;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:0 18px 18px 18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.7rem; align-items:center;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button {height: 38px !important; border-radius: 12px !important; font-weight: 700; white-space: nowrap; min-width: 96px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;}
@@ -8081,12 +8082,13 @@ if category == "Scheduling":
         .card-time {font-size:12px; color:#7a7168;}
         .card-info {display:flex; flex-direction:column; gap:6px;}
         .info-row {display:flex; align-items:center; gap:8px;}
-        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:14px; font-weight:600; display:flex; align-items:center; justify-content:center;}
         .info-text {font-size:13px; color:#514840; font-weight:600;}
         .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
         .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:10px 12px; font-weight:600; color:#5b5147; display:flex; align-items:center; gap:10px;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::before {content:"›"; color:#8c8176; font-size:18px;}
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::after {content:"..."; margin-left:auto; color:#8c8176; font-size:16px;}
         </style>
         """,
@@ -8629,11 +8631,11 @@ if category == "Scheduling":
                     status_class = _status_class(status_text)
                     staff_html = " &bull; ".join(html.escape(name) for name in staff) if staff else "Unassigned"
                     doctor_line = (
-                        f"<div class='info-row'><span class='info-icon'>DR</span><span class='info-text'>{html.escape(doctor)}</span></div>"
+                        f"<div class='info-row'><span class='info-icon'>👩‍⚕️</span><span class='info-text'>{html.escape(doctor)}</span></div>"
                         if doctor
                         else ""
                     )
-                    staff_line = f"<div class='info-row'><span class='info-icon'>ST</span><span class='info-text'>{staff_html}</span></div>"
+                    staff_line = f"<div class='info-row'><span class='info-icon'>👥</span><span class='info-text'>{staff_html}</span></div>"
                     row_key = row_id if row_id else f"full_{start}_{row_index}"
 
                     with col:
@@ -8674,27 +8676,27 @@ if category == "Scheduling":
                                     action_cols = st.columns([1.6, 1.1, 1.1], gap="small")
                                     with action_cols[0]:
                                         st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                        if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
+                                        if st.button("✓ Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
                                             _update_row_status(row_id, patient, in_time, "DONE")
                                     with action_cols[1]:
                                         st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
-                                        st.button("Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))},), use_container_width=True, type="secondary")
+                                        st.button("✎ Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))},), use_container_width=True, type="secondary")
                                     with action_cols[2]:
                                         st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                        if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
+                                        if st.button("✕ Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
                                             _update_row_status(row_id, patient, in_time, "CANCELLED")
                             else:
                                 action_cols = st.columns([1.6, 1.1, 1.1], gap="small")
                                 with action_cols[0]:
                                     st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                    if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
+                                    if st.button("✓ Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
                                         _update_row_status(row_id, patient, in_time, "DONE")
                                 with action_cols[1]:
                                     st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
-                                    st.button("Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))},), use_container_width=True, type="secondary")
+                                    st.button("✎ Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))},), use_container_width=True, type="secondary")
                                 with action_cols[2]:
                                     st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                    if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
+                                    if st.button("✕ Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
                                         _update_row_status(row_id, patient, in_time, "CANCELLED")
                             with st.expander("View Details", expanded=False):
                                 st.markdown(f"**Doctor:** {doctor or '--'}")
