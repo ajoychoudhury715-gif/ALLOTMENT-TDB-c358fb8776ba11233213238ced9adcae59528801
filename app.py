@@ -498,6 +498,9 @@ def sidebar_punch_widget(schedule_df: pd.DataFrame, excel_path: str | None = Non
             att.loc[mask, "PUNCH OUT"] = now_hhmm
             save_attendance_sheet(excel_path, att)
             st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
+            updated_df = _remove_assistant_assignments(schedule_df, assistant)
+            if updated_df is not None:
+                _maybe_save(updated_df, message=f"{assistant} removed from allotment after punch out")
             st.rerun()
 
     with st.expander("Admin actions"):
@@ -543,6 +546,9 @@ def sidebar_punch_widget_supabase(schedule_df: pd.DataFrame, supabase):
         if st.button("⏹ Punch Out", use_container_width=True, disabled=(not punch_in) or bool(punch_out)):
             db_punch_out(supabase, date_str, assistant, now_time)
             st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
+            updated_df = _remove_assistant_assignments(schedule_df, assistant)
+            if updated_df is not None:
+                _maybe_save(updated_df, message=f"{assistant} removed from allotment after punch out")
             st.rerun()
 
 
@@ -4051,6 +4057,28 @@ def is_assistant_available(
             return False, f"With {appt.get('patient', 'patient')} ({appt_in.strftime('%H:%M')}-{appt_out.strftime('%H:%M')})"
     
     return True, ""
+
+
+def _remove_assistant_assignments(df_schedule: pd.DataFrame | None, assistant_name: str) -> pd.DataFrame | None:
+    """Clear all allotments for an assistant (FIRST/SECOND/Third). Returns updated DF or None if no change."""
+    if df_schedule is None or df_schedule.empty:
+        return None
+    assist_upper = str(assistant_name or "").strip().upper()
+    if not assist_upper:
+        return None
+
+    df_updated = df_schedule.copy()
+    third_col = _get_third_column_name(df_updated.columns)
+    cols = ["FIRST", "SECOND", third_col]
+    changed = False
+    for col in cols:
+        if not col or col not in df_updated.columns:
+            continue
+        mask = df_updated[col].astype(str).str.strip().str.upper() == assist_upper
+        if mask.any():
+            df_updated.loc[mask, col] = ""
+            changed = True
+    return df_updated if changed else None
 
 
 def _pref_allows_role(value: Any) -> bool:
