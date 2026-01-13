@@ -1149,6 +1149,9 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         .compact-dashboard [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
         .schedule-cards {display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-top: 8px;}
         .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
+        .card-shell-marker {display:none;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; box-shadow:0 10px 20px rgba(20,17,15,0.08);}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:14px; display:flex; flex-direction:column; gap:10px; min-height:220px;}
         .card-head {display:flex; align-items:center; gap:10px;}
         .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
         .card-name {font-size:15px; font-weight:800; color:#14110f;}
@@ -1789,6 +1792,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
 
                     with col:
                         with st.container(border=True):
+                            st.markdown("<div class='card-shell-marker'></div>", unsafe_allow_html=True)
                             st.markdown(
                                 _normalize_html(
                                     f"""
@@ -8029,6 +8033,9 @@ if category == "Scheduling":
         <style>
         .full-schedule-cards {margin-top: 8px;}
         .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
+        .card-shell-marker {display:none;}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; box-shadow:0 10px 20px rgba(20,17,15,0.08);}
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:14px; display:flex; flex-direction:column; gap:10px; min-height:220px;}
         .card-head {display:flex; align-items:center; gap:10px;}
         .card-avatar {width:42px; height:42px; border-radius:50%; background:#d9c5b2; color:#34312d; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:13px;}
         .card-name {font-size:15px; font-weight:800; color:#14110f;}
@@ -8589,123 +8596,128 @@ if category == "Scheduling":
                     row_key = row_id if row_id else f"full_{start}_{row_index}"
 
                     with col:
-                        footer_html = ""
-                        if not (show_case or show_status):
-                            footer_html = f"""
-                                <div class="card-footer">
-                                    <div>
-                                        {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
+                        with st.container(border=True):
+                            st.markdown("<div class='card-shell-marker'></div>", unsafe_allow_html=True)
+                            st.markdown(
+                                _normalize_html(
+                                    f"""
+                                    <div class="card-head">
+                                        <div class="card-avatar">{html.escape(_initials(patient))}</div>
+                                        <div>
+                                            <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
+                                            <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                        </div>
+                                        <div class="card-menu">...</div>
                                     </div>
-                                    {f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>" if not show_status else ""}
-                                </div>
-                            """
-                        card_html = _normalize_html(
-                            f"""
-                            <div class="schedule-card">
-                                <div class="card-head">
-                                    <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                    <div>
-                                        <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
-                                        <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
+                                    {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
+                                    {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
+                                    <div class="staff-row">
+                                        <span class="staff-label">Staff:</span>
+                                        {staff_html}
                                     </div>
-                                    <div class="card-menu">...</div>
-                                </div>
-                                {f"<div class='doctor-pill'>{html.escape(doctor)}</div>" if doctor else ""}
-                                {f"<div class='procedure-text'>{html.escape(procedure)}</div>" if procedure else ""}
-                                <div class="staff-row">
-                                    <span class="staff-label">Staff:</span>
-                                    {staff_html}
-                                </div>
-                                {footer_html}
-                            </div>
-                            """
-                        )
-                        st.markdown(card_html, unsafe_allow_html=True)
-                        if show_case or show_status:
-                            columns_count = (
-                                (1 if show_case else 0)
-                                + (1 if show_status else 0)
-                                + (1 if show_suction else 0)
-                            )
-                            inline_cols = st.columns(columns_count, gap="small")
-                            col_idx = 0
-                            if show_case:
-                                case_active = _truthy(row.get("CASE PAPER"))
-                                with inline_cols[col_idx]:
-                                    case_checked = st.checkbox(
-                                        "Case Paper",
-                                        value=case_active,
-                                        key=f"full_card_case_{row_key}_{start}",
-                                    )
-                                    if case_checked != case_active:
-                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                col_idx += 1
-                            if show_status:
-                                status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
-                                with inline_cols[col_idx]:
-                                    status_value = st.selectbox(
-                                        "Status",
-                                        status_options,
-                                        index=status_index,
-                                        key=f"full_card_status_{row_key}_{start}",
-                                    )
-                                    if status_value != status:
-                                        _update_row_status(row_id, patient, in_time, status_value)
-                                col_idx += 1
-                            if show_suction:
-                                suction_active = _truthy(row.get("SUCTION"))
-                                with inline_cols[col_idx]:
-                                    st.markdown(
-                                        f"<span class='flag{' active' if suction_active else ''}'>Suction</span>",
-                                        unsafe_allow_html=True,
-                                    )
-
-                        action_cols = st.columns(3, gap="small")
-                        with action_cols[0]:
-                            st.button(
-                                "Edit",
-                                key=f"full_card_edit_{row_key}_{start}",
-                                on_click=_open_full_edit_dialog,
-                                args=(
-                                    {
-                                        "row_key": row_key,
-                                        "row_id": row_id,
-                                        "lookup_patient": patient,
-                                        "lookup_in_time": _fmt_time(in_time),
-                                        "patient": patient,
-                                        "in_time": _fmt_time(in_time),
-                                        "out_time": _fmt_time(out_time),
-                                        "doctor": doctor,
-                                        "procedure": procedure,
-                                        "status": status,
-                                        "op": _clean_text(row.get("OP")),
-                                        "staff_first": _clean_text(row.get("FIRST")),
-                                        "staff_second": _clean_text(row.get("SECOND")),
-                                        "staff_third": _clean_text(row.get("Third")),
-                                        "case_paper": _truthy(row.get("CASE PAPER")),
-                                        "suction": _truthy(row.get("SUCTION")),
-                                        "cleaning": _truthy(row.get("CLEANING")),
-                                    },
+                                    """
                                 ),
-                                use_container_width=True,
-                                type="secondary",
+                                unsafe_allow_html=True,
                             )
-                        with action_cols[1]:
-                            if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
-                                _update_row_status(row_id, patient, in_time, "DONE")
-                        with action_cols[2]:
-                            if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
-                                _update_row_status(row_id, patient, in_time, "CANCELLED")
+                            if not (show_case or show_status):
+                                st.markdown(
+                                    _normalize_html(
+                                        f"""
+                                        <div class="card-footer">
+                                            <div>
+                                                {f"<span class='flag{' active' if _truthy(row.get('SUCTION')) else ''}'>Suction</span>" if show_suction else ""}
+                                            </div>
+                                            {f"<span class='status-pill {_status_class(status)}'>{html.escape(status)}</span>" if not show_status else ""}
+                                        </div>
+                                        """
+                                    ),
+                                    unsafe_allow_html=True,
+                                )
+                            if show_case or show_status:
+                                columns_count = (
+                                    (1 if show_case else 0)
+                                    + (1 if show_status else 0)
+                                    + (1 if show_suction else 0)
+                                )
+                                inline_cols = st.columns(columns_count, gap="small")
+                                col_idx = 0
+                                if show_case:
+                                    case_active = _truthy(row.get("CASE PAPER"))
+                                    with inline_cols[col_idx]:
+                                        case_checked = st.checkbox(
+                                            "Case Paper",
+                                            value=case_active,
+                                            key=f"full_card_case_{row_key}_{start}",
+                                        )
+                                        if case_checked != case_active:
+                                            _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                    col_idx += 1
+                                if show_status:
+                                    status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
+                                    with inline_cols[col_idx]:
+                                        status_value = st.selectbox(
+                                            "Status",
+                                            status_options,
+                                            index=status_index,
+                                            key=f"full_card_status_{row_key}_{start}",
+                                        )
+                                        if status_value != status:
+                                            _update_row_status(row_id, patient, in_time, status_value)
+                                    col_idx += 1
+                                if show_suction:
+                                    suction_active = _truthy(row.get("SUCTION"))
+                                    with inline_cols[col_idx]:
+                                        st.markdown(
+                                            f"<span class='flag{' active' if suction_active else ''}'>Suction</span>",
+                                            unsafe_allow_html=True,
+                                        )
 
-                        with st.expander("View Details", expanded=False):
-                            st.markdown(f"**Doctor:** {doctor or '--'}")
-                            st.markdown(f"**Procedure:** {procedure or '--'}")
-                            st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
-                            st.markdown(f"**Status:** {status}")
-                            if show_case:
-                                st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
-                            if show_suction:
-                                st.markdown(f"**Suction:** {'Yes' if _truthy(row.get('SUCTION')) else 'No'}")
+                            action_cols = st.columns(3, gap="small")
+                            with action_cols[0]:
+                                st.button(
+                                    "Edit",
+                                    key=f"full_card_edit_{row_key}_{start}",
+                                    on_click=_open_full_edit_dialog,
+                                    args=(
+                                        {
+                                            "row_key": row_key,
+                                            "row_id": row_id,
+                                            "lookup_patient": patient,
+                                            "lookup_in_time": _fmt_time(in_time),
+                                            "patient": patient,
+                                            "in_time": _fmt_time(in_time),
+                                            "out_time": _fmt_time(out_time),
+                                            "doctor": doctor,
+                                            "procedure": procedure,
+                                            "status": status,
+                                            "op": _clean_text(row.get("OP")),
+                                            "staff_first": _clean_text(row.get("FIRST")),
+                                            "staff_second": _clean_text(row.get("SECOND")),
+                                            "staff_third": _clean_text(row.get("Third")),
+                                            "case_paper": _truthy(row.get("CASE PAPER")),
+                                            "suction": _truthy(row.get("SUCTION")),
+                                            "cleaning": _truthy(row.get("CLEANING")),
+                                        },
+                                    ),
+                                    use_container_width=True,
+                                    type="secondary",
+                                )
+                            with action_cols[1]:
+                                if st.button("Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
+                                    _update_row_status(row_id, patient, in_time, "DONE")
+                            with action_cols[2]:
+                                if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
+                                    _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                            with st.expander("View Details", expanded=False):
+                                st.markdown(f"**Doctor:** {doctor or '--'}")
+                                st.markdown(f"**Procedure:** {procedure or '--'}")
+                                st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
+                                st.markdown(f"**Status:** {status}")
+                                if show_case:
+                                    st.markdown(f"**Case Paper:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
+                                if show_suction:
+                                    st.markdown(f"**Suction:** {'Yes' if _truthy(row.get('SUCTION')) else 'No'}")
             if st.session_state.get("full_edit_open"):
                 _render_full_edit_dialog()
     # ================ Manual save
