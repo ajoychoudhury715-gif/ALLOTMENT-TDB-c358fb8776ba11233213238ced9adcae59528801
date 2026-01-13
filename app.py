@@ -1680,9 +1680,14 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 st.warning("Unable to locate row for update.")
                 return
 
-            old_status = str(df_updated.at[idx, "STATUS"]).strip().upper() if "STATUS" in df_updated.columns else ""
+            old_status = ""
             if "STATUS" in df_updated.columns:
+                old_status = str(df_updated.at[idx, "STATUS"]).strip().upper()
                 df_updated.at[idx, "STATUS"] = new_status
+            if "Status" in df_updated.columns:
+                if not old_status:
+                    old_status = str(df_updated.at[idx, "Status"]).strip().upper()
+                df_updated.at[idx, "Status"] = new_status
             ts = _now_iso()
             if "STATUS_CHANGED_AT" in df_updated.columns:
                 df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
@@ -1706,6 +1711,38 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             st.toast(f"{patient_name} marked {new_status}", icon="✅")
             st.rerun()
 
+        def _update_row_case_paper(row_id, patient_name, in_time_str, case_checked: bool):
+            df_source = df_raw if "df_raw" in globals() else df_schedule
+            if df_source is None or df_source.empty:
+                st.warning("No schedule data to update.")
+                return
+            df_updated = df_source.copy()
+            idx = None
+            if row_id and "REMINDER_ROW_ID" in df_updated.columns:
+                matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
+                if matches.any():
+                    idx = matches.idxmax()
+            if idx is None and "Patient Name" in df_updated.columns and patient_name:
+                name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
+                if in_time_str and "In Time" in df_updated.columns:
+                    time_mask = df_updated["In Time"].astype(str) == str(in_time_str)
+                    match = df_updated[name_mask & time_mask]
+                else:
+                    match = df_updated[name_mask]
+                if not match.empty:
+                    idx = match.index[0]
+            if idx is None:
+                st.warning("Unable to locate row for update.")
+                return
+            if "CASE PAPER" not in df_updated.columns:
+                st.warning("No CASE PAPER column to update.")
+                return
+            df_updated.at[idx, "CASE PAPER"] = "Yes" if case_checked else ""
+
+            _maybe_save(df_updated, message=f"Case paper updated for {patient_name}")
+            st.toast(f"{patient_name} case paper updated")
+            st.rerun()
+
         search_value = st.session_state.get("compact_search", "").strip()
         df_cards = df_display.copy()
         if search_value:
@@ -1722,6 +1759,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         else:
             show_case = "CASE PAPER" in df_display.columns
             show_suction = "SUCTION" in df_display.columns
+            show_status = ("STATUS" in df_display.columns) or ("Status" in df_display.columns)
             cards_per_row = 4
             card_rows = [
                 df_cards.iloc[i:i + cards_per_row]
@@ -1826,6 +1864,32 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                             with action_cols[2]:
                                 if st.button("Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
                                     _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                            if show_case or show_status:
+                                inline_cols = st.columns(2 if (show_case and show_status) else 1, gap="small")
+                                col_idx = 0
+                                if show_case:
+                                    case_active = _truthy(row.get("CASE PAPER"))
+                                    with inline_cols[col_idx]:
+                                        case_checked = st.checkbox(
+                                            "Case Paper",
+                                            value=case_active,
+                                            key=f"card_case_{row_key}",
+                                        )
+                                        if case_checked != case_active:
+                                            _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                    col_idx += 1
+                                if show_status:
+                                    status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status)
+                                    with inline_cols[col_idx]:
+                                        status_value = st.selectbox(
+                                            "Status",
+                                            status_options,
+                                            index=status_index,
+                                            key=f"card_status_{row_key}",
+                                        )
+                                        if status_value != status:
+                                            _update_row_status(row_id, patient, in_time, status_value)
 
                             with st.expander("View Details", expanded=False):
                                 st.markdown(f"**Doctor:** {doctor or '—'}")
@@ -8353,6 +8417,10 @@ if category == "Scheduling":
         if "STATUS" in df_updated.columns:
             old_status_norm = str(df_updated.at[idx, "STATUS"]).strip().upper()
             df_updated.at[idx, "STATUS"] = new_status
+        if "Status" in df_updated.columns:
+            if not old_status_norm:
+                old_status_norm = str(df_updated.at[idx, "Status"]).strip().upper()
+            df_updated.at[idx, "Status"] = new_status
 
         ts = _now_iso()
         if "STATUS_CHANGED_AT" in df_updated.columns:
@@ -8375,6 +8443,38 @@ if category == "Scheduling":
 
         _maybe_save(df_updated, message=f"Status set to {new_status} for {patient_name}")
         st.toast(f"{patient_name} marked {new_status}", icon="✅")
+        st.rerun()
+
+    def _update_row_case_paper(row_id, patient_name, in_time_val, case_checked: bool):
+        df_source = df_raw if "df_raw" in globals() else df
+        if df_source is None or df_source.empty:
+            st.warning("No schedule data to update.")
+            return
+        df_updated = df_source.copy()
+        idx = None
+        if row_id and "REMINDER_ROW_ID" in df_updated.columns:
+            matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
+            if matches.any():
+                idx = matches.idxmax()
+        if idx is None and "Patient Name" in df_updated.columns and patient_name:
+            name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
+            if in_time_val and "In Time" in df_updated.columns:
+                time_mask = df_updated["In Time"].astype(str) == str(in_time_val)
+                match = df_updated[name_mask & time_mask]
+            else:
+                match = df_updated[name_mask]
+            if not match.empty:
+                idx = match.index[0]
+        if idx is None:
+            st.warning("Unable to locate row for update.")
+            return
+        if "CASE PAPER" not in df_updated.columns:
+            st.warning("No CASE PAPER column to update.")
+            return
+        df_updated.at[idx, "CASE PAPER"] = "Yes" if case_checked else ""
+
+        _maybe_save(df_updated, message=f"Case paper updated for {patient_name}")
+        st.toast(f"{patient_name} case paper updated")
         st.rerun()
 
     edited_all = None
@@ -8447,6 +8547,7 @@ if category == "Scheduling":
 
         show_case = "CASE PAPER" in df_cards.columns
         show_suction = "SUCTION" in df_cards.columns
+        show_status = ("STATUS" in df_cards.columns) or ("Status" in df_cards.columns)
         if df_cards.empty:
             st.info("No patients found.")
         else:
@@ -8538,6 +8639,32 @@ if category == "Scheduling":
                         with action_cols[2]:
                             if st.button("Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
                                 _update_row_status(row_id, patient, in_time, "CANCELLED")
+
+                        if show_case or show_status:
+                            inline_cols = st.columns(2 if (show_case and show_status) else 1, gap="small")
+                            col_idx = 0
+                            if show_case:
+                                case_active = _truthy(row.get("CASE PAPER"))
+                                with inline_cols[col_idx]:
+                                    case_checked = st.checkbox(
+                                        "Case Paper",
+                                        value=case_active,
+                                        key=f"full_card_case_{row_key}_{start}",
+                                    )
+                                    if case_checked != case_active:
+                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
+                                col_idx += 1
+                            if show_status:
+                                status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status)
+                                with inline_cols[col_idx]:
+                                    status_value = st.selectbox(
+                                        "Status",
+                                        status_options,
+                                        index=status_index,
+                                        key=f"full_card_status_{row_key}_{start}",
+                                    )
+                                    if status_value != status:
+                                        _update_row_status(row_id, patient, in_time, status_value)
 
                         with st.expander("View Details", expanded=False):
                             st.markdown(f"**Doctor:** {doctor or '--'}")
