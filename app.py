@@ -4175,6 +4175,7 @@ def _allocate_assistants_for_slot(
 
     dept_assistants = get_assistants_for_department(department)
     all_assistants = _get_all_assistants()
+    free_now_set, free_status_map = _get_dashboard_free_set(df_schedule, all_assistants)
 
     avail_dept = get_available_assistants(
         department,
@@ -4183,6 +4184,8 @@ def _allocate_assistants_for_slot(
         df_schedule,
         exclude_row_id,
         assistants_override=dept_assistants,
+        free_now_set=free_now_set,
+        free_status_map=free_status_map,
     )
     available_dept_order = [a["name"] for a in avail_dept if a.get("available")]
     available_dept_map = {name.upper(): name for name in available_dept_order}
@@ -4195,6 +4198,8 @@ def _allocate_assistants_for_slot(
             df_schedule,
             exclude_row_id,
             assistants_override=all_assistants,
+            free_now_set=free_now_set,
+            free_status_map=free_status_map,
         )
         available_all_order = [a["name"] for a in avail_all if a.get("available")]
         available_all_map = {name.upper(): name for name in available_all_order}
@@ -4252,6 +4257,8 @@ def get_available_assistants(
     df_schedule: pd.DataFrame,
     exclude_row_id: str | None = None,
     assistants_override: list[str] | None = None,
+    free_now_set: set[str] | None = None,
+    free_status_map: dict[str, dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Get list of available assistants for a department at a specific time.
@@ -4264,6 +4271,22 @@ def get_available_assistants(
     available = []
     
     for assistant in assistants:
+        assist_upper = str(assistant).strip().upper()
+        if free_now_set is not None and assist_upper not in free_now_set:
+            reason = "Not available on dashboard"
+            if isinstance(free_status_map, dict):
+                info = free_status_map.get(assist_upper, {}) or {}
+                status_label = str(info.get("status", "")).strip().upper()
+                if info.get("reason"):
+                    reason = str(info.get("reason"))
+                elif status_label:
+                    reason = f"Dashboard: {status_label}"
+            available.append({
+                "name": assistant,
+                "available": False,
+                "reason": reason,
+            })
+            continue
         is_avail, reason = is_assistant_available(assistant, check_in_time, check_out_time, df_schedule, exclude_row_id)
         available.append({
             "name": assistant,
@@ -4471,6 +4494,22 @@ def get_current_assistant_status(
             }
     
     return status
+
+
+def _get_dashboard_free_set(
+    df_schedule: pd.DataFrame,
+    assistants: list[str],
+) -> tuple[set[str], dict[str, dict[str, str]]]:
+    try:
+        status_map = get_current_assistant_status(df_schedule, assistants=assistants)
+    except Exception:
+        return set(), {}
+    free_set = {
+        name
+        for name, info in status_map.items()
+        if str(info.get("status", "")).strip().upper() == "FREE"
+    }
+    return free_set, status_map
 
 
 STATUS_BADGES = {
@@ -9210,7 +9249,15 @@ if category == "Assistants" and assist_view == "Auto Allocation":
             st.info(f"Department: **{dept}**")
             
             # Get available assistants
-            available = get_available_assistants(dept, alloc_in_time, alloc_out_time, df)
+            free_now_set, free_status_map = _get_dashboard_free_set(df, _get_all_assistants())
+            available = get_available_assistants(
+                dept,
+                alloc_in_time,
+                alloc_out_time,
+                df,
+                free_now_set=free_now_set,
+                free_status_map=free_status_map,
+            )
             
             st.markdown("**Assistant Availability:**")
             for a in available:
