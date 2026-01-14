@@ -14,7 +14,6 @@ import uuid  # for generating stable row IDs
 import json
 import io
 import html
-import textwrap
 import openpyxl
 from openpyxl.utils import get_column_letter
 
@@ -52,7 +51,7 @@ GSHEETS_AVAILABLE = _gsheets_available
 # pip install pandas openpyxl streamlit gspread google-auth
 
 # Page config
-st.set_page_config(page_title="THE DENTAL BOND", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="THE DENTAL BOND", layout="wide", initial_sidebar_state="collapsed")
 
 # Session defaults for role/user (replace with real auth later)
 if "user_role" not in st.session_state:
@@ -62,11 +61,7 @@ if "current_user" not in st.session_state:
 if "nav_category" not in st.session_state:
     st.session_state.nav_category = "Scheduling"
 if "nav_sched" not in st.session_state:
-    st.session_state.nav_sched = "Full Schedule"
-
-def _get_profiles_cache_snapshot() -> dict[str, Any]:
-    cached = st.session_state.get("profiles_cache")
-    return cached if isinstance(cached, dict) else {}
+    st.session_state.nav_sched = "Compact Dashboard"
 
 # -----------------------------
 # Premium sidebar CSS (white pastel)
@@ -74,34 +69,33 @@ def _get_profiles_cache_snapshot() -> dict[str, Any]:
 def inject_white_pastel_sidebar():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
     [data-testid="stSidebar"] {
-        background: #f3f3f4;
-        border-right: 1px solid #d9c5b2;
+        background: linear-gradient(180deg, #f4f7fb 0%, #ffffff 55%, #1f3a5f 100%);
+        border-right: 1px solid #cbd5e1;
     }
     [data-testid="stSidebarContent"] { padding: 16px 14px; }
     [data-testid="stSidebar"] .stSelectbox, [data-testid="stSidebar"] .stRadio {
-        background: #f3f3f4;
-        border: 1px solid #d9c5b2;
+        background: #fff;
+        border: 1px solid #cbd5e1;
         border-radius: 16px;
         padding: 10px 12px 8px 12px;
-        box-shadow: 0 8px 24px rgba(20, 17, 15, 0.15);
+        box-shadow: 0 8px 24px rgba(25, 42, 81, 0.15);
     }
     [data-testid="stSidebar"] button {
         border-radius: 14px !important;
         padding: 0.6rem 0.9rem !important;
-        border: 1px solid #34312d !important;
-        background: #34312d !important;
-        box-shadow: 0 10px 22px rgba(20, 17, 15, 0.18) !important;
+        border: 1px solid #1f3a5f !important;
+        background: linear-gradient(180deg, #2e86c1, #1f3a5f) !important;
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12) !important;
         font-weight: 700;
     }
-    .sidebar-title { font-size: 18px; font-weight: 800; color: #14110f; margin-bottom: 6px; }
+    .sidebar-title { font-size: 18px; font-weight: 800; color: #1f3a5f; margin-bottom: 6px; }
     .live-pill {
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 12px; border-radius:999px; font-size:12px; font-weight:700;
-        background:#d9c5b2; color:#14110f; border:1px solid #7e7f83; margin-bottom: 10px;
+        background:#e2e8f0; color:#1f3a5f; border:1px solid #cbd5e1; margin-bottom: 10px;
     }
-    .live-dot { width:8px; height:8px; border-radius:999px; background:#34312d; }
+    .live-dot { width:8px; height:8px; border-radius:999px; background:#22c55e; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -175,45 +169,7 @@ def mins_to_hhmm(m):
     mm = m % 60
     return f"{h:02d}:{mm:02d}"
 
-def _normalize_html(block: str) -> str:
-    return "\n".join(
-        line.strip()
-        for line in textwrap.dedent(block).splitlines()
-        if line.strip()
-    )
-
-@st.cache_data(ttl=30)
-def _get_active_assistant_profile_names() -> list[str]:
-    try:
-        df = load_profiles(PROFILE_ASSISTANT_SHEET)
-    except Exception:
-        return []
-    if df is None or df.empty or "name" not in df.columns:
-        return []
-    names = df["name"].astype(str).str.strip().str.upper()
-    if "status" in df.columns:
-        status = df["status"].astype(str).str.upper()
-        names = names[status == "ACTIVE"]
-    out = [n for n in names.tolist() if n]
-    seen = set()
-    deduped: list[str] = []
-    for name in out:
-        if name in seen:
-            continue
-        seen.add(name)
-        deduped.append(name)
-    return deduped
-
-
 def get_assistants_list(schedule_df):
-    try:
-        profiles = _get_active_assistant_profile_names()
-        if profiles:
-            return profiles
-    except Exception:
-        pass
-    if schedule_df is None or schedule_df.empty:
-        return []
     cols = [c for c in ["FIRST", "SECOND", "Third"] if c in schedule_df.columns]
     names = set()
     for c in cols:
@@ -278,18 +234,13 @@ def save_attendance_sheet(excel_path: str | None, att_df: pd.DataFrame):
         clean_df = clean_df[ATTENDANCE_COLUMNS]
         with pd.ExcelWriter(path, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
             clean_df.to_excel(writer, sheet_name=ATTENDANCE_SHEET, index=False)
-        try:
-            _load_attendance_today_excel.clear()
-        except Exception:
-            pass
     except Exception as e:
         st.error(f"Attendance save failed: {e}")
 
-@st.cache_data(ttl=5)
-def db_get_one_attendance(_supabase, date_str: str, assistant: str):
+def db_get_one_attendance(supabase, date_str: str, assistant: str):
     try:
         res = (
-            _supabase.table("assistant_attendance")
+            supabase.table("assistant_attendance")
             .select("date,assistant,punch_in,punch_out")
             .eq("date", date_str)
             .eq("assistant", assistant)
@@ -301,148 +252,16 @@ def db_get_one_attendance(_supabase, date_str: str, assistant: str):
         st.warning(f"Attendance fetch failed: {e}")
         return None
 
-@st.cache_data(ttl=5)
-def _load_attendance_today_supabase(_supabase, date_str: str) -> list[dict[str, Any]]:
-    try:
-        res = (
-            _supabase.table("assistant_attendance")
-            .select("assistant,punch_in,punch_out")
-            .eq("date", date_str)
-            .execute()
-        )
-        return res.data or []
-    except Exception:
-        return []
-
-
-@st.cache_data(ttl=30)
-def _load_attendance_range_supabase(
-    _supabase,
-    start_date: str,
-    end_date: str,
-) -> list[dict[str, Any]]:
-    if not _supabase or not start_date or not end_date:
-        return []
-    try:
-        res = (
-            _supabase.table("assistant_attendance")
-            .select("date,assistant,punch_in,punch_out")
-            .gte("date", start_date)
-            .lte("date", end_date)
-            .execute()
-        )
-        return res.data or []
-    except Exception as e:
-        st.warning(f"Attendance fetch failed: {e}")
-        return []
-
-
-@st.cache_data(ttl=5)
-def _load_attendance_today_excel(_excel_path: str | None, date_str: str) -> list[dict[str, Any]]:
-    try:
-        att_df = load_attendance_sheet(_excel_path)
-        if att_df is None or att_df.empty:
-            return []
-        day_df = att_df[att_df["DATE"] == date_str]
-        if day_df.empty:
-            return []
-        return day_df.to_dict(orient="records")
-    except Exception:
-        return []
-
-
-def _build_punch_map_from_records(records: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
-    out: dict[str, dict[str, str]] = {}
-    for rec in records or []:
-        if not isinstance(rec, dict):
-            continue
-        name = str(rec.get("assistant") or rec.get("ASSISTANT") or "").strip().upper()
-        if not name:
-            continue
-        punch_in = str(rec.get("punch_in") or rec.get("PUNCH IN") or "").strip()
-        punch_out = str(rec.get("punch_out") or rec.get("PUNCH OUT") or "").strip()
-        out[name] = {"punch_in": punch_in, "punch_out": punch_out}
-    return out
-
-
-def _get_today_punch_map() -> dict[str, dict[str, str]]:
-    date_str, _ = ist_today_and_time()
-    if USE_SUPABASE and supabase_client is not None:
-        records = _load_attendance_today_supabase(supabase_client, date_str)
-        return _build_punch_map_from_records(records)
-    records = _load_attendance_today_excel(None, date_str)
-    return _build_punch_map_from_records(records)
-
-
-def _format_punch_time(val: str) -> str:
-    s = str(val or "").strip()
-    if len(s) >= 5:
-        return s[:5]
-    return s
-
-
-def _assistant_punch_state(
-    assistant_upper: str,
-    punch_map: dict[str, dict[str, str]] | None,
-) -> tuple[str, str, str]:
-    if not punch_map:
-        return "NONE", "", ""
-    rec = punch_map.get(assistant_upper)
-    if not rec:
-        return "NONE", "", ""
-    punch_in = str(rec.get("punch_in", "") or "").strip()
-    punch_out = str(rec.get("punch_out", "") or "").strip()
-    if punch_in and not punch_out:
-        return "IN", punch_in, ""
-    if punch_in and punch_out:
-        return "OUT", punch_in, punch_out
-    return "NONE", punch_in, punch_out
-
-
-def _calc_worked_minutes(punch_in: str, punch_out: str) -> int | None:
-    in_min = time_to_minutes(punch_in)
-    out_min = time_to_minutes(punch_out)
-    if in_min is None or out_min is None:
-        return None
-    worked = out_min - in_min
-    if worked < 0:
-        worked += 1440
-    return worked
-
-
-def _attendance_status(punch_in: str, punch_out: str) -> str:
-    if punch_in and punch_out:
-        return "COMPLETE"
-    if punch_in and not punch_out:
-        return "IN PROGRESS"
-    return "MISSING"
-
 def db_punch_in(supabase, date_str: str, assistant: str, now_time: str):
     try:
         payload = {"date": date_str, "assistant": assistant, "punch_in": now_time}
         supabase.table("assistant_attendance").upsert(payload, on_conflict="date,assistant").execute()
-        try:
-            db_get_one_attendance.clear()
-        except Exception:
-            pass
-        try:
-            _load_attendance_today_supabase.clear()
-        except Exception:
-            pass
     except Exception as e:
         st.error(f"Punch in failed: {e}")
 
 def db_punch_out(supabase, date_str: str, assistant: str, now_time: str):
     try:
         supabase.table("assistant_attendance").update({"punch_out": now_time}).eq("date", date_str).eq("assistant", assistant).execute()
-        try:
-            db_get_one_attendance.clear()
-        except Exception:
-            pass
-        try:
-            _load_attendance_today_supabase.clear()
-        except Exception:
-            pass
     except Exception as e:
         st.error(f"Punch out failed: {e}")
 
@@ -498,9 +317,6 @@ def sidebar_punch_widget(schedule_df: pd.DataFrame, excel_path: str | None = Non
             att.loc[mask, "PUNCH OUT"] = now_hhmm
             save_attendance_sheet(excel_path, att)
             st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
-            updated_df = _remove_assistant_assignments(schedule_df, assistant)
-            if updated_df is not None:
-                _maybe_save(updated_df, message=f"{assistant} removed from allotment after punch out")
             st.rerun()
 
     with st.expander("Admin actions"):
@@ -546,20 +362,16 @@ def sidebar_punch_widget_supabase(schedule_df: pd.DataFrame, supabase):
         if st.button("⏹ Punch Out", use_container_width=True, disabled=(not punch_in) or bool(punch_out)):
             db_punch_out(supabase, date_str, assistant, now_time)
             st.toast(f"{assistant} punched out at {now_hhmm}", icon="⏹")
-            updated_df = _remove_assistant_assignments(schedule_df, assistant)
-            if updated_df is not None:
-                _maybe_save(updated_df, message=f"{assistant} removed from allotment after punch out")
             st.rerun()
 
 
 # ================= DUTY REMINDER (SUPABASE) =================
-@st.cache_data(ttl=5)
-def fetch_active_duty_assignments(_supabase, assistant: str) -> list[dict[str, Any]]:
-    if not _supabase or not assistant:
+def fetch_active_duty_assignments(supabase, assistant: str) -> list[dict[str, Any]]:
+    if not supabase or not assistant:
         return []
     try:
         res = (
-            _supabase.table("duty_assignments")
+            supabase.table("duty_assignments")
             .select("id,duty_id,assistant,op,est_minutes,active")
             .eq("assistant", assistant)
             .eq("active", True)
@@ -570,7 +382,7 @@ def fetch_active_duty_assignments(_supabase, assistant: str) -> list[dict[str, A
         if not duty_ids:
             return []
         duty_res = (
-            _supabase.table("duties_master")
+            supabase.table("duties_master")
             .select("id,title,frequency,default_minutes,op,active")
             .in_("id", duty_ids)
             .eq("active", True)
@@ -599,13 +411,12 @@ def fetch_active_duty_assignments(_supabase, assistant: str) -> list[dict[str, A
         return []
 
 
-@st.cache_data(ttl=5)
-def fetch_duty_runs_since(_supabase, assistant: str, start_date_iso: str):
-    if not _supabase or not assistant:
+def fetch_duty_runs_since(supabase, assistant: str, start_date_iso: str):
+    if not supabase or not assistant:
         return []
     try:
         res = (
-            _supabase.table("duty_runs")
+            supabase.table("duty_runs")
             .select("id,date,assistant,duty_id,status,started_at,due_at,ended_at,est_minutes,op")
             .eq("assistant", assistant)
             .gte("date", start_date_iso)
@@ -617,13 +428,12 @@ def fetch_duty_runs_since(_supabase, assistant: str, start_date_iso: str):
         return []
 
 
-@st.cache_data(ttl=5)
-def fetch_active_duty_run(_supabase, assistant: str):
-    if not _supabase or not assistant:
+def fetch_active_duty_run(supabase, assistant: str):
+    if not supabase or not assistant:
         return None
     try:
         res = (
-            _supabase.table("duty_runs")
+            supabase.table("duty_runs")
             .select("id,date,assistant,duty_id,status,started_at,due_at,est_minutes,op")
             .eq("assistant", assistant)
             .eq("status", "IN_PROGRESS")
@@ -677,11 +487,6 @@ def start_duty_run_supabase(supabase, assistant: str, duty: dict[str, Any]):
     }
     try:
         res = supabase.table("duty_runs").insert(payload).execute()
-        try:
-            fetch_active_duty_run.clear()
-            fetch_duty_runs_since.clear()
-        except Exception:
-            pass
         run_id = res.data[0]["id"] if res.data else None
         return run_id, payload
     except Exception as e:
@@ -694,11 +499,6 @@ def mark_duty_done_supabase(supabase, run_id: str):
         return False
     try:
         supabase.table("duty_runs").update({"status": "DONE", "ended_at": now_ist().isoformat()}).eq("id", run_id).execute()
-        try:
-            fetch_active_duty_run.clear()
-            fetch_duty_runs_since.clear()
-        except Exception:
-            pass
         return True
     except Exception as e:
         st.error(f"Failed to close duty: {e}")
@@ -1113,103 +913,56 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
         """
         <style>
         body, .stApp {
-            background: #f3f3f4 !important;
+            background: radial-gradient(circle at 20% 20%, rgba(255,255,255,0.65), transparent 35%),
+                        radial-gradient(circle at 80% 10%, rgba(46,134,193,0.22), transparent 50%),
+                        linear-gradient(135deg, #dce9ef 0%, #c8dde5 35%, #9ec4d4 70%, #7aaec3 100%) !important;
         }
         .block-container {padding-top:0.3rem !important;}
         h1,h2,h3{margin:0.3rem 0 !important;}
-        .dash-title {text-align:center; color:#14110f; font-size:28px; font-weight:800; letter-spacing:0.5px;}
-        .dash-subtitle {text-align:center; margin-top:-10px; color:#7e7f83; font-weight:700;}
+        .dash-title {text-align:center; color:#1f3a5f; font-size:28px; font-weight:800; letter-spacing:0.5px;}
+        .dash-subtitle {text-align:center; margin-top:-10px; color:#1f3a5f; font-weight:700;}
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            background: #f3f3f4;
-            border: 1px solid #d9c5b2;
+            background: rgba(255,255,255,0.65);
+            border: 1px solid rgba(255,255,255,0.6);
             border-radius: 20px;
-            box-shadow: 0 18px 36px rgba(20, 17, 15, 0.18);
+            box-shadow: 0 24px 50px rgba(18, 44, 66, 0.18);
         }
         div[data-testid="stVerticalBlockBorderWrapper"] > div {
             padding: 16px 18px 18px 18px;
             border-radius: 20px;
         }
-        .v-divider {width: 1px; background: #d9c5b2; min-height: 280px; margin: 8px auto;}
+        .v-divider {width: 1px; background: rgba(148,163,184,0.5); min-height: 280px; margin: 8px auto;}
         .panel-title {font-size: 20px; font-weight: 800; margin-bottom: 8px; display:flex; align-items:center; gap:8px;}
         .panel-title .link {font-size: 14px; opacity: 0.6; margin-left: 4px;}
-        .alert-card {background: #d9c5b2; border: 1px solid #7e7f83; border-radius: 12px; padding: 12px; color: #14110f; margin-bottom: 8px; display:flex; gap:10px; align-items:center;}
-        .alert-icon {width: 28px; height: 28px; border-radius: 50%; border: 2px solid #34312d; display:flex; align-items:center; justify-content:center; color:#34312d; font-weight:700;}
+        .alert-card {background: #fce8e6; border: 1px solid #f6b1ab; border-radius: 12px; padding: 12px; color: #8c1c13; margin-bottom: 8px; display:flex; gap:10px; align-items:center;}
+        .alert-icon {width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ef4444; display:flex; align-items:center; justify-content:center; color:#ef4444; font-weight:700;}
         .alert-title {font-weight:700; margin-bottom:2px;}
         .alert-sub {opacity:0.85;}
-        .manage-pill {background: #f3f3f4; border: 1px solid #d9c5b2; border-radius: 12px; padding: 10px 12px; display:inline-flex; align-items:center; gap:8px; margin-top:6px; color:#14110f;}
-        .metric-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
-        .metric-title {font-size: 12px; color:#7e7f83; letter-spacing:0.6px;}
-        .metric-value {font-size: 22px; font-weight: 800; color:#14110f;}
+        .manage-pill {background: rgba(255,255,255,0.7); border: 1px solid rgba(203,213,225,0.9); border-radius: 12px; padding: 10px 12px; display:inline-flex; align-items:center; gap:8px; margin-top:6px;}
+        .metric-card {background:#f9fbfd; border:1px solid #e2e8f0; border-radius:12px; padding:12px; text-align:center; min-height:80px;}
+        .metric-title {font-size: 12px; color:#6b7280; letter-spacing:0.6px;}
+        .metric-value {font-size: 22px; font-weight: 800; color:#0f172a;}
         .metrics-grid {display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:10px; margin-bottom:6px;}
         #metrics-anchor + div[data-testid="stHorizontalBlock"] {margin-top: 0 !important;}
-        .controls-row .stButton>button {height: 34px !important; border-radius: 10px !important;}
+        .controls-row .stButton>button {height: 42px !important; border-radius: 12px !important;}
         .controls-row [data-baseweb="select"] > div {min-height: 42px !important; border-radius: 12px !important;}
-        button[kind="primary"] {background:#34312d !important; border:1px solid #34312d !important; color:#f3f3f4 !important; box-shadow:0 8px 18px rgba(20,17,15,0.25) !important;}
-        button[kind="secondary"] {background:#f3f3f4 !important; border:1px solid #7e7f83 !important; color:#14110f !important;}
-        .section-divider {height:1px; background: #d9c5b2; margin: 14px 0;}
-        .search-row input {background:#f3f3f4 !important; border-radius:10px !important; border:1px solid #d9c5b2 !important;}
-        [data-testid="stDataFrameContainer"] {border-radius: 14px !important; border: 1px solid #d9c5b2 !important; box-shadow: 0 8px 20px rgba(20,17,15,0.08) !important;}
-        [data-testid="stDataFrameContainer"] thead th {background:#f3f3f4 !important; color:#34312d !important; font-weight:700 !important;}
-        .summary-bar {background: #f3f3f4; border: 1px solid #d9c5b2; border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
+        button[kind="primary"] {background:#0f7a5f !important; border:1px solid #0f7a5f !important; color:#fff !important; box-shadow:0 8px 18px rgba(15,122,95,0.35) !important;}
+        button[kind="secondary"] {background:#ffffff !important; border:1px solid #cbd5e1 !important; color:#1f2937 !important;}
+        .section-divider {height:1px; background: rgba(148,163,184,0.35); margin: 14px 0;}
+        .search-row input {background:#f5f7fb !important; border-radius:10px !important; border:1px solid #cbd5e1 !important;}
+        [data-testid="stDataFrameContainer"] {border-radius: 14px !important; border: 1px solid rgba(203,213,225,0.9) !important; box-shadow: 0 8px 20px rgba(15,23,42,0.08) !important;}
+        [data-testid="stDataFrameContainer"] thead th {background:#f2f5f8 !important; color:#475569 !important; font-weight:700 !important;}
+        .summary-bar {background: rgba(255,255,255,0.75); border: 1px solid rgba(203,213,225,0.8); border-radius: 14px; padding: 6px 10px; margin-top: 12px;}
         .compact-dashboard [data-testid="stVerticalBlock"] {gap: 0.5rem;}
         .compact-dashboard [data-testid="stHorizontalBlock"] {gap: 0.6rem;}
-        .schedule-cards {display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-top: 8px;}
-        .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
-        .card-shell-marker {display:none;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14); overflow:hidden;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:0 18px 18px 18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center; justify-content:flex-start;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stButton"] > button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 30px !important; border-radius: 10px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 84px; padding: 0 10px !important; font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button *,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] * {white-space: nowrap;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: wrap; row-gap: 0.5rem;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) > div {min-width: 84px; flex: 1 1 84px;}
-        @media (min-width: 1100px) {
-            div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: nowrap;}
-            div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) > div {min-width: 100px; flex: 0 0 auto;}
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px; font-weight: 600; color:#3b322a; white-space: nowrap;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="secondary"] {background:#ffffff !important; border:1px solid #d8c9b8 !important; color:#3a3129 !important;}
-        div[data-testid="stVerticalBlock"]:has(.card-action-cancel) button {border-color:#e0b1b1 !important; color:#a94a4a !important; background:#fff7f7 !important;}
-        .card-action-marker {display:none;}
-        .card-status-banner {display:flex; align-items:center; gap:8px; padding:10px 18px; border-radius:18px 18px 12px 12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin:0 -18px 12px -18px;}
-        .card-status-banner.waiting {background:linear-gradient(90deg, #f7e6b7, #fff2d6); color:#6d5a44;}
-        .card-status-banner.ongoing {background:linear-gradient(90deg, #d5e2ff, #eef3ff); color:#2d4d86;}
-        .card-status-banner.arrived {background:linear-gradient(90deg, #e0e0e0, #f2f2f2); color:#4e4e4e;}
-        .card-status-banner.completed {background:linear-gradient(90deg, #cfead6, #e7f6ec); color:#2f5b3a;}
-        .card-status-banner.cancelled {background:linear-gradient(90deg, #f5d1d1, #fde8e8); color:#8a3e3e;}
-        .status-dot {width:10px; height:10px; border-radius:50%;}
-        .card-status-banner.waiting .status-dot {background:#f1b400; box-shadow:0 0 0 3px rgba(241,180,0,0.2);}
-        .card-status-banner.ongoing .status-dot {background:#3b6fd8; box-shadow:0 0 0 3px rgba(59,111,216,0.2);}
-        .card-status-banner.arrived .status-dot {background:#6f6f6f; box-shadow:0 0 0 3px rgba(111,111,111,0.2);}
-        .card-status-banner.completed .status-dot {background:#4caf6b; box-shadow:0 0 0 3px rgba(76,175,107,0.2);}
-        .card-status-banner.cancelled .status-dot {background:#d45c5c; box-shadow:0 0 0 3px rgba(212,92,92,0.2);}
-        .card-head {display:flex; align-items:center; gap:12px;}
-        .card-title {display:flex; flex-direction:column; gap:2px;}
-        .card-avatar {width:48px; height:48px; border-radius:50%; background:#e9dcc8; color:#3b2f22; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px;}
-        .card-name {font-size:17px; font-weight:800; color:#1f1a15; letter-spacing:0.2px;}
-        .card-time {font-size:12px; color:#7a7168;}
-        .card-info {display:flex; flex-direction:column; gap:6px;}
-        .info-row {display:flex; align-items:center; gap:8px;}
-        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:14px; font-weight:600; display:flex; align-items:center; justify-content:center;}
-        .info-text {font-size:13px; color:#514840; font-weight:600;}
-        .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
-        .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:10px 12px; font-weight:600; color:#5b5147; display:flex; align-items:center; gap:10px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::before {content:"›"; color:#8c8176; font-size:18px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::after {content:"..."; margin-left:auto; color:#8c8176; font-size:16px;}
-        .card-expand {font-size:12px; color:#7e7f83; border-top:1px solid #d9c5b2; padding-top:8px; display:flex; align-items:center; justify-content:space-between;}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
     st.markdown("<div class='compact-dashboard'>", unsafe_allow_html=True)
+    st.markdown("<div class='dash-title'>THE DENTAL BOND</div>", unsafe_allow_html=True)
+    st.markdown("<div class='dash-subtitle'>Real-time Scheduling Management System</div>", unsafe_allow_html=True)
     st.write("")
 
     with st.container(border=True):
@@ -1220,9 +973,8 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             today_idx = now_ist().weekday()
             tomorrow_idx = (today_idx + 1) % 7
             weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
-            today_off = weekly_off_map.get(today_idx, [])
-            tomorrow_off = weekly_off_map.get(tomorrow_idx, [])
+            today_off = WEEKLY_OFF.get(today_idx, [])
+            tomorrow_off = WEEKLY_OFF.get(tomorrow_idx, [])
 
             if today_off:
                 st.markdown(
@@ -1292,13 +1044,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             with b1:
                 st.button("➕ Add Patient", use_container_width=True, key="compact_add_patient", type="primary")
             with b2:
-                st.button(
-                    "?? Save Changes",
-                    use_container_width=True,
-                    key="compact_save_changes",
-                    type="secondary",
-                    disabled=bool(st.session_state.get("is_saving")),
-                )
+                st.button("💾 Save Changes", use_container_width=True, key="compact_save_changes", type="secondary")
             with b3:
                 st.selectbox("Delete row", ["Delete row..."], label_visibility="collapsed", key="compact_delete_row")
             st.markdown("</div>", unsafe_allow_html=True)
@@ -1319,8 +1065,7 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
                 "In Time": ["01:09 AM", "01:09 AM"],
                 "Out Time": ["01:14 AM", "01:14 AM"],
                 "Procedure": ["PLT/INE", "PSE/IENN"],
-                "Doctor": ["DR. FARHATH", "DR. SHRUTI"],
-                "FIRST": ["ANISHA", "LAWANA"],
+                "FIRST": ["DR. HUSAIN", "DR. FARHATH"],
                 "SECOND": ["ANISHA", "LAWANA"],
                 "THIRD": ["NITIN", "MUKHILA"],
                 "CASE PAPER": ["None", "None"],
@@ -1335,625 +1080,13 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
             if "DR." in df_display.columns and "Doctor" not in df_display.columns:
                 rename_map["DR."] = "Doctor"
             df_display = df_display.rename(columns=rename_map)
-            desired_cols = [
-                c
-                for c in [
-                    "Patient Name",
-                    "In Time",
-                    "Out Time",
-                    "Procedure",
-                    "Doctor",
-                    "DR.",
-                    "FIRST",
-                    "SECOND",
-                    "Third",
-                    "THIRD",
-                    "CASE PAPER",
-                    "SUCTION",
-                    "REMINDER_ROW_ID",
-                    "STATUS",
-                    "Status",
-                ]
-                if c in df_display.columns
-            ]
+            desired_cols = [c for c in ["Patient Name", "In Time", "Out Time", "Procedure", "FIRST", "SECOND", "Third", "CASE PAPER", "SUCTION", "STATUS", "Status"] if c in df_display.columns]
             if desired_cols:
                 df_display = df_display[desired_cols]
             if "STATUS" in df_display.columns and "Status" not in df_display.columns:
                 df_display = df_display.rename(columns={"STATUS": "Status"})
 
-        view_options = ["Cards"]
-        if st.session_state.get("user_role") == "admin":
-            view_options.append("Table")
-        view_mode = st.radio(
-            "View",
-            view_options,
-            horizontal=True,
-            key="compact_view_mode",
-            label_visibility="collapsed",
-        )
-
-        def _clean_text(val) -> str:
-            if val is None or (isinstance(val, float) and pd.isna(val)):
-                return ""
-            text = str(val).strip()
-            if text.lower() in {"nan", "none"}:
-                return ""
-            return text
-
-        def _truthy(val) -> bool:
-            if isinstance(val, bool):
-                return val
-            text = _clean_text(val).lower()
-            return text in {"yes", "y", "true", "1", "done", "checked"}
-
-        def _initials(name: str) -> str:
-            parts = [p for p in name.strip().split() if p]
-            if not parts:
-                return "--"
-            if len(parts) == 1:
-                return parts[0][:2].upper()
-            return (parts[0][0] + parts[-1][0]).upper()
-
-        def _status_class(status: str) -> str:
-            status_up = status.upper()
-            if "WAIT" in status_up:
-                return "waiting"
-            if "ONGOING" in status_up or "ON GOING" in status_up:
-                return "ongoing"
-            if "ARRIVED" in status_up:
-                return "arrived"
-            if "DONE" in status_up or "COMPLETED" in status_up:
-                return "completed"
-            if "CANCEL" in status_up or "SHIFT" in status_up:
-                return "cancelled"
-            return "waiting"
-
-        def _open_compact_edit_dialog(context: dict[str, Any]) -> None:
-            st.session_state["compact_edit_context"] = context
-            st.session_state["compact_edit_open"] = True
-            row_key = str(context.get("row_key", "")).strip()
-            if not row_key:
-                return
-            in_time_value = str(context.get("in_time", "") or "").strip()
-            out_time_value = str(context.get("out_time", "") or "").strip()
-            if in_time_value.upper() in {"N/A", "NONE", "NAT"}:
-                in_time_value = ""
-            if out_time_value.upper() in {"N/A", "NONE", "NAT"}:
-                out_time_value = ""
-            st.session_state[f"compact_popup_patient_{row_key}"] = str(context.get("patient", "") or "")
-            in_hour, in_minute, in_ampm = _time_to_picker_parts(in_time_value)
-            out_hour, out_minute, out_ampm = _time_to_picker_parts(out_time_value)
-            st.session_state[f"compact_popup_in_hour_{row_key}"] = in_hour
-            st.session_state[f"compact_popup_in_min_{row_key}"] = in_minute
-            st.session_state[f"compact_popup_in_ampm_{row_key}"] = in_ampm
-            st.session_state[f"compact_popup_out_hour_{row_key}"] = out_hour
-            st.session_state[f"compact_popup_out_min_{row_key}"] = out_minute
-            st.session_state[f"compact_popup_out_ampm_{row_key}"] = out_ampm
-            st.session_state[f"compact_popup_status_{row_key}"] = str(context.get("status", "") or "")
-            st.session_state[f"compact_popup_doctor_{row_key}"] = str(context.get("doctor", "") or "")
-            st.session_state[f"compact_popup_procedure_{row_key}"] = str(context.get("procedure", "") or "")
-            st.session_state[f"compact_popup_first_{row_key}"] = str(context.get("staff_first", "") or "")
-            st.session_state[f"compact_popup_second_{row_key}"] = str(context.get("staff_second", "") or "")
-            st.session_state[f"compact_popup_third_{row_key}"] = str(context.get("staff_third", "") or "")
-            st.session_state[f"compact_popup_case_{row_key}"] = bool(context.get("case_paper", False))
-            st.session_state[f"compact_popup_suction_{row_key}"] = bool(context.get("suction", False))
-
-        def _close_compact_edit_dialog() -> None:
-            st.session_state["compact_edit_open"] = False
-            st.session_state["compact_edit_context"] = {}
-
-        def _compact_normalize_time_input(raw_value: str) -> tuple[str, str | None]:
-            text = str(raw_value or "").strip()
-            if not text:
-                return "", None
-            t = _coerce_to_time_obj(text)
-            if t is None:
-                return "", "Invalid time format. Use HH:MM or 09:30 AM."
-            return f"{t.hour:02d}:{t.minute:02d}", None
-
-        def _compact_build_select_options(options: list[str], current_value: str) -> tuple[list[str], int]:
-            current = str(current_value or "").strip()
-            opts = [opt for opt in options if str(opt).strip()]
-            if current and current not in opts:
-                opts = [current] + opts
-            opts = [""] + opts
-            index = opts.index(current) if current in opts else 0
-            return opts, index
-
-        def _apply_compact_card_edit(row_id, patient_name, in_time_str, updates: dict[str, Any]) -> bool:
-            df_source = df_raw if "df_raw" in globals() else df_schedule
-            if df_source is None or df_source.empty:
-                st.warning("No schedule data to update.")
-                return False
-            df_updated = df_source.copy()
-            idx = None
-            if row_id and "REMINDER_ROW_ID" in df_updated.columns:
-                matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
-                if matches.any():
-                    idx = matches.idxmax()
-            if idx is None and "Patient Name" in df_updated.columns and patient_name:
-                name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
-                if in_time_str and "In Time" in df_updated.columns:
-                    time_mask = df_updated["In Time"].astype(str) == str(in_time_str)
-                    match = df_updated[name_mask & time_mask]
-                else:
-                    match = df_updated[name_mask]
-                if not match.empty:
-                    idx = match.index[0]
-            if idx is None:
-                st.warning("Unable to locate row for update.")
-                return False
-
-            status_col = "STATUS" if "STATUS" in df_updated.columns else "Status" if "Status" in df_updated.columns else ""
-            old_status_norm = str(df_updated.at[idx, status_col]).strip().upper() if status_col else ""
-
-            for col, val in updates.items():
-                if col in df_updated.columns:
-                    df_updated.at[idx, col] = val
-
-            if status_col:
-                new_status_norm = str(df_updated.at[idx, status_col]).strip().upper()
-                if new_status_norm and new_status_norm != old_status_norm:
-                    ts = _now_iso()
-                    if "STATUS_CHANGED_AT" in df_updated.columns:
-                        df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
-                    if ("ONGOING" in new_status_norm or "ON GOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
-                        if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
-                            df_updated.at[idx, "ACTUAL_START_AT"] = ts
-                    if ("DONE" in new_status_norm or "COMPLETED" in new_status_norm) and "ACTUAL_END_AT" in df_updated.columns:
-                        if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
-                            df_updated.at[idx, "ACTUAL_END_AT"] = ts
-                    if "STATUS_LOG" in df_updated.columns:
-                        existing_log = str(df_updated.at[idx, "STATUS_LOG"])
-                        try:
-                            df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
-                                existing_log,
-                                {"at": ts, "from": old_status_norm, "to": new_status_norm},
-                            )
-                        except Exception:
-                            df_updated.at[idx, "STATUS_LOG"] = existing_log
-
-            if bool(st.session_state.get("auto_assign_assistants", True)):
-                only_empty = bool(st.session_state.get("auto_assign_only_empty", True))
-                _auto_fill_assistants_for_row(df_updated, int(idx), only_fill_empty=only_empty)
-
-            _maybe_save(df_updated, show_toast=False, message=f"Updated {patient_name or 'patient'}")
-            if st.session_state.get("auto_save_enabled", False):
-                st.toast("Changes saved.", icon="✅")
-            else:
-                st.toast("Changes queued. Click 'Save Changes'.", icon="📝")
-            return True
-
-        def _render_compact_edit_dialog_body() -> None:
-            context = st.session_state.get("compact_edit_context") or {}
-            if not context:
-                _close_compact_edit_dialog()
-                return
-            row_key = str(context.get("row_key", "")).strip()
-            if not row_key:
-                _close_compact_edit_dialog()
-                return
-
-            lookup_patient = str(context.get("lookup_patient", "") or "")
-            lookup_in_time = str(context.get("lookup_in_time", "") or "")
-            row_id = str(context.get("row_id", "") or "")
-
-            with st.form(key=f"compact_popup_form_{row_key}"):
-                form_left, form_right = st.columns(2, gap="small")
-                with form_left:
-                    patient_input = st.text_input(
-                        "Patient Name",
-                        key=f"compact_popup_patient_{row_key}",
-                    )
-                    st.markdown("In Time")
-                    in_time_cols = st.columns(3, gap="small")
-                    with in_time_cols[0]:
-                        in_hour = st.selectbox(
-                            "Hour",
-                            options=TIME_PICKER_HOURS,
-                            key=f"compact_popup_in_hour_{row_key}",
-                        )
-                    with in_time_cols[1]:
-                        in_minute = st.selectbox(
-                            "Minute",
-                            options=TIME_PICKER_MINUTES,
-                            key=f"compact_popup_in_min_{row_key}",
-                        )
-                    with in_time_cols[2]:
-                        in_ampm = st.selectbox(
-                            "AM/PM",
-                            options=TIME_PICKER_AMPM,
-                            key=f"compact_popup_in_ampm_{row_key}",
-                        )
-                    st.markdown("Out Time")
-                    out_time_cols = st.columns(3, gap="small")
-                    with out_time_cols[0]:
-                        out_hour = st.selectbox(
-                            "Hour",
-                            options=TIME_PICKER_HOURS,
-                            key=f"compact_popup_out_hour_{row_key}",
-                        )
-                    with out_time_cols[1]:
-                        out_minute = st.selectbox(
-                            "Minute",
-                            options=TIME_PICKER_MINUTES,
-                            key=f"compact_popup_out_min_{row_key}",
-                        )
-                    with out_time_cols[2]:
-                        out_ampm = st.selectbox(
-                            "AM/PM",
-                            options=TIME_PICKER_AMPM,
-                            key=f"compact_popup_out_ampm_{row_key}",
-                        )
-                    status_current = st.session_state.get(f"compact_popup_status_{row_key}", "")
-                    status_options, status_index = _compact_build_select_options(STATUS_OPTIONS, status_current)
-                    status_input = st.selectbox(
-                        "Status",
-                        options=status_options,
-                        index=status_index,
-                        key=f"compact_popup_status_{row_key}",
-                    )
-                with form_right:
-                    doctor_current = st.session_state.get(f"compact_popup_doctor_{row_key}", "")
-                    doctor_options, doctor_index = _compact_build_select_options(DOCTOR_OPTIONS, doctor_current)
-                    doctor_input = st.selectbox(
-                        "Doctor",
-                        options=doctor_options,
-                        index=doctor_index,
-                        key=f"compact_popup_doctor_{row_key}",
-                    )
-                    procedure_input = st.text_input(
-                        "Procedure",
-                        key=f"compact_popup_procedure_{row_key}",
-                    )
-                    first_current = st.session_state.get(f"compact_popup_first_{row_key}", "")
-                    first_options, first_index = _compact_build_select_options(ASSISTANT_OPTIONS, first_current)
-                    first_input = st.selectbox(
-                        "First",
-                        options=first_options,
-                        index=first_index,
-                        key=f"compact_popup_first_{row_key}",
-                    )
-                    second_current = st.session_state.get(f"compact_popup_second_{row_key}", "")
-                    second_options, second_index = _compact_build_select_options(ASSISTANT_OPTIONS, second_current)
-                    second_input = st.selectbox(
-                        "Second",
-                        options=second_options,
-                        index=second_index,
-                        key=f"compact_popup_second_{row_key}",
-                    )
-                    third_current = st.session_state.get(f"compact_popup_third_{row_key}", "")
-                    third_options, third_index = _compact_build_select_options(ASSISTANT_OPTIONS, third_current)
-                    third_input = st.selectbox(
-                        "Third",
-                        options=third_options,
-                        index=third_index,
-                        key=f"compact_popup_third_{row_key}",
-                    )
-
-                flag_cols = st.columns(2, gap="small")
-                with flag_cols[0]:
-                    case_paper_input = st.checkbox(
-                        "QTRAQ",
-                        key=f"compact_popup_case_{row_key}",
-                    )
-                with flag_cols[1]:
-                    suction_input = st.checkbox(
-                        "Suction",
-                        key=f"compact_popup_suction_{row_key}",
-                    )
-
-                form_actions = st.columns(2, gap="small")
-                with form_actions[0]:
-                    save_clicked = st.form_submit_button("Save", use_container_width=True)
-                with form_actions[1]:
-                    cancel_clicked = st.form_submit_button("Cancel", use_container_width=True)
-
-            if cancel_clicked:
-                _close_compact_edit_dialog()
-                st.rerun()
-            if save_clicked:
-                in_norm, in_err = _time_from_picker_parts(in_hour, in_minute, in_ampm)
-                out_norm, out_err = _time_from_picker_parts(out_hour, out_minute, out_ampm)
-                if in_err or out_err:
-                    if in_err:
-                        st.error(in_err)
-                    if out_err:
-                        st.error(out_err)
-                else:
-                    updates = {
-                        "Patient Name": str(patient_input or "").strip(),
-                        "In Time": in_norm,
-                        "Out Time": out_norm,
-                        "Procedure": str(procedure_input or "").strip(),
-                        "DR.": str(doctor_input or "").strip(),
-                        "Doctor": str(doctor_input or "").strip(),
-                        "FIRST": str(first_input or "").strip(),
-                        "SECOND": str(second_input or "").strip(),
-                        "Third": str(third_input or "").strip(),
-                        "THIRD": str(third_input or "").strip(),
-                        "CASE PAPER": "Yes" if case_paper_input else "",
-                        "SUCTION": bool(suction_input),
-                        "STATUS": str(status_input or "").strip(),
-                        "Status": str(status_input or "").strip(),
-                    }
-                    if _apply_compact_card_edit(row_id, lookup_patient, lookup_in_time, updates):
-                        _close_compact_edit_dialog()
-                        st.rerun()
-
-        _dialog_decorator = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
-        if _dialog_decorator:
-            @_dialog_decorator("Edit appointment")
-            def _render_compact_edit_dialog() -> None:
-                _render_compact_edit_dialog_body()
-        else:
-            def _render_compact_edit_dialog() -> None:
-                st.warning("Popup editing requires a newer Streamlit version.")
-                _render_compact_edit_dialog_body()
-
-        def _update_row_status(row_id, patient_name, in_time_str, new_status):
-            df_source = df_raw if "df_raw" in globals() else df_schedule
-            if df_source is None or df_source.empty:
-                st.warning("No schedule data to update.")
-                return
-            df_updated = df_source.copy()
-            idx = None
-            if row_id and "REMINDER_ROW_ID" in df_updated.columns:
-                matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
-                if matches.any():
-                    idx = matches.idxmax()
-            if idx is None and "Patient Name" in df_updated.columns and patient_name:
-                name_mask = df_updated["Patient Name"].astype(str).str.upper() == patient_name.upper()
-                if in_time_str and "In Time" in df_updated.columns:
-                    time_mask = df_updated["In Time"].astype(str) == in_time_str
-                    match = df_updated[name_mask & time_mask]
-                else:
-                    match = df_updated[name_mask]
-                if not match.empty:
-                    idx = match.index[0]
-            if idx is None:
-                st.warning("Unable to locate row for update.")
-                return
-
-            old_status = ""
-            if "STATUS" in df_updated.columns:
-                old_status = str(df_updated.at[idx, "STATUS"]).strip().upper()
-                df_updated.at[idx, "STATUS"] = new_status
-            if "Status" in df_updated.columns:
-                if not old_status:
-                    old_status = str(df_updated.at[idx, "Status"]).strip().upper()
-                df_updated.at[idx, "Status"] = new_status
-            ts = _now_iso()
-            if "STATUS_CHANGED_AT" in df_updated.columns:
-                df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
-            if ("ONGOING" in new_status or "ON GOING" in new_status) and "ACTUAL_START_AT" in df_updated.columns:
-                if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
-                    df_updated.at[idx, "ACTUAL_START_AT"] = ts
-            if ("DONE" in new_status or "COMPLETED" in new_status) and "ACTUAL_END_AT" in df_updated.columns:
-                if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
-                    df_updated.at[idx, "ACTUAL_END_AT"] = ts
-            if "STATUS_LOG" in df_updated.columns:
-                existing_log = str(df_updated.at[idx, "STATUS_LOG"])
-                try:
-                    df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
-                        existing_log,
-                        {"at": ts, "from": old_status, "to": new_status},
-                    )
-                except Exception:
-                    df_updated.at[idx, "STATUS_LOG"] = existing_log
-
-            _maybe_save(df_updated, message=f"Status set to {new_status} for {patient_name}")
-            st.toast(f"{patient_name} marked {new_status}", icon="✅")
-            st.rerun()
-
-        def _update_row_case_paper(row_id, patient_name, in_time_str, case_checked: bool):
-            df_source = df_raw if "df_raw" in globals() else df_schedule
-            if df_source is None or df_source.empty:
-                st.warning("No schedule data to update.")
-                return
-            df_updated = df_source.copy()
-            idx = None
-            if row_id and "REMINDER_ROW_ID" in df_updated.columns:
-                matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
-                if matches.any():
-                    idx = matches.idxmax()
-            if idx is None and "Patient Name" in df_updated.columns and patient_name:
-                name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
-                if in_time_str and "In Time" in df_updated.columns:
-                    time_mask = df_updated["In Time"].astype(str) == str(in_time_str)
-                    match = df_updated[name_mask & time_mask]
-                else:
-                    match = df_updated[name_mask]
-                if not match.empty:
-                    idx = match.index[0]
-            if idx is None:
-                st.warning("Unable to locate row for update.")
-                return
-            if "CASE PAPER" not in df_updated.columns:
-                st.warning("No QTRAQ column to update.")
-                return
-            df_updated.at[idx, "CASE PAPER"] = "Yes" if case_checked else ""
-
-            _maybe_save(df_updated, message=f"Case paper updated for {patient_name}")
-            st.toast(f"{patient_name} case paper updated")
-            st.rerun()
-
-        search_value = st.session_state.get("compact_search", "").strip()
-        df_cards = df_display.copy()
-        if search_value:
-            query = search_value.lower()
-            mask = pd.Series(False, index=df_cards.index)
-            for col in ["Patient Name", "Doctor", "DR.", "Procedure", "FIRST", "SECOND", "Third", "THIRD", "Status"]:
-                if col in df_cards.columns:
-                    mask = mask | df_cards[col].astype(str).str.lower().str.contains(query, na=False)
-            df_cards = df_cards[mask]
-
-        if view_mode == "Table":
-            df_table = df_display.drop(columns=["REMINDER_ROW_ID"], errors="ignore")
-            st.data_editor(df_table, use_container_width=True, height=280, key="compact_schedule_editor")
-        else:
-            show_case = "CASE PAPER" in df_display.columns
-            cards_per_row = 3
-            card_rows = [
-                df_cards.iloc[i:i + cards_per_row]
-                for i in range(0, len(df_cards), cards_per_row)
-            ]
-            if df_cards.empty:
-                st.info("No patients found.")
-            for chunk in card_rows:
-                cols = st.columns(len(chunk), gap="small")
-                for col, (row_index, row) in zip(cols, chunk.iterrows()):
-                    patient = _clean_text(row.get("Patient Name"))
-                    doctor = _clean_text(row.get("Doctor") or row.get("DR."))
-                    procedure = _clean_text(row.get("Procedure"))
-                    in_time = _clean_text(row.get("In Time") or row.get("In Time Str"))
-                    out_time = _clean_text(row.get("Out Time") or row.get("Out Time Str"))
-                    status = _clean_text(row.get("Status") or row.get("STATUS") or "WAITING")
-                    row_id = _clean_text(row.get("REMINDER_ROW_ID"))
-                    staff = [
-                        _clean_text(row.get("FIRST")),
-                        _clean_text(row.get("SECOND")),
-                        _clean_text(row.get("Third") or row.get("THIRD")),
-                    ]
-                    staff = [name for name in staff if name]
-                    time_text = " - ".join([t for t in [in_time, out_time] if t])
-                    status_text = (status or "WAITING").strip().upper()
-                    if not status_text:
-                        status_text = "WAITING"
-                    status_class = _status_class(status_text)
-                    staff_html = " &bull; ".join(html.escape(name) for name in staff) if staff else "Unassigned"
-                    doctor_line = (
-                        f"<div class='info-row'><span class='info-icon'>👩‍⚕️</span><span class='info-text'>{html.escape(doctor)}</span></div>"
-                        if doctor
-                        else ""
-                    )
-                    staff_line = f"<div class='info-row'><span class='info-icon'>👥</span><span class='info-text'>{staff_html}</span></div>"
-                    row_key = row_id if row_id else f"compact_{row_index}"
-
-                    with col:
-                        with st.container(border=True):
-                            st.markdown("<div class='card-shell-marker'></div>", unsafe_allow_html=True)
-                            st.markdown(
-                                _normalize_html(
-                                    f"""
-                                    <div class="card-status-banner {status_class}">
-                                        <span class="status-dot"></span>
-                                        <span class="status-text">{html.escape(status_text)}</span>
-                                    </div>
-                                    <div class="card-head">
-                                        <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                        <div class="card-title">
-                                            <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
-                                            <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
-                                        </div>
-                                    </div>
-                                    <div class="card-subdivider"></div>
-                                    <div class="card-info">
-                                        {doctor_line}
-                                        {staff_line}
-                                    </div>
-                                    """
-                                ),
-                                unsafe_allow_html=True,
-                            )
-
-                            st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
-                            if show_case:
-                                row_cols = st.columns([1, 1.15, 1.15, 1.15], gap="small")
-                                with row_cols[0]:
-                                    case_active = _truthy(row.get("CASE PAPER"))
-                                    case_checked = st.checkbox(
-                                        "QTRAQ",
-                                        value=case_active,
-                                        key=f"card_case_{row_key}",
-                                    )
-                                    if case_checked != case_active:
-                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                with row_cols[1]:
-                                    st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                    if st.button("✓ Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
-                                        _update_row_status(row_id, patient, in_time, "DONE")
-                                with row_cols[2]:
-                                    st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
-                                    st.button(
-                                        "✎ Edit",
-                                        key=f"card_edit_{row_key}",
-                                        on_click=_open_compact_edit_dialog,
-                                        args=(
-                                            {
-                                                "row_key": row_key,
-                                                "row_id": row_id,
-                                                "lookup_patient": patient,
-                                                "lookup_in_time": in_time,
-                                                "patient": patient,
-                                                "in_time": in_time,
-                                                "out_time": out_time,
-                                                "doctor": doctor,
-                                                "procedure": procedure,
-                                                "status": status,
-                                                "staff_first": _clean_text(row.get("FIRST")),
-                                                "staff_second": _clean_text(row.get("SECOND")),
-                                                "staff_third": _clean_text(row.get("Third") or row.get("THIRD")),
-                                                "case_paper": _truthy(row.get("CASE PAPER")),
-                                                "suction": _truthy(row.get("SUCTION")),
-                                            },
-                                        ),
-                                        use_container_width=True,
-                                        type="secondary",
-                                    )
-                                with row_cols[3]:
-                                    st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                    if st.button("✕ Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
-                                        _update_row_status(row_id, patient, in_time, "CANCELLED")
-                            else:
-                                action_cols = st.columns([1.15, 1.15, 1.15], gap="small")
-                                with action_cols[0]:
-                                    st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                    if st.button("✓ Done", key=f"card_done_{row_key}", use_container_width=True, type="primary"):
-                                        _update_row_status(row_id, patient, in_time, "DONE")
-                                with action_cols[1]:
-                                    st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
-                                    st.button(
-                                        "✎ Edit",
-                                        key=f"card_edit_{row_key}",
-                                        on_click=_open_compact_edit_dialog,
-                                        args=(
-                                            {
-                                                "row_key": row_key,
-                                                "row_id": row_id,
-                                                "lookup_patient": patient,
-                                                "lookup_in_time": in_time,
-                                                "patient": patient,
-                                                "in_time": in_time,
-                                                "out_time": out_time,
-                                                "doctor": doctor,
-                                                "procedure": procedure,
-                                                "status": status,
-                                                "staff_first": _clean_text(row.get("FIRST")),
-                                                "staff_second": _clean_text(row.get("SECOND")),
-                                                "staff_third": _clean_text(row.get("Third") or row.get("THIRD")),
-                                                "case_paper": _truthy(row.get("CASE PAPER")),
-                                                "suction": _truthy(row.get("SUCTION")),
-                                            },
-                                        ),
-                                        use_container_width=True,
-                                        type="secondary",
-                                    )
-                                with action_cols[2]:
-                                    st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                    if st.button("✕ Cancel", key=f"card_cancel_{row_key}", use_container_width=True, type="secondary"):
-                                        _update_row_status(row_id, patient, in_time, "CANCELLED")
-
-                            with st.expander("View Details", expanded=False):
-                                st.markdown(f"**Doctor:** {doctor or '—'}")
-                                st.markdown(f"**Procedure:** {procedure or '—'}")
-                                st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
-                                st.markdown(f"**Status:** {status}")
-                                if show_case:
-                                    st.markdown(f"**QTRAQ:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
-
-            if st.session_state.get("compact_edit_open"):
-                _render_compact_edit_dialog()
+        st.data_editor(df_display, use_container_width=True, height=280, key="compact_schedule_editor")
 
         st.markdown("<div class='summary-bar'>", unsafe_allow_html=True)
         with st.expander("📊 Schedule Summary by Doctor", expanded=False):
@@ -1963,41 +1096,13 @@ def render_compact_dashboard(df_schedule: pd.DataFrame):
 
 # Global save-mode flags
 if "auto_save_enabled" not in st.session_state:
-    st.session_state.auto_save_enabled = True
+    st.session_state.auto_save_enabled = False
 if "pending_changes" not in st.session_state:
     st.session_state.pending_changes = False
 if "pending_changes_reason" not in st.session_state:
     st.session_state.pending_changes_reason = ""
 if "unsaved_df" not in st.session_state:
     st.session_state.unsaved_df = None
-if "save_debounce_seconds" not in st.session_state:
-    st.session_state.save_debounce_seconds = 0
-if "last_save_at" not in st.session_state:
-    st.session_state.last_save_at = 0.0
-if "last_saved_hash" not in st.session_state:
-    st.session_state.last_saved_hash = None
-if "loaded_save_version" not in st.session_state:
-    st.session_state.loaded_save_version = None
-if "loaded_save_at" not in st.session_state:
-    st.session_state.loaded_save_at = None
-if "enable_conflict_checks" not in st.session_state:
-    st.session_state.enable_conflict_checks = True
-if "save_conflict" not in st.session_state:
-    st.session_state.save_conflict = None
-if "is_saving" not in st.session_state:
-    st.session_state.is_saving = False
-if "unsaved_df_version" not in st.session_state:
-    st.session_state.unsaved_df_version = 0
-if "supabase_ready" not in st.session_state:
-    st.session_state.supabase_ready = False
-if "supabase_ready_at" not in st.session_state:
-    st.session_state.supabase_ready_at = 0.0
-if "supabase_profiles_seeded" not in st.session_state:
-    st.session_state.supabase_profiles_seeded = False
-if "supabase_staff_refreshed" not in st.session_state:
-    st.session_state.supabase_staff_refreshed = False
-if "profiles_cache_bust" not in st.session_state:
-    st.session_state.profiles_cache_bust = 0
 if "active_duty_run_id" not in st.session_state:
     st.session_state.active_duty_run_id = None
 if "active_duty_due_at" not in st.session_state:
@@ -2012,38 +1117,38 @@ if "duty_current_assistant" not in st.session_state:
 # ===== COLOR CUSTOMIZATION SECTION =====
 # Keep all colors centralized so UI stays consistent.
 LIGHT_COLORS = {
-    "bg_primary": "#f3f3f4",
-    "bg_secondary": "#f3f3f4",
-    "text_primary": "#14110f",
-    "text_secondary": "#7e7f83",
-    "button_bg": "#34312d",
-    "button_text": "#f3f3f4",
-    "accent": "#d9c5b2",
-    "success": "#34312d",
-    "warning": "#d9c5b2",
-    "danger": "#7e7f83",
-    "info": "#34312d",
+    "bg_primary": "#f4f7fb",
+    "bg_secondary": "#ffffff",
+    "text_primary": "#1c1c1c",
+    "text_secondary": "#6b7280",
+    "button_bg": "#2e86c1",
+    "button_text": "#ffffff",
+    "accent": "#e67e22",
+    "success": "#10b981",
+    "warning": "#e67e22",
+    "danger": "#ef4444",
+    "info": "#1f3a5f",
     # Solid surfaces
-    "glass_bg": "#f3f3f4",
-    "glass_border": "#d9c5b2",
+    "glass_bg": "#ffffff",
+    "glass_border": "#cbd5e1",
 }
 
 # Dark mode with vibrant neon accents for status indicators
 DARK_COLORS = {
-    "bg_primary": "#14110f",
-    "bg_secondary": "#34312d",
-    "text_primary": "#f3f3f4",
-    "text_secondary": "#7e7f83",
-    "button_bg": "#34312d",
-    "button_text": "#f3f3f4",
-    "accent": "#d9c5b2",
-    "success": "#34312d",
-    "warning": "#d9c5b2",
-    "danger": "#7e7f83",
-    "info": "#34312d",
+    "bg_primary": "#111827",
+    "bg_secondary": "#1f3a5f",
+    "text_primary": "#e5e7eb",
+    "text_secondary": "#9ca3af",
+    "button_bg": "#2e86c1",
+    "button_text": "#ffffff",
+    "accent": "#e67e22",
+    "success": "#10b981",
+    "warning": "#e67e22",
+    "danger": "#ef4444",
+    "info": "#2e86c1",
     # Solid surfaces
-    "glass_bg": "#34312d",
-    "glass_border": "#7e7f83",
+    "glass_bg": "#1f2937",
+    "glass_border": "#374151",
 }
 
 if "dark_mode" not in st.session_state:
@@ -2093,9 +1198,12 @@ st.markdown(
     }}
     
     body, .stApp {{
-        background: var(--bg-primary) !important;
+        background:
+            radial-gradient(900px circle at 20% 20%, rgba(46, 134, 193, 0.12), transparent 45%),
+            radial-gradient(1100px circle at 80% 10%, rgba(31, 58, 95, 0.18), transparent 50%),
+            linear-gradient(135deg, #f4f7fb 0%, #ffffff 45%, #2e86c1 85%, #1f3a5f 100%) !important;
         color: var(--text-primary) !important;
-        font-family: 'Sora', sans-serif;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     }}
 
     /* Tighten gap below sticky header */
@@ -2115,14 +1223,14 @@ st.markdown(
 
     /* Cards & tables */
     .stDataFrame, .stTable, [data-testid="stDataFrameResizable"], [data-testid="stTable"] {{
-        background: var(--glass-bg) !important;
-        border: 1px solid var(--glass-border) !important;
-        box-shadow: 0 12px 28px rgba(20, 17, 15, 0.18);
+        background: #fff8e4 !important;
+        border: 1px solid #909090 !important;
+        box-shadow: 0 12px 28px rgba(0,0,0,0.18);
         border-radius: 16px;
         backdrop-filter: none !important;
     }}
     .stDataFrame table, .stTable table {{
-        background: var(--glass-bg) !important;
+        background: #fff8e4 !important;
     }}
     
     header {{
@@ -2145,25 +1253,12 @@ st.markdown(
     [data-testid="stToolbar"] button[title*="View source"] {{
         display: none !important;
     }}
-    [data-testid="stToolbarActions"],
-    [data-testid="stMainMenu"] {{
-        display: none !important;
-        visibility: hidden !important;
-    }}
     
     /* Professional main container */
     .main {{
         padding: 2rem 3rem !important;
         max-width: 2200px !important;
         margin: 0 auto !important;
-    }}
-
-    html, body, [data-testid="stAppViewContainer"] {{
-        overflow-y: auto !important;
-        height: auto !important;
-    }}
-    [data-testid="stAppViewContainer"] > .main {{
-        overflow: visible !important;
     }}
     
     /* Professional header styling */
@@ -2196,65 +1291,65 @@ st.markdown(
     /* Premium Status-based row background colors with dynamic effects */
     /* Upcoming rows - Light blue */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("WAITING")) {{
-        background: rgba(217, 197, 178, 0.35) !important;
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%) !important;
         border-left: 5px solid {COLORS['info']} !important;
     }}
     
     /* Ongoing rows - Light green */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ON GOING")) {{
-        background: rgba(52, 49, 45, 0.12) !important;
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.1) 100%) !important;
         border-left: 5px solid {COLORS['success']} !important;
     }}
     
     /* Arrived rows - Light yellow */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ARRIVED")) {{
-        background: rgba(217, 197, 178, 0.45) !important;
+        background: linear-gradient(90deg, rgba(245, 158, 11, 0.3) 0%, rgba(245, 158, 11, 0.1) 100%) !important;
         border-left: 5px solid {COLORS['warning']} !important;
     }}
 
     /* Shifted rows - Yellow */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("SHIFTED")) {{
-        background: rgba(217, 197, 178, 0.45) !important;
+        background: linear-gradient(90deg, rgba(245, 158, 11, 0.3) 0%, rgba(245, 158, 11, 0.1) 100%) !important;
         border-left: 5px solid {COLORS['warning']} !important;
     }}
     
     /* Cancelled rows - Light red */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("CANCELLED")) {{
-        background: rgba(126, 127, 131, 0.25) !important;
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.1) 100%) !important;
         border-left: 5px solid {COLORS['danger']} !important;
     }}
     
     /* Enhanced Hover effect with shadow lift */
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("WAITING")):hover {{
-        background: rgba(217, 197, 178, 0.45) !important;
-        box-shadow: 0 4px 12px rgba(52, 49, 45, 0.18) inset !important;
+        background: linear-gradient(90deg, rgba(59, 130, 246, 0.5) 0%, rgba(59, 130, 246, 0.2) 100%) !important;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) inset !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ON GOING")):hover {{
-        background: rgba(52, 49, 45, 0.18) !important;
-        box-shadow: 0 4px 12px rgba(20, 17, 15, 0.18) inset !important;
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.5) 0%, rgba(16, 185, 129, 0.2) 100%) !important;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) inset !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("ARRIVED")):hover {{
-        background: rgba(217, 197, 178, 0.55) !important;
-        box-shadow: 0 4px 12px rgba(52, 49, 45, 0.18) inset !important;
+        background: linear-gradient(90deg, rgba(245, 158, 11, 0.5) 0%, rgba(245, 158, 11, 0.2) 100%) !important;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) inset !important;
     }}
 
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("SHIFTED")):hover {{
-        background: rgba(217, 197, 178, 0.55) !important;
-        box-shadow: 0 4px 12px rgba(52, 49, 45, 0.18) inset !important;
+        background: linear-gradient(90deg, rgba(245, 158, 11, 0.5) 0%, rgba(245, 158, 11, 0.2) 100%) !important;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) inset !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:has(td:contains("CANCELLED")):hover {{
-        background: rgba(126, 127, 131, 0.35) !important;
-        box-shadow: 0 4px 12px rgba(126, 127, 131, 0.25) inset !important;
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.5) 0%, rgba(239, 68, 68, 0.2) 100%) !important;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) inset !important;
     }}
     
     /* Table Header Styling - Premium & Elegant */
     [data-testid="stDataFrameContainer"] thead {{
-        background: {COLORS['button_bg']} !important;
+        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['button_bg']} 100%) !important;
         border-bottom: 1px solid var(--glass-border) !important;
-        box-shadow: 0 6px 18px rgba(20, 17, 15, 0.28) !important;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28) !important;
     }}
     
     [data-testid="stDataFrameContainer"] thead th {{
@@ -2265,12 +1360,12 @@ st.markdown(
         font-size: 0.99rem !important;
         letter-spacing: 1px !important;
         text-transform: uppercase !important;
-        background: {COLORS['button_bg']} !important;
+        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['button_bg']} 100%) !important;
         position: relative !important;
-        text-shadow: 0 2px 4px rgba(20, 17, 15, 0.3) !important;
-        box-shadow: inset 0 1px 0 rgba(243, 243, 244, 0.18) !important;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+        box-shadow: inset 0 1px 0 rgba(249, 249, 249, 0.18) !important;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        border-right: 1px solid rgba(243, 243, 244, 0.22) !important;
+        border-right: 1px solid rgba(249, 249, 249, 0.22) !important;
     }}
     
     [data-testid="stDataFrameContainer"] thead th:last-child {{
@@ -2280,7 +1375,7 @@ st.markdown(
     [data-testid="stDataFrameContainer"] thead th:hover {{
         filter: brightness(1.08) !important;
         transform: translateY(-2px) !important;
-        box-shadow: inset 0 1px 0 rgba(243, 243, 244, 0.10), 0 10px 22px rgba(20, 17, 15, 0.22) !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 10px 22px rgba(0, 0, 0, 0.22) !important;
     }}
     
     /* Premium Table Rows */
@@ -2292,19 +1387,19 @@ st.markdown(
     
     /* Alternating row background for better readability */
     [data-testid="stDataFrameContainer"] tbody tr:nth-child(even) {{
-        background-color: rgba(243, 243, 244, 0.04) !important;
+        background-color: rgba(255, 255, 255, 0.04) !important;
     }}
     
     [data-testid="stDataFrameContainer"] tbody tr:hover {{
-        background-color: rgba(243, 243, 244, 0.06) !important;
-        box-shadow: 0 2px 14px rgba(20, 17, 15, 0.22) inset !important;
+        background-color: rgba(255, 255, 255, 0.06) !important;
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.22) inset !important;
     }}
     
     /* Premium Table Cells */
     [data-testid="stDataFrameContainer"] tbody td {{
         padding: 12px 14px !important;
-        border-bottom: 1px solid rgba(217, 197, 178, 0.55) !important;
-        border-right: 1px solid rgba(217, 197, 178, 0.35) !important;
+        border-bottom: 1px solid rgba(201, 187, 176, 0.55) !important;
+        border-right: 1px solid rgba(201, 187, 176, 0.35) !important;
         font-size: 0.93rem !important;
         line-height: 1.25 !important;
         vertical-align: middle !important;
@@ -2334,7 +1429,7 @@ st.markdown(
         border-radius: 14px;
         background: var(--glass-bg);
         border: 1px solid var(--glass-border);
-        box-shadow: 0 10px 26px rgba(20,17,15,0.12);
+        box-shadow: 0 10px 26px rgba(0,0,0,0.12);
         backdrop-filter: none !important;
         display: flex;
         flex-direction: column;
@@ -2362,14 +1457,14 @@ st.markdown(
     .main [data-baseweb="select"] button {{
         color: {COLORS['text_primary']} !important;
         background-color: {COLORS['bg_secondary']} !important;
-        border: 1px solid #d9c5b2 !important;
+        border: 1px solid #d3c3b0 !important;
         border-radius: 6px !important;
         transition: all 0.2s ease !important;
     }}
     
     .main [data-baseweb="select"] button:hover {{
         border-color: {COLORS['button_bg']} !important;
-        box-shadow: 0 2px 8px rgba(20, 17, 15, 0.22) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22) !important;
     }}
     
     .main [data-baseweb="select"] button span {{
@@ -2379,7 +1474,7 @@ st.markdown(
     [data-baseweb="popover"] {{
         background-color: {COLORS['bg_secondary']} !important;
         border-radius: 8px !important;
-        box-shadow: 0 4px 12px rgba(20, 17, 15, 0.15) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
     }}
     
     [data-baseweb="menu"] {{
@@ -2434,30 +1529,30 @@ st.markdown(
     
     /* Button Styling - Premium & Attractive */
     .stButton>button {{
-        background: {COLORS['button_bg']} !important;
+        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['text_primary']} 160%) !important;
         color: {COLORS['button_text']} !important;
         border: none !important;
-        border-radius: 10px !important;
+        border-radius: 8px !important;
         font-weight: 700 !important;
-        font-size: 0.85rem !important;
-        padding: 8px 16px !important;
+        font-size: 1rem !important;
+        padding: 12px 28px !important;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        box-shadow: 0 4px 18px rgba(20, 17, 15, 0.25) !important;
-        letter-spacing: 0.3px !important;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25) !important;
+        letter-spacing: 0.5px !important;
         text-transform: uppercase !important;
         cursor: pointer !important;
     }}
     
     .stButton>button:hover {{
-        background: {COLORS['button_bg']} !important;
+        background: linear-gradient(135deg, {COLORS['text_primary']} 0%, {COLORS['button_bg']} 100%) !important;
         transform: translateY(-4px) !important;
-        box-shadow: 0 10px 28px rgba(20, 17, 15, 0.32) !important;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32) !important;
         letter-spacing: 1px !important;
     }}
     
     .stButton>button:active {{
         transform: translateY(-1px) !important;
-        box-shadow: 0 2px 10px rgba(20, 17, 15, 0.28) !important;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28) !important;
     }}
     
     .stButton>button:focus {{
@@ -2522,7 +1617,7 @@ st.markdown(
         background: var(--glass-bg) !important;
         border-radius: 14px !important;
         border: 1px solid var(--glass-border) !important;
-        box-shadow: 0 14px 40px rgba(20, 17, 15, 0.30) !important;
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.30) !important;
         overflow: hidden !important;
         transition: all 0.3s ease !important;
         backdrop-filter: none !important;
@@ -2530,7 +1625,7 @@ st.markdown(
     }}
     
     [data-testid="stDataFrameContainer"]:hover {{
-        box-shadow: 0 18px 52px rgba(20, 17, 15, 0.36) !important;
+        box-shadow: 0 18px 52px rgba(0, 0, 0, 0.36) !important;
     }}
     
     /* Tabs Styling */
@@ -2557,28 +1652,28 @@ st.markdown(
     
     /* Alert/Message Styling */
     .st-info {{
-        background-color: rgba(217, 197, 178, 0.18) !important;
+        background-color: rgba(59, 130, 246, 0.1) !important;
         border-left: 4px solid {COLORS['info']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
     }}
     
     .st-success {{
-        background-color: rgba(52, 49, 45, 0.12) !important;
+        background-color: rgba(16, 185, 129, 0.1) !important;
         border-left: 4px solid {COLORS['success']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
     }}
     
     .st-warning {{
-        background-color: rgba(217, 197, 178, 0.22) !important;
+        background-color: rgba(245, 158, 11, 0.1) !important;
         border-left: 4px solid {COLORS['warning']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
     }}
     
     .st-error {{
-        background-color: rgba(126, 127, 131, 0.18) !important;
+        background-color: rgba(239, 68, 68, 0.1) !important;
         border-left: 4px solid {COLORS['danger']} !important;
         border-radius: 6px !important;
         padding: 12px 16px !important;
@@ -2592,9 +1687,9 @@ st.markdown(
     }}
     
     @keyframes pulse-glow {{
-        0% {{ box-shadow: 0 0 0 0 rgba(52, 49, 45, 0.7); }}
-        70% {{ box-shadow: 0 0 0 10px rgba(52, 49, 45, 0); }}
-        100% {{ box-shadow: 0 0 0 0 rgba(52, 49, 45, 0); }}
+        0% {{ box-shadow: 0 0 0 0 rgba(153, 88, 47, 0.7); }}
+        70% {{ box-shadow: 0 0 0 10px rgba(153, 88, 47, 0); }}
+        100% {{ box-shadow: 0 0 0 0 rgba(153, 88, 47, 0); }}
     }}
     
     @keyframes spin-check {{
@@ -2613,7 +1708,7 @@ st.markdown(
         height: 20px !important;
         cursor: pointer !important;
         transition: transform 140ms ease, filter 0.3s ease !important;
-        accent-color: #34312d !important;
+        accent-color: #99582f !important;
     }}
 
     /* Keyboard focus for table checkboxes */
@@ -2701,7 +1796,7 @@ st.markdown(
     /* Divider styling */
     hr {{
         border: none !important;
-        border-top: 2px solid #d9c5b2 !important;
+        border-top: 2px solid #d3c3b0 !important;
         margin: 2rem 0 !important;
     }}
     
@@ -2710,32 +1805,32 @@ st.markdown(
         background-color: {COLORS['bg_secondary']} !important;
         border-radius: 8px !important;
         padding: 1.5rem !important;
-        border: 1px solid #d9c5b2 !important;
+        border: 1px solid #d3c3b0 !important;
         margin-bottom: 1.5rem !important;
-        box-shadow: 0 2px 8px rgba(20, 17, 15, 0.08) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
     }}
     
     /* Save button styling - aesthetic and smooth */
     button[key="manual_save_btn"] {{
-        background: {COLORS['button_bg']} !important;
+        background: linear-gradient(135deg, {COLORS['button_bg']} 0%, {COLORS['text_primary']} 160%) !important;
         color: {COLORS['button_text']} !important;
         border: none !important;
         border-radius: 6px !important;
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
-        box-shadow: 0 2px 8px rgba(52, 49, 45, 0.3) !important;
+        box-shadow: 0 2px 8px rgba(153, 88, 47, 0.3) !important;
         padding: 10px 20px !important;
     }}
     
     button[key="manual_save_btn"]:hover {{
-        background: {COLORS['button_bg']} !important;
-        box-shadow: 0 4px 14px rgba(52, 49, 45, 0.4) !important;
+        background: linear-gradient(135deg, {COLORS['text_primary']} 0%, {COLORS['button_bg']} 100%) !important;
+        box-shadow: 0 4px 14px rgba(153, 88, 47, 0.4) !important;
         transform: translateY(-2px) !important;
     }}
     
     button[key="manual_save_btn"]:active {{
         transform: translateY(0) !important;
-        box-shadow: 0 2px 6px rgba(52, 49, 45, 0.3) !important;
+        box-shadow: 0 2px 6px rgba(153, 88, 47, 0.3) !important;
     }}
 
     /* Availability dashboard styling */
@@ -2747,11 +1842,11 @@ st.markdown(
     }}
 
     .availability-card {{
-        background: var(--bg-secondary);
+        background: linear-gradient(165deg, var(--bg-secondary), var(--bg-primary));
         border: 1px solid var(--glass-border);
         border-radius: 18px;
         padding: 1.25rem 1.35rem;
-        box-shadow: 0 12px 32px rgba(20, 17, 15, 0.22);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
         backdrop-filter: none !important;
         display: flex;
         flex-direction: column;
@@ -2815,7 +1910,7 @@ st.markdown(
         border-top: 4px solid var(--accent);
         border-radius: 14px;
         padding: 1rem 1.1rem;
-        box-shadow: 0 12px 28px rgba(20, 17, 15, 0.18);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
         min-height: 140px;
         display: flex;
         flex-direction: column;
@@ -2827,7 +1922,7 @@ st.markdown(
 
     .assistant-card:hover {{
         transform: translateY(-4px);
-        box-shadow: 0 16px 36px rgba(20, 17, 15, 0.24);
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.24);
     }}
 
     .assistant-card.status-free {{ border-top-color: var(--success); }}
@@ -2861,27 +1956,27 @@ st.markdown(
     }}
 
     .assistant-card__status-pill.success {{
-        background: rgba(52, 49, 45, 0.18);
-        color: var(--text-primary);
-        border: 1px solid rgba(52, 49, 45, 0.35);
+        background: rgba(16, 185, 129, 0.2);
+        color: var(--success);
+        border: 1px solid rgba(16, 185, 129, 0.4);
     }}
-    
+
     .assistant-card__status-pill.warning {{
-        background: rgba(217, 197, 178, 0.35);
-        color: var(--text-primary);
-        border: 1px solid rgba(217, 197, 178, 0.6);
+        background: rgba(245, 158, 11, 0.2);
+        color: var(--warning);
+        border: 1px solid rgba(245, 158, 11, 0.4);
     }}
-    
+
     .assistant-card__status-pill.danger {{
-        background: rgba(126, 127, 131, 0.25);
-        color: var(--text-primary);
-        border: 1px solid rgba(126, 127, 131, 0.45);
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--danger);
+        border: 1px solid rgba(239, 68, 68, 0.4);
     }}
-    
+
     .assistant-card__status-pill.info {{
-        background: rgba(20, 17, 15, 0.12);
-        color: var(--text-primary);
-        border: 1px solid rgba(20, 17, 15, 0.35);
+        background: rgba(59, 130, 246, 0.2);
+        color: var(--info);
+        border: 1px solid rgba(59, 130, 246, 0.4);
     }}
 
     .assistant-card__details {{
@@ -2925,18 +2020,19 @@ if os.path.exists(_logo_path):
 header_css = f"""
 <style>
 header[data-testid="stHeader"] {{
-    background: #f3f3f4 !important;
+    background: linear-gradient(135deg, #f4f7fb 0%, #ffffff 40%, #2e86c1 80%, #1f3a5f 100%) !important;
     min-height: 72px;
-    border-bottom: 1px solid #d9c5b2;
-    box-shadow: 0 12px 32px rgba(20, 17, 15, 0.18);
+    border-bottom: 1px solid rgba(150, 122, 161, 0.35);
+    box-shadow: 0 18px 50px rgba(25, 42, 81, 0.2);
     position: sticky;
     top: 0;
     z-index: 100;
 }}
+header[data-testid="stHeader"] .stAppToolbar,
 header[data-testid="stHeader"] [data-testid="stToolbarActions"],
 header[data-testid="stHeader"] [data-testid="stMainMenu"] {{
-    display: none !important;
-    visibility: hidden !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }}
 header[data-testid="stHeader"]::after {{
     content: "THE DENTAL BOND\\AReal-time Scheduling Management System";
@@ -2950,8 +2046,8 @@ header[data-testid="stHeader"]::after {{
     font-weight: 800;
     line-height: 1.3;
     letter-spacing: 0.4px;
-    color: #14110f;
-    text-shadow: 0 3px 10px rgba(52, 49, 45, 0.2);
+    color: #192a51;
+    text-shadow: 0 3px 10px rgba(25, 42, 81, 0.22);
     pointer-events: none;
 }}
 </style>
@@ -3007,87 +2103,85 @@ def _date_from_any(val):
 now = datetime.now(IST)
 date_line_str = now.strftime('%B %d, %Y - %I:%M:%S %p')
 
-if st.session_state.get("nav_category") != "Dashboard":
-    st.markdown(f"""
-        <style>
-        .divider-line {{
-            height: 2px;
-            background: {COLORS['accent']};
-            margin: 0.8rem 0;
-            border-radius: 1px;
-        }}
-        .sticky-top {{
-            position: sticky;
-            top: 0;
-            z-index: 999;
-            background: {COLORS['bg_primary']};
-            padding: 0.4rem 0 0.35rem 0;
-            box-shadow: none;
-        }}
-        .date-line {{
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            margin-top: 0.5rem;
-        }}
-        </style>
-        <div class="sticky-top">
-            <div class="date-line">{date_line_str} IST</div>
-        </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"""
+    <style>
+    .divider-line {{
+        height: 2px;
+        background: linear-gradient(90deg, transparent 0%, #99582f 50%, transparent 100%);
+        margin: 0.8rem 0;
+        border-radius: 1px;
+    }}
+    .sticky-top {{
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        background: linear-gradient(135deg, {COLORS['bg_primary']}00, {COLORS['bg_secondary']}00);
+        padding: 0.4rem 0 0.35rem 0;
+        box-shadow: none;
+    }}
+    .date-line {{
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-top: 0.5rem;
+    }}
+    </style>
+    <div class="sticky-top">
+        <div class="date-line">{date_line_str} IST</div>
+    </div>
+""", unsafe_allow_html=True)
 
-    # Assistants Weekly Off display (10mm below date)
-    st.markdown("<div style='margin-top:10mm;'></div>", unsafe_allow_html=True)
+# Assistants Weekly Off display (10mm below date)
+st.markdown("<div style='margin-top:10mm;'></div>", unsafe_allow_html=True)
 
-    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    today_idx = now.weekday()
-    tomorrow_idx = (today_idx + 1) % 7
-    weekly_off_map = _get_profiles_cache_snapshot().get("weekly_off_map", WEEKLY_OFF)
+weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+today_idx = now.weekday()
+tomorrow_idx = (today_idx + 1) % 7
 
-    def _render_off_card(title: str, off_list: list[str]):
-        has_off = bool(off_list)
-        names = ", ".join(off_list) if has_off else "All assistants available"
-        icon = "🚫" if has_off else "✅"
-        bg = COLORS['danger'] if has_off else COLORS['success']
-        border = COLORS['danger'] if has_off else COLORS['success']
-        note = "Cannot be allocated" if has_off else "No weekly off"
-        st.markdown(
-            f"""
-            <div style="
-                background: {COLORS['bg_secondary']};
-                border: 1px solid {border}40;
-                border-left: 4px solid {border};
-                border-radius: 8px;
-                padding: 12px 14px;
-                margin: 6px 0 10px 0;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            ">
-                <span style="font-size: 1.3em;">{icon}</span>
-                <div>
-                    <strong style="color: {COLORS['text_primary']};">{title}</strong>
-                    <div style="color: {COLORS['text_secondary']}; margin-top: 2px;">
-                        <strong>{names}</strong> — {note}
-                    </div>
+def _render_off_card(title: str, off_list: list[str]):
+    has_off = bool(off_list)
+    names = ", ".join(off_list) if has_off else "All assistants available"
+    icon = "🚫" if has_off else "✅"
+    bg = COLORS['danger'] if has_off else COLORS['success']
+    border = COLORS['danger'] if has_off else COLORS['success']
+    note = "Cannot be allocated" if has_off else "No weekly off"
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, {bg}15, {COLORS['accent']}10);
+            border: 1px solid {border}40;
+            border-left: 4px solid {border};
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin: 6px 0 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        ">
+            <span style="font-size: 1.3em;">{icon}</span>
+            <div>
+                <strong style="color: {COLORS['text_primary']};">{title}</strong>
+                <div style="color: {COLORS['text_secondary']}; margin-top: 2px;">
+                    <strong>{names}</strong> — {note}
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    st.markdown("### 🗓️ Assistants Weekly Off")
-    col_today, col_tomorrow = st.columns(2)
-    with col_today:
-        _render_off_card(
-            f"Today ({weekday_names[today_idx]})",
-            weekly_off_map.get(today_idx, []),
-        )
-    with col_tomorrow:
-        _render_off_card(
-            f"Tomorrow ({weekday_names[tomorrow_idx]})",
-            weekly_off_map.get(tomorrow_idx, []),
-        )
+st.markdown("### 🗓️ Assistants Weekly Off")
+col_today, col_tomorrow = st.columns(2)
+with col_today:
+    _render_off_card(
+        f"Today ({weekday_names[today_idx]})",
+        WEEKLY_OFF.get(today_idx, []),
+    )
+with col_tomorrow:
+    _render_off_card(
+        f"Tomorrow ({weekday_names[tomorrow_idx]})",
+        WEEKLY_OFF.get(tomorrow_idx, []),
+    )
 
 
 def _get_app_version_short() -> str:
@@ -3219,52 +2313,6 @@ def _coerce_to_time_obj(time_value: Any) -> time_type | None:
 
     return None
 
-TIME_PICKER_HOURS = [""] + [f"{i:02d}" for i in range(1, 13)]
-TIME_PICKER_MINUTES = [""] + [f"{i:02d}" for i in range(60)]
-TIME_PICKER_AMPM = ["AM", "PM"]
-
-def _time_to_picker_parts(time_value: Any) -> tuple[str, str, str]:
-    t = _coerce_to_time_obj(time_value)
-    if t is None:
-        return "", "", "AM"
-    hour = t.hour
-    if hour == 0:
-        hour_12 = 12
-        ampm = "AM"
-    elif hour < 12:
-        hour_12 = hour
-        ampm = "AM"
-    elif hour == 12:
-        hour_12 = 12
-        ampm = "PM"
-    else:
-        hour_12 = hour - 12
-        ampm = "PM"
-    return f"{hour_12:02d}", f"{t.minute:02d}", ampm
-
-def _time_from_picker_parts(hour_str: str, minute_str: str, ampm: str) -> tuple[str, str | None]:
-    hour_text = str(hour_str or "").strip()
-    minute_text = str(minute_str or "").strip()
-    if not hour_text and not minute_text:
-        return "", None
-    if not hour_text or not minute_text:
-        return "", "Select hour and minute."
-    try:
-        hour = int(hour_text)
-        minute = int(minute_text)
-    except ValueError:
-        return "", "Invalid time selection."
-    if hour < 1 or hour > 12 or minute < 0 or minute > 59:
-        return "", "Invalid time selection."
-    ampm_norm = str(ampm or "").strip().upper()
-    if ampm_norm not in ("AM", "PM"):
-        return "", "Select AM or PM."
-    if hour == 12:
-        hour_24 = 0 if ampm_norm == "AM" else 12
-    else:
-        hour_24 = hour if ampm_norm == "AM" else hour + 12
-    return f"{hour_24:02d}:{minute:02d}", None
-
 def dec_to_time(time_value: Any) -> str:
     """Convert various time formats to HH:MM string"""
     t = _coerce_to_time_obj(time_value)
@@ -3325,7 +2373,7 @@ def _unique_preserve_order(items: list[str]) -> list[str]:
 
 
 def _norm_staff_key(value: str) -> str:
-    """Normalize names like 'DR. NAME' vs 'DR.NAME' to a stable key."""
+    """Normalize names like 'DR. HUSSAIN' vs 'DR.HUSSAIN' to a stable key."""
     try:
         s = str(value or "").strip().upper()
         return re.sub(r"[^A-Z0-9]+", "", s)
@@ -3334,7 +2382,7 @@ def _norm_staff_key(value: str) -> str:
 
 def _parse_weekly_off_days(val: str) -> list[int]:
     """Parse weekly off string to list of weekday indices (0=Mon)."""
-    if val is None:
+    if not val:
         return []
     days_map = {
         "MONDAY": 0, "MON": 0,
@@ -3346,31 +2394,8 @@ def _parse_weekly_off_days(val: str) -> list[int]:
         "SUNDAY": 6, "SUN": 6,
     }
     out: list[int] = []
-    parts: list[Any] = []
-    if isinstance(val, (list, tuple, set)):
-        parts = list(val)
-    elif isinstance(val, str):
-        raw = val.strip()
-        if not raw:
-            return []
-        if (raw.startswith("[") and raw.endswith("]")) or (raw.startswith("{") and raw.endswith("}")):
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, (list, tuple, set)):
-                    parts = list(parsed)
-                else:
-                    parts = [parsed]
-            except Exception:
-                parts = raw.replace(";", ",").split(",")
-        else:
-            parts = raw.replace(";", ",").split(",")
-    else:
-        parts = [val]
-
-    for part in parts:
-        if part is None or (isinstance(part, float) and pd.isna(part)):
-            continue
-        p = str(part).strip().upper()
+    for part in str(val).replace(";", ",").split(","):
+        p = part.strip().upper()
         if not p:
             continue
         if p.isdigit():
@@ -3399,117 +2424,6 @@ def _weekly_off_str_from_list(lst: list[str]) -> str:
         if nm in [d.upper() for d in WEEKDAY_NAMES]:
             out.append(WEEKDAY_NAMES[[d.upper() for d in WEEKDAY_NAMES].index(nm)])
     return ",".join(out)
-
-
-ALLOCATION_RULES_PATH = Path(__file__).with_name("allocation_rules.json")
-
-
-def _config_bool(val: Any, default: bool = False) -> bool:
-    if isinstance(val, bool):
-        return val
-    if val is None:
-        return default
-    s = str(val).strip().lower()
-    if s in {"1", "true", "yes", "on"}:
-        return True
-    if s in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
-@st.cache_data(ttl=30)
-def _load_allocation_config_cached(path_str: str, mtime: float) -> dict[str, Any]:
-    try:
-        with open(path_str, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        return payload if isinstance(payload, dict) else {}
-    except Exception:
-        return {}
-
-
-def _get_allocation_config() -> dict[str, Any]:
-    try:
-        if ALLOCATION_RULES_PATH.exists():
-            mtime = ALLOCATION_RULES_PATH.stat().st_mtime
-            payload = _load_allocation_config_cached(str(ALLOCATION_RULES_PATH), mtime)
-            return payload if isinstance(payload, dict) else {}
-    except Exception:
-        pass
-    return {}
-
-
-def _get_allocation_department_config(department: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
-    dept_upper = str(department).strip().upper()
-    if not dept_upper:
-        return {}
-    cfg = config or _get_allocation_config()
-    if not isinstance(cfg, dict):
-        return {}
-    depts = cfg.get("departments", {})
-    if isinstance(depts, dict):
-        for key, val in depts.items():
-            if str(key).strip().upper() == dept_upper:
-                return val if isinstance(val, dict) else {}
-    return {}
-
-
-def _get_global_allocation_config(config: dict[str, Any] | None = None) -> dict[str, bool]:
-    cfg = config or _get_allocation_config()
-    if not isinstance(cfg, dict):
-        return {
-            "cross_department_fallback": False,
-            "use_profile_role_flags": False,
-            "load_balance": False,
-        }
-    global_cfg = cfg.get("global", {}) if isinstance(cfg.get("global", {}), dict) else {}
-    return {
-        "cross_department_fallback": _config_bool(global_cfg.get("cross_department_fallback", False)),
-        "use_profile_role_flags": _config_bool(global_cfg.get("use_profile_role_flags", False)),
-        "load_balance": _config_bool(global_cfg.get("load_balance", False)),
-    }
-
-
-def _get_config_department_maps(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    cfg = config or _get_allocation_config()
-    doctor_map: dict[str, str] = {}
-    assistant_map: dict[str, str] = {}
-    dept_list: list[str] = []
-    depts = cfg.get("departments") if isinstance(cfg, dict) else None
-    if isinstance(depts, dict) and depts:
-        for dept, data in depts.items():
-            dept_upper = str(dept).strip().upper()
-            if dept_upper and dept_upper not in dept_list:
-                dept_list.append(dept_upper)
-            if not isinstance(data, dict):
-                continue
-            for name in data.get("doctors", []) or []:
-                key = _norm_staff_key(name)
-                if key and key not in doctor_map:
-                    doctor_map[key] = dept_upper
-            for name in data.get("assistants", []) or []:
-                key = _norm_staff_key(name)
-                if key and key not in assistant_map:
-                    assistant_map[key] = dept_upper
-    if not dept_list:
-        for dept, data in DEPARTMENTS.items():
-            dept_upper = str(dept).strip().upper()
-            if dept_upper and dept_upper not in dept_list:
-                dept_list.append(dept_upper)
-            if not isinstance(data, dict):
-                continue
-            for name in data.get("doctors", []) or []:
-                key = _norm_staff_key(name)
-                if key and key not in doctor_map:
-                    doctor_map[key] = dept_upper
-            for name in data.get("assistants", []) or []:
-                key = _norm_staff_key(name)
-                if key and key not in assistant_map:
-                    assistant_map[key] = dept_upper
-    return {
-        "departments": dept_list,
-        "doctors": doctor_map,
-        "assistants": assistant_map,
-    }
 
 
 def _seed_supabase_profiles_if_needed(client) -> None:
@@ -3544,17 +2458,10 @@ def _seed_supabase_profiles_if_needed(client) -> None:
             "kind": kind,
         })
 
-    config = _get_allocation_config()
-    dept_source = config.get("departments", {}) if isinstance(config, dict) else {}
-    if not isinstance(dept_source, dict) or not dept_source:
-        dept_source = DEPARTMENTS
-
-    for dept, data in dept_source.items():
-        if not isinstance(data, dict):
-            continue
-        for a in data.get("assistants", []) or []:
+    for dept, data in DEPARTMENTS.items():
+        for a in data.get("assistants", []):
             _add(a, dept, PROFILE_ASSISTANT_SHEET)
-        for d in data.get("doctors", []) or []:
+        for d in data.get("doctors", []):
             _add(d, dept, PROFILE_DOCTOR_SHEET)
 
     if to_insert:
@@ -3586,9 +2493,6 @@ def _refresh_staff_options_from_supabase(client):
         week_map: dict[int, list[str]] = {i: [] for i in range(7)}
         if "weekly_off" in df.columns:
             for _, row in df.iterrows():
-                kind = str(row.get("kind", "")).strip()
-                if kind != PROFILE_ASSISTANT_SHEET:
-                    continue
                 wo_days = _parse_weekly_off_days(row.get("weekly_off", ""))
                 name = str(row.get("name", "")).strip().upper()
                 if not name:
@@ -3608,12 +2512,14 @@ def _is_blank_cell(value: Any) -> bool:
     except Exception:
         pass
     s = str(value).strip()
-    return (not s) or (s.lower() in {"nan", "none", "nat", "n/a", "na", "null", "-", "--"})
+    return (not s) or (s.lower() in {"nan", "none", "nat"})
 
 
 DEPARTMENTS = {
     "PROSTHO": {
         "doctors": _unique_preserve_order([
+            "DR.HUSSAIN",  # preferred spelling
+            "DR.HUSAIN",   # legacy spelling (kept for compatibility with existing data)
             "DR.SHIFA",
         ]),
         "assistants": _unique_preserve_order([
@@ -3696,20 +2602,6 @@ def get_department_for_doctor(doctor_name: str) -> str:
     doc_key = _norm_staff_key(doctor_name)
     if not doc_key:
         return ""
-    try:
-        cache = _get_profiles_cache()
-        dept = cache.get("doctor_dept_map", {}).get(doc_key, "")
-        if dept:
-            return dept
-    except Exception:
-        pass
-    try:
-        config_maps = _get_config_department_maps()
-        dept = config_maps.get("doctors", {}).get(doc_key, "")
-        if dept:
-            return dept
-    except Exception:
-        pass
     for dept, config in DEPARTMENTS.items():
         for d in config["doctors"]:
             d_key = _norm_staff_key(d)
@@ -3722,26 +2614,9 @@ def get_department_for_doctor(doctor_name: str) -> str:
 def get_assistants_for_department(department: str) -> list[str]:
     """Get list of assistants for a specific department"""
     dept_upper = str(department).strip().upper()
-    if not dept_upper:
-        return _get_all_assistants()
-    try:
-        cache = _get_profiles_cache()
-        dept_list = cache.get("assistants_by_dept", {}).get(dept_upper, [])
-        if dept_list:
-            return dept_list
-    except Exception:
-        pass
-    try:
-        cfg = _get_allocation_config()
-        dept_cfg = _get_allocation_department_config(dept_upper, cfg)
-        assistants = dept_cfg.get("assistants", []) if isinstance(dept_cfg, dict) else []
-        if assistants:
-            return _unique_preserve_order(assistants)
-    except Exception:
-        pass
     if dept_upper in DEPARTMENTS:
         return DEPARTMENTS[dept_upper]["assistants"]
-    return _get_all_assistants()
+    return ALL_ASSISTANTS
 
 def get_department_for_assistant(assistant_name: str) -> str:
     """Get the department an assistant belongs to"""
@@ -3750,20 +2625,6 @@ def get_department_for_assistant(assistant_name: str) -> str:
     assist_key = _norm_staff_key(assistant_name)
     if not assist_key:
         return ""
-    try:
-        cache = _get_profiles_cache()
-        dept = cache.get("assistant_dept_map", {}).get(assist_key, "")
-        if dept:
-            return dept
-    except Exception:
-        pass
-    try:
-        config_maps = _get_config_department_maps()
-        dept = config_maps.get("assistants", {}).get(assist_key, "")
-        if dept:
-            return dept
-    except Exception:
-        pass
     for dept, config in DEPARTMENTS.items():
         for a in config["assistants"]:
             a_key = _norm_staff_key(a)
@@ -3771,6 +2632,7 @@ def get_department_for_assistant(assistant_name: str) -> str:
                 continue
             if assist_key == a_key or assist_key.endswith(a_key) or a_key.endswith(assist_key):
                 return dept
+    # ANSHIKA is shared between departments
     return "SHARED"
 
 # ================ TIME BLOCKING SYSTEM ================
@@ -3924,11 +2786,8 @@ def _sync_time_blocks_from_meta(df_any: pd.DataFrame | None) -> None:
 
 def _apply_time_blocks_to_meta(meta: dict) -> dict:
     out = dict(meta or {})
-    serialized = _serialize_time_blocks(st.session_state.get("time_blocks", []))
-    prev = out.get("time_blocks")
-    out["time_blocks"] = serialized
-    if prev != serialized or not out.get("time_blocks_updated_at"):
-        out["time_blocks_updated_at"] = datetime.now(IST).isoformat()
+    out["time_blocks"] = _serialize_time_blocks(st.session_state.get("time_blocks", []))
+    out["time_blocks_updated_at"] = datetime.now(IST).isoformat()
     return out
 
 # ================ ASSISTANT AVAILABILITY TRACKING ================
@@ -3939,11 +2798,10 @@ def get_assistant_schedule(assistant_name: str, df_schedule: pd.DataFrame) -> li
     
     assist_upper = str(assistant_name).strip().upper()
     appointments = []
-    third_col = _get_third_column_name(df_schedule.columns)
     
     for idx, row in df_schedule.iterrows():
         # Check FIRST, SECOND, Third columns
-        for col in ["FIRST", "SECOND", third_col]:
+        for col in ["FIRST", "SECOND", "Third"]:
             if col in row.index:
                 val = str(row.get(col, "")).strip().upper()
                 if val == assist_upper:
@@ -3980,22 +2838,15 @@ def is_assistant_available(
         return False, "No assistant specified"
     
     assist_upper = str(assistant_name).strip().upper()
-
-    punch_map = _get_today_punch_map()
-    punch_state, _, punch_out = _assistant_punch_state(assist_upper, punch_map)
-    if punch_state != "IN":
-        try:
-            today_weekday = now.weekday()  # 0=Monday, 6=Sunday
-            weekly_off_map = _get_profiles_cache().get("weekly_off_map", WEEKLY_OFF)
-            off_assistants = weekly_off_map.get(today_weekday, [])
-            if any(str(a).strip().upper() == assist_upper for a in off_assistants):
-                return False, f"Weekly off on {now.strftime('%A')}"
-        except Exception:
-            pass
-        if punch_state == "OUT":
-            out_label = _format_punch_time(punch_out)
-            return False, f"Punched out at {out_label}" if out_label else "Punched out"
-        return False, "Not punched in"
+    
+    # Check if today is the assistant's weekly off day
+    try:
+        today_weekday = now.weekday()  # 0=Monday, 6=Sunday
+        off_assistants = WEEKLY_OFF.get(today_weekday, [])
+        if any(str(a).strip().upper() == assist_upper for a in off_assistants):
+            return False, f"Weekly off on {now.strftime('%A')}"
+    except Exception:
+        pass
     
     # Convert check times to minutes
     check_in = _coerce_to_time_obj(check_in_time)
@@ -4058,372 +2909,21 @@ def is_assistant_available(
     
     return True, ""
 
-
-def _remove_assistant_assignments(df_schedule: pd.DataFrame | None, assistant_name: str) -> pd.DataFrame | None:
-    """Clear all allotments for an assistant (FIRST/SECOND/Third). Returns updated DF or None if no change."""
-    if df_schedule is None or df_schedule.empty:
-        return None
-    assist_upper = str(assistant_name or "").strip().upper()
-    if not assist_upper:
-        return None
-
-    df_updated = df_schedule.copy()
-    third_col = _get_third_column_name(df_updated.columns)
-    cols = ["FIRST", "SECOND", third_col]
-    changed = False
-    for col in cols:
-        if not col or col not in df_updated.columns:
-            continue
-        mask = df_updated[col].astype(str).str.strip().str.upper() == assist_upper
-        if mask.any():
-            df_updated.loc[mask, col] = ""
-            changed = True
-    return df_updated if changed else None
-
-
-def _pref_allows_role(value: Any) -> bool:
-    try:
-        s = str(value or "").strip().lower()
-    except Exception:
-        return True
-    if not s:
-        return True
-    if s in {"no", "n", "false", "0", "off"}:
-        return False
-    if s in {"yes", "y", "true", "1", "on"}:
-        return True
-    return True
-
-
-def _to_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except Exception:
-        return None
-
-
-def _normalize_name_list(values: Any) -> list[str]:
-    if values is None:
-        return []
-    if isinstance(values, (list, tuple, set)):
-        items = list(values)
-    else:
-        items = [values]
-    return _unique_preserve_order([str(x) for x in items if str(x).strip()])
-
-
-def _get_third_column_name(columns: Any) -> str:
-    try:
-        if "Third" in columns:
-            return "Third"
-        if "THIRD" in columns:
-            return "THIRD"
-    except Exception:
-        pass
-    return "Third"
-
-
-def _collect_time_overrides(time_overrides: Any) -> list[tuple[float, list[str]]]:
-    overrides: list[tuple[float, list[str]]] = []
-    if time_overrides is None:
-        return overrides
-    if isinstance(time_overrides, dict):
-        if "after_hour" in time_overrides:
-            after = _to_float(time_overrides.get("after_hour"))
-            assistants = _normalize_name_list(
-                time_overrides.get("assistant") or time_overrides.get("assistants")
-            )
-            if after is not None and assistants:
-                overrides.append((after, assistants))
-        else:
-            for key, val in time_overrides.items():
-                after = _to_float(key)
-                assistants = _normalize_name_list(val)
-                if after is not None and assistants:
-                    overrides.append((after, assistants))
-    elif isinstance(time_overrides, list):
-        for item in time_overrides:
-            if isinstance(item, dict):
-                after = _to_float(item.get("after_hour"))
-                assistants = _normalize_name_list(item.get("assistant") or item.get("assistants"))
-                if after is not None and assistants:
-                    overrides.append((after, assistants))
-            elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                after = _to_float(item[0])
-                assistants = _normalize_name_list(item[1])
-                if after is not None and assistants:
-                    overrides.append((after, assistants))
-    return overrides
-
-
-def _time_override_candidates(time_overrides: Any, appt_hour: float) -> list[str]:
-    overrides = _collect_time_overrides(time_overrides)
-    matched = [(after, names) for after, names in overrides if appt_hour >= after]
-    matched.sort(key=lambda item: item[0], reverse=True)
-    out: list[str] = []
-    for _, names in matched:
-        out.extend(names)
-    return _unique_preserve_order(out)
-
-
-def _rule_candidates_for_role(
-    role: str,
-    rule: dict[str, Any],
-    doctor: str,
-    appt_hour: float,
-    first_assistant: str,
-) -> list[str]:
-    if not isinstance(rule, dict):
-        return []
-    candidates: list[str] = []
-
-    if role == "SECOND":
-        when_map = rule.get("when_first_is", {})
-        if isinstance(when_map, dict) and first_assistant:
-            first_key = _norm_staff_key(first_assistant)
-            for key, val in when_map.items():
-                if _norm_staff_key(key) == first_key:
-                    candidates.extend(_normalize_name_list(val))
-                    break
-
-    doctor_key = _norm_staff_key(doctor)
-    doc_list = None
-    doctor_overrides = rule.get("doctor_overrides", {})
-    if isinstance(doctor_overrides, dict):
-        for key, val in doctor_overrides.items():
-            if _norm_staff_key(key) == doctor_key:
-                doc_list = val
-                break
-    if doc_list is None:
-        for key, val in rule.items():
-            if key in {"default", "time_override", "when_first_is", "doctor_overrides"}:
-                continue
-            if _norm_staff_key(key) == doctor_key:
-                doc_list = val
-                break
-    if doc_list is not None:
-        candidates.extend(_normalize_name_list(doc_list))
-
-    if "time_override" in rule:
-        candidates.extend(_time_override_candidates(rule.get("time_override"), appt_hour))
-
-    candidates.extend(_normalize_name_list(rule.get("default", [])))
-    return _unique_preserve_order(candidates)
-
-
-def _assistant_loads(df_schedule: pd.DataFrame, exclude_row_id: str | None = None) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    if df_schedule is None or df_schedule.empty:
-        return counts
-    third_col = _get_third_column_name(df_schedule.columns)
-    for _, row in df_schedule.iterrows():
-        if exclude_row_id and str(row.get("REMINDER_ROW_ID", "")).strip() == str(exclude_row_id).strip():
-            continue
-        for col in ["FIRST", "SECOND", third_col]:
-            name = str(row.get(col, "")).strip().upper()
-            if not name:
-                continue
-            counts[name] = counts.get(name, 0) + 1
-    return counts
-
-
-def _order_by_load(names: list[str], load_map: dict[str, int]) -> list[str]:
-    if not names:
-        return names
-    order = {name: idx for idx, name in enumerate(names)}
-    return sorted(names, key=lambda n: (load_map.get(n, 0), order.get(n, 0)))
-
-
-def _select_assistant_from_candidates(
-    role: str,
-    candidates: list[str],
-    available_map: dict[str, str],
-    available_order: list[str],
-    already: set[str],
-    pref_map: dict[str, dict[str, Any]],
-    use_role_flags: bool,
-    load_map: dict[str, int],
-    load_balance: bool,
-) -> str:
-    filtered: list[str] = []
-    for name in candidates:
-        key = str(name).strip().upper()
-        if not key or key in already:
-            continue
-        if key not in available_map:
-            continue
-        if use_role_flags:
-            pref_val = pref_map.get(_norm_staff_key(key), {}).get(role, "")
-            if not _pref_allows_role(pref_val):
-                continue
-        filtered.append(key)
-    if filtered and load_balance:
-        filtered = _order_by_load(filtered, load_map)
-    if filtered:
-        return available_map[filtered[0]]
-
-    fallback: list[str] = []
-    for name in available_order:
-        key = str(name).strip().upper()
-        if not key or key in already:
-            continue
-        if use_role_flags:
-            pref_val = pref_map.get(_norm_staff_key(key), {}).get(role, "")
-            if not _pref_allows_role(pref_val):
-                continue
-        if key in available_map:
-            fallback.append(key)
-    if fallback and load_balance:
-        fallback = _order_by_load(fallback, load_map)
-    if fallback:
-        return available_map[fallback[0]]
-    return ""
-
-
-def _allocate_assistants_for_slot(
-    doctor: str,
-    department: str,
-    in_time: Any,
-    out_time: Any,
-    df_schedule: pd.DataFrame,
-    exclude_row_id: str | None = None,
-    current_assignments: dict[str, Any] | None = None,
-    only_fill_empty: bool = False,
-) -> dict[str, str]:
-    result = {"FIRST": "", "SECOND": "", "Third": ""}
-    if current_assignments:
-        for role in result:
-            val = current_assignments.get(role, "")
-            result[role] = "" if _is_blank_cell(val) else str(val).strip()
-
-    if not doctor:
-        return result
-
-    in_obj = _coerce_to_time_obj(in_time)
-    out_obj = _coerce_to_time_obj(out_time)
-    if in_obj is None or out_obj is None:
-        return result
-
-    appt_hour = in_obj.hour + in_obj.minute / 60.0
-    config = _get_allocation_config()
-    global_cfg = _get_global_allocation_config(config)
-    dept_cfg = _get_allocation_department_config(department, config)
-    rules = dept_cfg.get("allocation_rules", {}) if isinstance(dept_cfg, dict) else {}
-
-    dept_assistants = get_assistants_for_department(department)
-    all_assistants = _get_all_assistants()
-    free_now_set, free_status_map = _get_dashboard_free_set(df_schedule, all_assistants)
-
-    avail_dept = get_available_assistants(
-        department,
-        in_time,
-        out_time,
-        df_schedule,
-        exclude_row_id,
-        assistants_override=dept_assistants,
-        free_now_set=free_now_set,
-        free_status_map=free_status_map,
-    )
-    available_dept_order = [a["name"] for a in avail_dept if a.get("available")]
-    available_dept_map = {name.upper(): name for name in available_dept_order}
-
-    if global_cfg.get("cross_department_fallback", False):
-        avail_all = get_available_assistants(
-            department,
-            in_time,
-            out_time,
-            df_schedule,
-            exclude_row_id,
-            assistants_override=all_assistants,
-            free_now_set=free_now_set,
-            free_status_map=free_status_map,
-        )
-        available_all_order = [a["name"] for a in avail_all if a.get("available")]
-        available_all_map = {name.upper(): name for name in available_all_order}
-    else:
-        available_all_order = available_dept_order
-        available_all_map = available_dept_map
-
-    cache = _get_profiles_cache()
-    pref_map = cache.get("assistant_prefs", {})
-    load_map = _assistant_loads(df_schedule, exclude_row_id) if global_cfg.get("load_balance", False) else {}
-
-    already = {
-        str(x).strip().upper()
-        for x in [result["FIRST"], result["SECOND"], result["Third"]]
-        if x
-    }
-
-    for role in ["FIRST", "SECOND", "Third"]:
-        if only_fill_empty and role in result and result[role]:
-            continue
-        rule = rules.get(role, {}) if isinstance(rules, dict) else {}
-        candidates = _rule_candidates_for_role(role, rule, doctor, appt_hour, result.get("FIRST", ""))
-        chosen = _select_assistant_from_candidates(
-            role,
-            candidates,
-            available_dept_map,
-            available_dept_order,
-            already,
-            pref_map,
-            global_cfg.get("use_profile_role_flags", False),
-            load_map,
-            global_cfg.get("load_balance", False),
-        )
-        if not chosen and global_cfg.get("cross_department_fallback", False):
-            chosen = _select_assistant_from_candidates(
-                role,
-                candidates,
-                available_all_map,
-                available_all_order,
-                already,
-                pref_map,
-                global_cfg.get("use_profile_role_flags", False),
-                load_map,
-                global_cfg.get("load_balance", False),
-            )
-        if chosen:
-            result[role] = chosen
-            already.add(chosen.strip().upper())
-    return result
-
 def get_available_assistants(
     department: str,
     check_in_time: Any,
     check_out_time: Any,
     df_schedule: pd.DataFrame,
     exclude_row_id: str | None = None,
-    assistants_override: list[str] | None = None,
-    free_now_set: set[str] | None = None,
-    free_status_map: dict[str, dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Get list of available assistants for a department at a specific time.
     Returns list of dicts with assistant name and availability status.
     """
-    if assistants_override is not None:
-        assistants = _unique_preserve_order(assistants_override)
-    else:
-        assistants = get_assistants_for_department(department)
+    assistants = get_assistants_for_department(department)
     available = []
     
     for assistant in assistants:
-        assist_upper = str(assistant).strip().upper()
-        if free_now_set is not None and assist_upper not in free_now_set:
-            reason = "Not available on dashboard"
-            if isinstance(free_status_map, dict):
-                info = free_status_map.get(assist_upper, {}) or {}
-                status_label = str(info.get("status", "")).strip().upper()
-                if info.get("reason"):
-                    reason = str(info.get("reason"))
-                elif status_label:
-                    reason = f"Dashboard: {status_label}"
-            available.append({
-                "name": assistant,
-                "available": False,
-                "reason": reason,
-            })
-            continue
         is_avail, reason = is_assistant_available(assistant, check_in_time, check_out_time, df_schedule, exclude_row_id)
         available.append({
             "name": assistant,
@@ -4444,17 +2944,24 @@ def auto_allocate_assistants(
     Automatically allocate assistants based on department and availability.
     Returns dict with FIRST, SECOND, Third assignments.
     """
+    result = {"FIRST": "", "SECOND": "", "Third": ""}
+    
     department = get_department_for_doctor(doctor)
-    return _allocate_assistants_for_slot(
-        doctor,
-        department,
-        in_time,
-        out_time,
-        df_schedule,
-        exclude_row_id=exclude_row_id,
-        current_assignments=None,
-        only_fill_empty=False,
-    )
+    if not department:
+        return result
+    
+    available_list = get_available_assistants(department, in_time, out_time, df_schedule, exclude_row_id)
+    
+    # Filter to only available assistants
+    free_assistants = [a["name"] for a in available_list if a["available"]]
+    
+    # Assign up to 3 assistants
+    roles = ["FIRST", "SECOND", "Third"]
+    for i, role in enumerate(roles):
+        if i < len(free_assistants):
+            result[role] = free_assistants[i]
+    
+    return result
 
 
 def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, only_fill_empty: bool = True) -> bool:
@@ -4465,8 +2972,6 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
 
         row = df_schedule.iloc[row_index]
         doctor = str(row.get("DR.", "")).strip()
-        if _is_blank_cell(doctor):
-            doctor = str(row.get("Doctor", "")).strip()
         in_time_val = row.get("In Time", None)
         out_time_val = row.get("Out Time", None)
         row_id = str(row.get("REMINDER_ROW_ID", "")).strip()
@@ -4477,67 +2982,112 @@ def _auto_fill_assistants_for_row(df_schedule: pd.DataFrame, row_index: int, onl
             return False
 
         department = get_department_for_doctor(doctor)
+        if not department:
+            return False
 
         current_first = row.get("FIRST", "")
         current_second = row.get("SECOND", "")
-        third_col = _get_third_column_name(df_schedule.columns)
-        current_third = row.get(third_col, "")
+        current_third = row.get("Third", "")
 
+        # If all 3 are truly filled, nothing to do.
         if only_fill_empty and (not _is_blank_cell(current_first)) and (not _is_blank_cell(current_second)) and (not _is_blank_cell(current_third)):
             return False
 
-        allocations = _allocate_assistants_for_slot(
-            doctor,
-            department,
-            in_time_val,
-            out_time_val,
-            df_schedule,
-            exclude_row_id=row_id,
-            current_assignments={
-                "FIRST": current_first,
-                "SECOND": current_second,
-                "Third": current_third,
-            },
-            only_fill_empty=only_fill_empty,
-        )
+        already = {
+            str(x).strip().upper()
+            for x in [current_first, current_second, current_third]
+            if not _is_blank_cell(x)
+        }
+
+        # Get appointment time in hours (decimal format for comparison)
+        in_time_obj = _coerce_to_time_obj(in_time_val)
+        appt_hour = in_time_obj.hour + in_time_obj.minute / 60.0 if in_time_obj else 0
+
+        # Compute free assistants for this time window, excluding this same row.
+        avail = get_available_assistants(department, in_time_val, out_time_val, df_schedule, exclude_row_id=row_id)
+        free_assistants = {a["name"].upper(): a["name"] for a in avail if a.get("available")}
 
         changed = False
-        for role, current_val in [("FIRST", current_first), ("SECOND", current_second), ("Third", current_third)]:
-            new_val = allocations.get(role, "")
-            if _is_blank_cell(new_val):
+        
+        # Get allocation rules for this department
+        dept_config = DEPARTMENTS.get(department, {})
+        allocation_rules = dept_config.get("allocation_rules", {})
+
+        roles = [("FIRST", current_first), ("SECOND", current_second), ("Third", current_third)]
+        for role, current_val in roles:
+            if only_fill_empty and (not _is_blank_cell(current_val)):
                 continue
-            if str(new_val).strip() != str(current_val).strip():
-                if role == "Third":
-                    if third_col in df_schedule.columns:
-                        df_schedule.iloc[row_index, df_schedule.columns.get_loc(third_col)] = new_val
+            
+            # Get preferred assistants for this role based on doctor, time, and other roles
+            preferred_assistants = []
+            
+            if role in allocation_rules:
+                rule = allocation_rules[role]
+                
+                # Try default rules first (unless there are conditional rules for SECOND)
+                default_list = rule.get("default", [])
+                for assistant_name in default_list:
+                    if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
+                        preferred_assistants.append(free_assistants[assistant_name.upper()])
+                
+                # If we found from default, use them
+                if preferred_assistants:
+                    pass  # We have preferred assistants from default rules
                 else:
-                    if role in df_schedule.columns:
-                        df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = new_val
+                    # Only use doctor-specific rules if we're short of assistants (fallback)
+                    doctor_assistant_list = rule.get(doctor, [])
+                    for assistant_name in doctor_assistant_list:
+                        if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
+                            preferred_assistants.append(free_assistants[assistant_name.upper()])
+                    
+                    # If still no preferred assistants and conditional rules exist, try those
+                    if not preferred_assistants and "when_first_is" in rule and role == "SECOND":
+                        first_assistant = df_schedule.iloc[row_index, df_schedule.columns.get_loc("FIRST")] if "FIRST" in df_schedule.columns else ""
+                        first_assistant = str(first_assistant).strip()
+                        if first_assistant and first_assistant in rule["when_first_is"]:
+                            conditional_list = rule["when_first_is"][first_assistant]
+                            for assistant_name in conditional_list:
+                                if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
+                                    preferred_assistants.append(free_assistants[assistant_name.upper()])
+                    
+                    # Last resort: check time overrides (for FIRST role)
+                    if not preferred_assistants and role == "FIRST" and "time_override" in rule:
+                        time_overrides = rule["time_override"]
+                        if isinstance(time_overrides, list):
+                            for item in time_overrides:
+                                if isinstance(item, tuple):
+                                    start_hour, assistant_name = item
+                                    if appt_hour >= start_hour:
+                                        if assistant_name.upper() not in already and assistant_name.upper() in free_assistants:
+                                            preferred_assistants.append(free_assistants[assistant_name.upper()])
+
+            # If we have preferred assistants from rules, use the first available
+            if preferred_assistants:
+                chosen = preferred_assistants[0]
+                if role in df_schedule.columns:
+                    df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = chosen
+                already.add(chosen.upper())
                 changed = True
+            else:
+                # Fallback: use any free assistant not already assigned
+                for free_name in free_assistants.values():
+                    if free_name.upper() not in already:
+                        if role in df_schedule.columns:
+                            df_schedule.iloc[row_index, df_schedule.columns.get_loc(role)] = free_name
+                        already.add(free_name.upper())
+                        changed = True
+                        break
 
         return changed
     except Exception:
         return False
 
-def get_current_assistant_status(
-    df_schedule: pd.DataFrame,
-    assistants: list[str] | None = None,
-    punch_map: dict[str, dict[str, str]] | None = None,
-) -> dict[str, dict[str, str]]:
+def get_current_assistant_status(df_schedule: pd.DataFrame) -> dict[str, dict[str, str]]:
     """
     Get real-time status of all assistants.
     Returns dict with assistant name -> status info
     """
     status = {}
-    if df_schedule is None:
-        df_schedule = pd.DataFrame()
-    if assistants is None:
-        assistants = _get_all_assistants()
-    if punch_map is None:
-        try:
-            punch_map = _get_today_punch_map()
-        except Exception:
-            punch_map = {}
     current_time = time_type(now.hour, now.minute)
     current_min = now.hour * 60 + now.minute
     today_weekday = now.weekday()
@@ -4547,28 +3097,20 @@ def get_current_assistant_status(
         if isinstance(weekday_name_list, list) and 0 <= today_weekday < len(weekday_name_list)
         else now.strftime("%A")
     )
-    weekly_off_map = _get_profiles_cache_snapshot().get("weekly_off_map", WEEKLY_OFF)
     weekly_off_set = {
         str(name).strip().upper()
-        for name in weekly_off_map.get(today_weekday, [])
+        for name in WEEKLY_OFF.get(today_weekday, [])
         if str(name).strip()
     }
     
-    for assistant in assistants:
+    for assistant in ALL_ASSISTANTS:
         assist_upper = assistant.upper()
 
-        punch_state, punch_in, punch_out = _assistant_punch_state(assist_upper, punch_map)
-        if punch_state != "IN":
-            if assist_upper in weekly_off_set:
-                reason = f"Weekly off ({weekday_label})"
-            elif punch_state == "OUT":
-                out_label = _format_punch_time(punch_out)
-                reason = f"Punched out at {out_label}" if out_label else "Punched out"
-            else:
-                reason = "Not punched in"
+        # Weekly off overrides all other availability states
+        if assist_upper in weekly_off_set:
             status[assist_upper] = {
                 "status": "BLOCKED",
-                "reason": reason,
+                "reason": f"Weekly off ({weekday_label})",
                 "department": get_department_for_assistant(assist_upper),
             }
             continue
@@ -4631,22 +3173,6 @@ def get_current_assistant_status(
             }
     
     return status
-
-
-def _get_dashboard_free_set(
-    df_schedule: pd.DataFrame,
-    assistants: list[str],
-) -> tuple[set[str], dict[str, dict[str, str]]]:
-    try:
-        status_map = get_current_assistant_status(df_schedule, assistants=assistants)
-    except Exception:
-        return set(), {}
-    free_set = {
-        name
-        for name, info in status_map.items()
-        if str(info.get("status", "")).strip().upper() == "FREE"
-    }
-    return free_set, status_map
 
 
 STATUS_BADGES = {
@@ -4730,12 +3256,6 @@ def _render_assistant_cards(card_entries: list[dict[str, Any]]) -> None:
 with st.sidebar:
     st.markdown("## 🔔 Notifications")
     st.checkbox("Enable 15-minute reminders", value=True, key="enable_reminders")
-    st.checkbox(
-        "Run alerts on all pages",
-        value=False,
-        key="alerts_background",
-        help="When off, reminders and status alerts run only on the Scheduling page for smoother UX.",
-    )
     st.selectbox(
         "Default snooze (seconds)",
         options=[30, 60, 90, 120, 150, 180, 300],
@@ -4765,10 +3285,9 @@ with st.sidebar:
     today_weekday = now.weekday()  # 0=Monday, 6=Sunday
     weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     today_name = weekday_names[today_weekday]
-    weekly_off_map = _get_profiles_cache_snapshot().get("weekly_off_map", WEEKLY_OFF)
     
     # TODAY'S OFF
-    today_off = weekly_off_map.get(today_weekday, [])
+    today_off = WEEKLY_OFF.get(today_weekday, [])
     st.markdown("**Today:**")
     if today_off:
         off_text = ", ".join(today_off)
@@ -4780,7 +3299,7 @@ with st.sidebar:
     # TOMORROW'S OFF
     tomorrow_weekday = (today_weekday + 1) % 7  # Next day, wrap around if Sunday
     tomorrow_name = weekday_names[tomorrow_weekday]
-    tomorrow_off = weekly_off_map.get(tomorrow_weekday, [])
+    tomorrow_off = WEEKLY_OFF.get(tomorrow_weekday, [])
     
     st.markdown("**Tomorrow:**")
     if tomorrow_off:
@@ -4809,7 +3328,6 @@ PROFILE_SUPABASE_TABLE = "profiles"
 # Hard defaults (override with secrets/env in prod)
 SUPABASE_URL_DEFAULT = "https://iulgvbjkqcrwwnrwjolh.supabase.co"
 SUPABASE_KEY_DEFAULT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1bGd2YmprcWNyd3ducndqb2xoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjQyNDM1NSwiZXhwIjoyMDgyMDAwMzU1fQ.PlilHFvaHxCTCdXHQILJ07enCTwTarOphYILnO9RIwU"
-SUPABASE_CHECK_TTL_SECONDS = 60
 
 gsheet_client = None
 gsheet_worksheet = None
@@ -4870,52 +3388,6 @@ def _now_iso():
     return datetime.now().isoformat(timespec="seconds")
 
 
-def _profiles_table_setup_sql(table_name: str) -> str:
-    table = table_name or "profiles"
-    return (
-        f"create table if not exists {table} (\n"
-        "  id text primary key,\n"
-        "  kind text not null,\n"
-        "  name text not null,\n"
-        "  department text,\n"
-        "  contact_email text,\n"
-        "  contact_phone text,\n"
-        "  status text,\n"
-        "  weekly_off text,\n"
-        "  pref_first text,\n"
-        "  pref_second text,\n"
-        "  pref_third text,\n"
-        "  created_at timestamptz,\n"
-        "  updated_at timestamptz,\n"
-        "  created_by text,\n"
-        "  updated_by text\n"
-        ");\n"
-    )
-
-
-@st.cache_data(ttl=30)
-def _profiles_table_ready(_supabase, table_name: str) -> tuple[bool, str]:
-    if not _supabase or not table_name:
-        return False, "Supabase client is not available."
-    try:
-        _supabase.table(table_name).select("id,kind,name").limit(1).execute()
-        return True, ""
-    except Exception as e:
-        return False, str(e)
-
-
-def _render_profiles_setup_help(table_name: str, err: str | None = None) -> None:
-    st.error("Supabase profiles table is missing or misconfigured.")
-    if err:
-        st.caption(f"Details: {err}")
-    st.markdown("Create the table in Supabase SQL Editor:")
-    st.code(_profiles_table_setup_sql(table_name), language="sql")
-    st.markdown(
-        "If you use an anon key, add RLS policies that allow read and write, "
-        "or use a service role key."
-    )
-
-
 def load_profiles(sheet_name: str) -> pd.DataFrame:
     """Load assistant/doctor profiles (Supabase-first)."""
     if USE_SUPABASE and supabase_client is not None:
@@ -4967,17 +3439,11 @@ def load_profiles(sheet_name: str) -> pd.DataFrame:
         return _ensure_profile_df(pd.DataFrame())
 
 
-def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
-    """Persist assistant/doctor profiles (Supabase-first). Returns True on success."""
+def save_profiles(df: pd.DataFrame, sheet_name: str) -> None:
+    """Persist assistant/doctor profiles (Supabase-first)."""
     if USE_SUPABASE and supabase_client is not None:
         try:
             clean_df = _ensure_profile_df(df)
-            clean_df = clean_df.where(pd.notna(clean_df), None)
-            if "id" in clean_df.columns:
-                ids = clean_df["id"].astype(str)
-                missing = clean_df["id"].isna() | ids.str.strip().isin(["", "nan", "none"])
-                if missing.any():
-                    clean_df.loc[missing, "id"] = [str(uuid.uuid4()) for _ in range(int(missing.sum()))]
             clean_df["kind"] = sheet_name
             # Flatten weekly_off lists if present
             def _fmt_wo(val):
@@ -4990,30 +3456,16 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
             for row in rows:
                 rid = row.get("id")
                 if rid:
-                    res = supabase_client.table(PROFILE_SUPABASE_TABLE).upsert(row, on_conflict="id").execute()
+                    supabase_client.table(PROFILE_SUPABASE_TABLE).upsert(row, on_conflict="id").execute()
                 else:
-                    res = supabase_client.table(PROFILE_SUPABASE_TABLE).insert(row).execute()
-                err = getattr(res, "error", None)
-                if err:
-                    raise RuntimeError(str(err))
-            try:
-                _get_active_assistant_profile_names.clear()
-            except Exception:
-                pass
-            return True
+                    supabase_client.table(PROFILE_SUPABASE_TABLE).insert(row).execute()
+            return
         except Exception as e:
             st.error(f"Error saving profiles to Supabase '{sheet_name}': {e}")
-            st.info("Ensure the profiles table exists and has all required columns.")
-            st.code(_profiles_table_setup_sql(PROFILE_SUPABASE_TABLE), language="sql")
-            return False
+            st.info("If you see column errors, add columns weekly_off, pref_first, pref_second, pref_third to the profiles table.")
+            return
     try:
         clean_df = _ensure_profile_df(df)
-        clean_df = clean_df.where(pd.notna(clean_df), None)
-        if "id" in clean_df.columns:
-            ids = clean_df["id"].astype(str)
-            missing = clean_df["id"].isna() | ids.str.strip().isin(["", "nan", "none"])
-            if missing.any():
-                clean_df.loc[missing, "id"] = [str(uuid.uuid4()) for _ in range(int(missing.sum()))]
         try:
             wb = openpyxl.load_workbook(file_path)
         except zipfile.BadZipFile:
@@ -5029,501 +3481,81 @@ def save_profiles(df: pd.DataFrame, sheet_name: str) -> bool:
             writer.sheets = {ws.title: ws for ws in wb.worksheets}
             clean_df.to_excel(writer, sheet_name=sheet_name, index=False)
             writer.save()
-        try:
-            _get_active_assistant_profile_names.clear()
-        except Exception:
-            pass
-        return True
     except Exception as e:
         st.error(f"Error saving profiles '{sheet_name}': {e}")
-        return False
-
-
-@st.cache_data(ttl=30)
-def _load_profiles_cached(sheet_name: str, cache_bust: int) -> pd.DataFrame:
-    return load_profiles(sheet_name)
-
-
-def _is_active_status(value: Any) -> bool:
-    try:
-        s = str(value or "").strip().upper()
-    except Exception:
-        return True
-    return (not s) or s == "ACTIVE"
-
-
-def _get_profiles_cache() -> dict[str, Any]:
-    cache_bust = int(st.session_state.get("profiles_cache_bust", 0))
-    cached = st.session_state.get("profiles_cache", {})
-    if isinstance(cached, dict) and cached.get("cache_bust") == cache_bust:
-        return cached
-
-    assistants_df = _load_profiles_cached(PROFILE_ASSISTANT_SHEET, cache_bust)
-    doctors_df = _load_profiles_cached(PROFILE_DOCTOR_SHEET, cache_bust)
-
-    if assistants_df is None:
-        assistants_df = _ensure_profile_df(pd.DataFrame())
-    if doctors_df is None:
-        doctors_df = _ensure_profile_df(pd.DataFrame())
-
-    assistants_df = _ensure_profile_df(assistants_df)
-    doctors_df = _ensure_profile_df(doctors_df)
-
-    config = _get_allocation_config()
-    config_maps = _get_config_department_maps(config)
-    config_doctor_map = config_maps.get("doctors", {})
-    config_assistant_map = config_maps.get("assistants", {})
-
-    assistants_list: list[str] = []
-    assistant_dept_map: dict[str, str] = {}
-    assistant_pref_map: dict[str, dict[str, Any]] = {}
-    weekly_off_map: dict[int, list[str]] = {i: [] for i in range(7)}
-
-    for _, row in assistants_df.iterrows():
-        name = str(row.get("name", "")).strip().upper()
-        if not name:
-            continue
-        if "status" in assistants_df.columns and not _is_active_status(row.get("status", "")):
-            continue
-        assistants_list.append(name)
-        key = _norm_staff_key(name)
-        dept = str(row.get("department", "")).strip().upper()
-        if not dept:
-            dept = config_assistant_map.get(key, "")
-        if not dept:
-            dept = "SHARED"
-        assistant_dept_map[key] = dept
-        assistant_pref_map[key] = {
-            "FIRST": row.get("pref_first", ""),
-            "SECOND": row.get("pref_second", ""),
-            "Third": row.get("pref_third", ""),
-        }
-        try:
-            for idx in _parse_weekly_off_days(row.get("weekly_off", "")):
-                weekly_off_map[idx].append(name)
-        except Exception:
-            pass
-
-    doctors_list: list[str] = []
-    doctor_dept_map: dict[str, str] = {}
-    for _, row in doctors_df.iterrows():
-        name = str(row.get("name", "")).strip().upper()
-        if not name:
-            continue
-        if "status" in doctors_df.columns and not _is_active_status(row.get("status", "")):
-            continue
-        doctors_list.append(name)
-        key = _norm_staff_key(name)
-        dept = str(row.get("department", "")).strip().upper()
-        if not dept:
-            dept = config_doctor_map.get(key, "")
-        if dept:
-            doctor_dept_map[key] = dept
-
-    assistants_list = _unique_preserve_order(assistants_list)
-    doctors_list = _unique_preserve_order(doctors_list)
-
-    dept_set = set(config_maps.get("departments", []) or [])
-    dept_set.update([d for d in assistant_dept_map.values() if d])
-    dept_set.update([d for d in doctor_dept_map.values() if d])
-    if not dept_set:
-        dept_set.update([str(d).strip().upper() for d in DEPARTMENTS.keys()])
-
-    def _build_config_lists(key: str) -> dict[str, list[str]]:
-        out: dict[str, list[str]] = {}
-        depts = config.get("departments", {}) if isinstance(config, dict) else {}
-        if isinstance(depts, dict):
-            for dept_name, data in depts.items():
-                if not isinstance(data, dict):
-                    continue
-                dept_upper = str(dept_name).strip().upper()
-                if not dept_upper:
-                    continue
-                raw_list = data.get(key, []) or []
-                out[dept_upper] = _unique_preserve_order(raw_list)
-        return out
-
-    config_assistant_lists = _build_config_lists("assistants")
-    config_doctor_lists = _build_config_lists("doctors")
-
-    assistants_by_dept: dict[str, list[str]] = {dept: [] for dept in dept_set}
-    if config_assistant_lists:
-        for dept, ordered in config_assistant_lists.items():
-            for name in ordered:
-                if name in assistants_list and name not in assistants_by_dept.setdefault(dept, []):
-                    assistants_by_dept[dept].append(name)
-    for name in assistants_list:
-        dept = assistant_dept_map.get(_norm_staff_key(name), "")
-        if not dept:
-            continue
-        if name not in assistants_by_dept.setdefault(dept, []):
-            assistants_by_dept[dept].append(name)
-
-    doctors_by_dept: dict[str, list[str]] = {dept: [] for dept in dept_set}
-    if config_doctor_lists:
-        for dept, ordered in config_doctor_lists.items():
-            for name in ordered:
-                if name in doctors_list and name not in doctors_by_dept.setdefault(dept, []):
-                    doctors_by_dept[dept].append(name)
-    for name in doctors_list:
-        dept = doctor_dept_map.get(_norm_staff_key(name), "")
-        if not dept:
-            continue
-        if name not in doctors_by_dept.setdefault(dept, []):
-            doctors_by_dept[dept].append(name)
-
-    global ALL_ASSISTANTS, ALL_DOCTORS, WEEKLY_OFF
-    if assistants_list:
-        ALL_ASSISTANTS = assistants_list
-    if doctors_list:
-        ALL_DOCTORS = doctors_list
-    if assistants_list:
-        WEEKLY_OFF = weekly_off_map
-
-    cache = {
-        "cache_bust": cache_bust,
-        "assistants": assistants_list,
-        "doctors": doctors_list,
-        "assistant_dept_map": assistant_dept_map,
-        "doctor_dept_map": doctor_dept_map,
-        "assistant_prefs": assistant_pref_map,
-        "weekly_off_map": weekly_off_map,
-        "departments": sorted([d for d in dept_set if d]),
-        "assistants_by_dept": assistants_by_dept,
-        "doctors_by_dept": doctors_by_dept,
-    }
-    st.session_state.profiles_cache = cache
-    return cache
-
-
-def _get_known_departments() -> list[str]:
-    try:
-        cache = _get_profiles_cache()
-        depts = cache.get("departments", [])
-        if depts:
-            return depts
-    except Exception:
-        pass
-    config = _get_allocation_config()
-    dept_list = []
-    depts = config.get("departments", {}) if isinstance(config, dict) else {}
-    if isinstance(depts, dict):
-        for dept in depts.keys():
-            dept_upper = str(dept).strip().upper()
-            if dept_upper and dept_upper not in dept_list:
-                dept_list.append(dept_upper)
-    if dept_list:
-        return sorted(dept_list)
-    return sorted([str(d).strip().upper() for d in DEPARTMENTS.keys() if str(d).strip()])
-
-
-def _get_all_doctors() -> list[str]:
-    try:
-        cache = _get_profiles_cache()
-        doctors = cache.get("doctors", [])
-        if doctors:
-            return doctors
-    except Exception:
-        pass
-    config = _get_allocation_config()
-    out: list[str] = []
-    depts = config.get("departments", {}) if isinstance(config, dict) else {}
-    if isinstance(depts, dict):
-        for data in depts.values():
-            if not isinstance(data, dict):
-                continue
-            out.extend(data.get("doctors", []) or [])
-    out = _unique_preserve_order(out)
-    if out:
-        return out
-    return ALL_DOCTORS
-
-
-def _get_all_assistants() -> list[str]:
-    try:
-        cache = _get_profiles_cache()
-        assistants = cache.get("assistants", [])
-        if assistants:
-            return assistants
-    except Exception:
-        pass
-    config = _get_allocation_config()
-    out: list[str] = []
-    depts = config.get("departments", {}) if isinstance(config, dict) else {}
-    if isinstance(depts, dict):
-        for data in depts.values():
-            if not isinstance(data, dict):
-                continue
-            out.extend(data.get("assistants", []) or [])
-    out = _unique_preserve_order(out)
-    if out:
-        return out
-    return ALL_ASSISTANTS
-
-
-def _restore_profile_hidden_columns(
-    edited_df: pd.DataFrame,
-    base_df: pd.DataFrame,
-    hidden_cols: list[str],
-    user_name: str,
-) -> pd.DataFrame:
-    out = edited_df.copy()
-    for col in hidden_cols:
-        if col not in out.columns:
-            out[col] = ""
-    if "id" not in out.columns:
-        out["id"] = ""
-
-    base_id_map: dict[str, dict[str, Any]] = {}
-    if "id" in base_df.columns:
-        for _, row in base_df.iterrows():
-            rid = str(row.get("id", "")).strip()
-            if not rid or rid.lower() in {"nan", "none"}:
-                continue
-            base_id_map[rid] = row.to_dict()
-
-    if base_id_map and "name" in out.columns and "department" in out.columns:
-        base_key = (
-            base_df["name"].astype(str).str.strip().str.upper()
-            + "|"
-            + base_df["department"].astype(str).str.strip().str.upper()
-        )
-        base_keys = dict(zip(base_key, base_df["id"].astype(str)))
-        missing_id = out["id"].apply(_is_blank_cell)
-        if missing_id.any():
-            out_key = (
-                out["name"].astype(str).str.strip().str.upper()
-                + "|"
-                + out["department"].astype(str).str.strip().str.upper()
-            )
-            out.loc[missing_id, "id"] = out_key[missing_id].map(base_keys).fillna("")
-
-    if base_id_map:
-        for col in hidden_cols:
-            mask = out[col].apply(_is_blank_cell)
-            if not mask.any():
-                continue
-            out.loc[mask, col] = out.loc[mask, "id"].map(
-                lambda rid: base_id_map.get(str(rid).strip(), {}).get(col, "")
-            )
-
-    now_iso = _now_iso()
-    if "created_at" in out.columns:
-        mask = out["created_at"].apply(_is_blank_cell)
-        if mask.any():
-            out.loc[mask, "created_at"] = now_iso
-    if "created_by" in out.columns:
-        mask = out["created_by"].apply(_is_blank_cell)
-        if mask.any():
-            out.loc[mask, "created_by"] = user_name
-
-    return out
 
 
 def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) -> None:
     """UI to add/edit assistant/doctor profiles with simple role guard."""
     user_role = st.session_state.get("user_role", "viewer")
     user_name = st.session_state.get("current_user", "user")
-    if USE_SUPABASE and supabase_client is not None:
-        ready, err = _profiles_table_ready(supabase_client, PROFILE_SUPABASE_TABLE)
-        if not ready:
-            _render_profiles_setup_help(PROFILE_SUPABASE_TABLE, err)
-            return
     df_profiles = load_profiles(sheet_name)
     status_options = ["ACTIVE", "INACTIVE"]
-    dept_options = [""] + _get_known_departments()
-    hidden_cols = ["id", "created_at", "updated_at", "created_by", "updated_by"]
-    is_editor = user_role in ("admin", "editor")
+    dept_options = [""] + sorted(DEPARTMENTS.keys())
 
     st.markdown(f"### {entity_label} Profiles")
 
+    # Filters (applied to the read-only view)
+    f1, f2, f3 = st.columns([0.2, 0.2, 0.6])
+    with f1:
+        status_filter = st.multiselect(
+            "Status",
+            options=status_options,
+            default=["ACTIVE"],
+            key=f"{sheet_name}_status_filter",
+        )
+    with f2:
+        dept_filter = st.selectbox(
+            dept_label,
+            options=["All"] + dept_options[1:],
+            key=f"{sheet_name}_dept_filter",
+        )
+    with f3:
+        search_term = st.text_input("Search name", key=f"{sheet_name}_search")
+
+    filtered = df_profiles.copy()
+    if status_filter:
+        filtered = filtered[filtered["status"].isin(status_filter)]
+    if dept_filter and dept_filter != "All":
+        filtered = filtered[filtered["department"].str.upper() == dept_filter.upper()]
+    if search_term:
+        filtered = filtered[filtered["name"].str.contains(search_term, case=False, na=False)]
+
+    st.dataframe(filtered, use_container_width=True, hide_index=True)
+
+    is_editor = user_role in ("admin", "editor")
     if not is_editor:
-        # Filters (applied to the read-only view)
-        f1, f2, f3 = st.columns([0.2, 0.2, 0.6])
-        with f1:
-            status_filter = st.multiselect(
-                "Status",
-                options=status_options,
-                default=["ACTIVE"],
-                key=f"{sheet_name}_status_filter",
-            )
-        with f2:
-            dept_filter = st.selectbox(
-                dept_label,
-                options=["All"] + dept_options[1:],
-                key=f"{sheet_name}_dept_filter",
-            )
-        with f3:
-            search_term = st.text_input("Search name", key=f"{sheet_name}_search")
-
-        filtered = df_profiles.copy()
-        if status_filter:
-            filtered = filtered[filtered["status"].isin(status_filter)]
-        if dept_filter and dept_filter != "All":
-            filtered = filtered[filtered["department"].str.upper() == dept_filter.upper()]
-        if search_term:
-            filtered = filtered[filtered["name"].str.contains(search_term, case=False, na=False)]
-
-        display_filtered = filtered.drop(columns=[c for c in hidden_cols if c in filtered.columns], errors="ignore")
-        st.dataframe(display_filtered, use_container_width=True, hide_index=True)
         st.info("You are in read-only mode. Switch to admin/editor to add or edit profiles.")
         return
 
-    def _render_add_profile_dialog_body() -> None:
-        st.markdown(f"### Add {entity_label}")
-        with st.form(f"add_{sheet_name}_form", clear_on_submit=False):
-            name = st.text_input(f"{entity_label} Name")
-            dept = st.selectbox(dept_label, options=dept_options, key=f"{sheet_name}_dept_new")
-            contact_email = st.text_input("Contact Email", key=f"{sheet_name}_email_new")
-            contact_phone = st.text_input("Contact Phone", key=f"{sheet_name}_phone_new")
-            status_val = st.selectbox("Status", options=status_options, key=f"{sheet_name}_status_new")
-            submitted = st.form_submit_button(f"Add {entity_label}")
-            if submitted:
-                if not name.strip():
-                    st.warning("Name is required.")
-                else:
-                    new_row = {
-                        "id": str(uuid.uuid4()),
-                        "name": name.strip(),
-                        "department": dept.strip(),
-                        "contact_email": contact_email.strip(),
-                        "contact_phone": contact_phone.strip(),
-                        "status": status_val,
-                        "created_at": _now_iso(),
-                        "updated_at": _now_iso(),
-                        "created_by": user_name,
-                        "updated_by": user_name,
-                    }
-                    df_profiles_local = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
-                    ok = save_profiles(df_profiles_local, sheet_name)
-                    if not ok:
-                        st.error(f"Failed to save {entity_label}.")
-                        return
-                    st.session_state.profiles_cache_bust += 1
-                    if USE_SUPABASE and supabase_client is not None:
-                        st.session_state.supabase_staff_refreshed = False
-                    st.success(f"{entity_label} added.")
-                    st.rerun()
-
-    _dialog_decorator = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
-    if _dialog_decorator:
-        @_dialog_decorator(f"Add {entity_label}")
-        def _render_add_profile_dialog() -> None:
-            _render_add_profile_dialog_body()
-    else:
-        def _render_add_profile_dialog() -> None:
-            st.warning("Popup add requires a newer Streamlit version.")
-            _render_add_profile_dialog_body()
-
-    if st.button(f"Add {entity_label}", key=f"add_{sheet_name}_open", use_container_width=True):
-        _render_add_profile_dialog()
-
-    def _render_delete_profile_dialog_body() -> None:
-        st.markdown(f"### Delete {entity_label} Profiles")
-        if df_profiles.empty:
-            st.caption("No profiles available to delete.")
-            return
-        option_meta: dict[str, dict[str, Any]] = {}
-        delete_options: list[str] = []
-
-        for idx, row in df_profiles.iterrows():
-            name = str(row.get("name", "")).strip()
-            dept = str(row.get("department", "")).strip()
-            rid = str(row.get("id", "")).strip()
-
-            label_parts = [name.title() if name else f"Row {idx + 1}"]
-            if dept:
-                label_parts.append(dept.title())
-            label = " - ".join(label_parts)
-            if rid:
-                label = f"{label} ({rid[-6:]})"
+    st.markdown(f"#### Add {entity_label}")
+    with st.form(f"add_{sheet_name}_form", clear_on_submit=True):
+        name = st.text_input(f"{entity_label} Name")
+        dept = st.selectbox(dept_label, options=dept_options, key=f"{sheet_name}_dept_new")
+        contact_email = st.text_input("Contact Email", key=f"{sheet_name}_email_new")
+        contact_phone = st.text_input("Contact Phone", key=f"{sheet_name}_phone_new")
+        status_val = st.selectbox("Status", options=status_options, key=f"{sheet_name}_status_new")
+        submitted = st.form_submit_button(f"Add {entity_label}")
+        if submitted:
+            if not name.strip():
+                st.warning("Name is required.")
             else:
-                label = f"{label} (row {idx + 1})"
-            if label in option_meta:
-                label = f"{label} #{idx + 1}"
-
-            option_meta[label] = {
-                "id": rid,
-                "index": idx,
-                "name": name.upper(),
-                "department": dept.upper(),
-            }
-            delete_options.append(label)
-
-        selected = st.multiselect(
-            f"Select {entity_label} profiles",
-            options=delete_options,
-            key=f"{sheet_name}_delete_select",
-        )
-        confirm = st.checkbox(
-            "Confirm delete",
-            key=f"{sheet_name}_delete_confirm",
-        )
-        if st.button(
-            f"Delete selected {entity_label} profiles",
-            key=f"{sheet_name}_delete_btn",
-            use_container_width=True,
-        ):
-            if not selected:
-                st.warning("Select at least one profile to delete.")
-            elif not confirm:
-                st.warning("Please confirm delete.")
-            else:
-                to_delete = [option_meta[label] for label in selected if label in option_meta]
-                if USE_SUPABASE and supabase_client is not None:
-                    try:
-                        ids = [item["id"] for item in to_delete if item.get("id")]
-                        if ids:
-                            supabase_client.table(PROFILE_SUPABASE_TABLE).delete().in_("id", ids).execute()
-                        for item in to_delete:
-                            if item.get("id"):
-                                continue
-                            if not item.get("name"):
-                                continue
-                            q = (
-                                supabase_client.table(PROFILE_SUPABASE_TABLE)
-                                .delete()
-                                .eq("kind", sheet_name)
-                                .eq("name", item["name"])
-                            )
-                            if item.get("department"):
-                                q = q.eq("department", item["department"])
-                            q.execute()
-                        try:
-                            _get_active_assistant_profile_names.clear()
-                        except Exception:
-                            pass
-                        try:
-                            _refresh_staff_options_from_supabase(supabase_client)
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        st.error(f"Failed to delete {entity_label} profiles: {e}")
-                        return
-                else:
-                    drop_idx = [item["index"] for item in to_delete]
-                    df_after = df_profiles.drop(index=drop_idx, errors="ignore").reset_index(drop=True)
-                    ok = save_profiles(df_after, sheet_name)
-                    if not ok:
-                        st.error(f"Failed to delete {entity_label} profiles.")
-                        return
-                if USE_SUPABASE and supabase_client is not None:
-                    st.session_state.supabase_staff_refreshed = False
-                st.session_state.profiles_cache_bust += 1
-                st.success(f"Deleted {len(to_delete)} {entity_label} profile(s).")
+                new_row = {
+                    "id": str(uuid.uuid4()),
+                    "name": name.strip(),
+                    "department": dept.strip(),
+                    "contact_email": contact_email.strip(),
+                    "contact_phone": contact_phone.strip(),
+                    "status": status_val,
+                    "created_at": _now_iso(),
+                    "updated_at": _now_iso(),
+                    "created_by": user_name,
+                    "updated_by": user_name,
+                }
+                df_profiles = pd.concat([df_profiles, pd.DataFrame([new_row])], ignore_index=True)
+                save_profiles(df_profiles, sheet_name)
+                st.success(f"{entity_label} added.")
                 st.rerun()
-
-    if _dialog_decorator:
-        @_dialog_decorator(f"Delete {entity_label}")
-        def _render_delete_profile_dialog() -> None:
-            _render_delete_profile_dialog_body()
-    else:
-        def _render_delete_profile_dialog() -> None:
-            st.warning("Popup delete requires a newer Streamlit version.")
-            _render_delete_profile_dialog_body()
-
-    if st.button(f"Delete {entity_label}", key=f"delete_{sheet_name}_open", use_container_width=True):
-        _render_delete_profile_dialog()
 
     st.markdown("#### Edit All Profiles")
     edited_df = st.data_editor(
@@ -5532,32 +3564,24 @@ def render_profile_manager(sheet_name: str, entity_label: str, dept_label: str) 
         use_container_width=True,
         key=f"{sheet_name}_editor",
         column_config={
-            "id": None,
+            "id": st.column_config.TextColumn("ID", disabled=True),
             "name": st.column_config.TextColumn(f"{entity_label} Name", required=True),
             "department": st.column_config.SelectboxColumn(dept_label, options=dept_options),
             "contact_email": st.column_config.TextColumn("Contact Email"),
             "contact_phone": st.column_config.TextColumn("Contact Phone"),
             "status": st.column_config.SelectboxColumn("Status", options=status_options, required=True),
-            "created_at": None,
-            "updated_at": None,
-            "created_by": None,
-            "updated_by": None,
+            "created_at": st.column_config.TextColumn("Created At", disabled=True),
+            "updated_at": st.column_config.TextColumn("Updated At", disabled=True),
+            "created_by": st.column_config.TextColumn("Created By", disabled=True),
+            "updated_by": st.column_config.TextColumn("Updated By", disabled=True),
         },
     )
     if st.button("Save profile changes", key=f"{sheet_name}_save_btn"):
-        edited_df = _restore_profile_hidden_columns(edited_df, df_profiles, hidden_cols, user_name)
         edited_df["updated_at"] = _now_iso()
         edited_df["updated_by"] = user_name
-        ok = save_profiles(edited_df, sheet_name)
-        if not ok:
-            st.error("Failed to save profile changes.")
-            return
-        st.session_state.profiles_cache_bust += 1
-        if USE_SUPABASE and supabase_client is not None:
-            st.session_state.supabase_staff_refreshed = False
+        save_profiles(edited_df, sheet_name)
         st.success("Profiles updated.")
-        if USE_SUPABASE and supabase_client is not None:
-            st.rerun()
+        st.rerun()
 
 
 # Auto-select backend for Streamlit Cloud:
@@ -5707,8 +3731,8 @@ def _open_spreadsheet(client, spreadsheet_ref: str):
 
 def _get_supabase_config_from_secrets_or_env():
     """Return (url, key, table, row_id, profile_table) from Streamlit secrets/env vars."""
-    url = ""
-    key = ""
+    url = SUPABASE_URL_DEFAULT
+    key = SUPABASE_KEY_DEFAULT
     service_key = ""
     table = supabase_table_name
     row_id = supabase_row_id
@@ -5716,19 +3740,9 @@ def _get_supabase_config_from_secrets_or_env():
 
     try:
         if hasattr(st, 'secrets'):
-            supabase_section = st.secrets.get("supabase", None)
-            if isinstance(supabase_section, dict):
-                # Support [supabase] table in secrets for legacy configs.
-                url = str(supabase_section.get("url", "") or "").strip() or url
-                key = str(supabase_section.get("key", "") or "").strip() or key
-                service_key = str(supabase_section.get("service_role_key", "") or "").strip() or service_key
-                table = str(supabase_section.get("table", table) or table).strip() or table
-                row_id = str(supabase_section.get("row_id", row_id) or row_id).strip() or row_id
-                profile_table = str(supabase_section.get("profile_table", profile_table) or profile_table).strip() or profile_table
-
-            url = str(st.secrets.get("supabase_url", "") or "").strip() or url
-            key = str(st.secrets.get("supabase_key", "") or "").strip() or key
-            service_key = str(st.secrets.get("supabase_service_role_key", "") or "").strip() or service_key
+            url = str(st.secrets.get("supabase_url", "") or "").strip()
+            key = str(st.secrets.get("supabase_key", "") or "").strip()
+            service_key = str(st.secrets.get("supabase_service_role_key", "") or "").strip()
             table = str(st.secrets.get("supabase_table", table) or table).strip() or table
             row_id = str(st.secrets.get("supabase_row_id", row_id) or row_id).strip() or row_id
             profile_table = str(st.secrets.get("supabase_profile_table", profile_table) or profile_table).strip() or profile_table
@@ -5748,43 +3762,9 @@ def _get_supabase_config_from_secrets_or_env():
     if os.getenv("SUPABASE_PROFILE_TABLE"):
         profile_table = os.getenv("SUPABASE_PROFILE_TABLE", profile_table).strip() or profile_table
 
-    if not url:
-        url = SUPABASE_URL_DEFAULT
-    if not key:
-        key = SUPABASE_KEY_DEFAULT
-
     # Prefer service role key when present (avoids RLS setup for server-side app).
     effective_key = service_key or key
     return url, effective_key, table, row_id, profile_table
-
-
-@st.cache_resource
-def _get_supabase_client_cached(_url: str, _key: str):
-    return create_client(_url, _key)
-
-
-def _get_supabase_client(_url: str, _key: str):
-    if not SUPABASE_AVAILABLE:
-        return None
-    if not _url or not _key:
-        return None
-    try:
-        return _get_supabase_client_cached(_url, _key)
-    except Exception:
-        try:
-            return create_client(_url, _key)
-        except Exception:
-            return None
-
-
-def _supabase_ready_recent() -> bool:
-    try:
-        if not st.session_state.get("supabase_ready"):
-            return False
-        last = float(st.session_state.get("supabase_ready_at") or 0.0)
-        return (time_module.time() - last) < SUPABASE_CHECK_TTL_SECONDS
-    except Exception:
-        return False
 
 
 def _get_expected_columns():
@@ -5870,9 +3850,7 @@ def search_patients_from_supabase(
 ):
     """Search patients (id + name) from a Supabase table."""
     q = (_query or "").strip()
-    client = _get_supabase_client(_url, _key)
-    if client is None:
-        return []
+    client = create_client(_url, _key)
 
     def _is_simple_ident(name: str) -> bool:
         return bool(re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", str(name or "")))
@@ -6015,9 +3993,7 @@ def load_data_from_supabase(_url: str, _key: str, _table: str, _row_id: str):
     payload = {"columns": [...], "rows": [ {col: val, ...}, ... ]}
     """
     try:
-        client = _get_supabase_client(_url, _key)
-        if client is None:
-            return None
+        client = create_client(_url, _key)
         resp = client.table(_table).select("payload").eq("id", _row_id).execute()
 
         data = getattr(resp, "data", None)
@@ -6060,9 +4036,7 @@ def load_data_from_supabase(_url: str, _key: str, _table: str, _row_id: str):
 def save_data_to_supabase(_url: str, _key: str, _table: str, _row_id: str, df: pd.DataFrame) -> bool:
     """Save dataframe payload to Supabase (upsert)."""
     try:
-        client = _get_supabase_client(_url, _key)
-        if client is None:
-            return False
+        client = create_client(_url, _key)
 
         df_clean = df.copy().fillna("")
         # Convert to JSON-serializable primitives; avoid pandas NA
@@ -6104,26 +4078,16 @@ if SUPABASE_AVAILABLE:
     try:
         sup_url, sup_key, sup_table, sup_row, profile_table = _get_supabase_config_from_secrets_or_env()
         if sup_url and sup_key:
-            supabase_client = _get_supabase_client(sup_url, sup_key)
-            if supabase_client is None:
-                raise RuntimeError("Supabase client unavailable.")
+            supabase_client = create_client(sup_url, sup_key)
             supabase_table_name = sup_table
             supabase_row_id = sup_row
             PROFILE_SUPABASE_TABLE = profile_table
-            # Quick connectivity check (will also validate credentials).
-            # Skip repeated checks to keep button clicks responsive.
-            if not _supabase_ready_recent():
-                _ = supabase_client.table(supabase_table_name).select("id").limit(1).execute()
-                st.session_state.supabase_ready = True
-                st.session_state.supabase_ready_at = time_module.time()
-                st.sidebar.success("Connected to Supabase")
+            # Quick connectivity check (will also validate credentials)
+            _ = supabase_client.table(supabase_table_name).select("id").limit(1).execute()
             USE_SUPABASE = True
-            if not st.session_state.supabase_profiles_seeded:
-                _seed_supabase_profiles_if_needed(supabase_client)
-                st.session_state.supabase_profiles_seeded = True
-            if not st.session_state.supabase_staff_refreshed:
-                _refresh_staff_options_from_supabase(supabase_client)
-                st.session_state.supabase_staff_refreshed = True
+            st.sidebar.success("🗄️ Connected to Supabase")
+            _seed_supabase_profiles_if_needed(supabase_client)
+            _refresh_staff_options_from_supabase(supabase_client)
         else:
             # Not configured; show a quick setup helper.
             with st.sidebar.expander("✅ Quick setup (Supabase)", expanded=False):
@@ -6161,11 +4125,6 @@ if SUPABASE_AVAILABLE:
                 )
     except Exception as e:
         # Safe diagnostics: only presence of keys, not values.
-        st.session_state.supabase_ready = False
-        st.session_state.supabase_ready_at = 0.0
-        st.session_state.supabase_profiles_seeded = False
-        st.session_state.supabase_staff_refreshed = False
-        supabase_client = None
         present = {}
         try:
             if hasattr(st, 'secrets'):
@@ -6187,13 +4146,11 @@ if FORCE_SUPABASE and not USE_SUPABASE:
     try:
         sup_url, sup_key, sup_table, sup_row, profile_table = _get_supabase_config_from_secrets_or_env()
         if sup_url and sup_key:
-            supabase_client = _get_supabase_client(sup_url, sup_key)
-            if supabase_client is not None:
-                supabase_table_name = sup_table
-                supabase_row_id = sup_row
-                PROFILE_SUPABASE_TABLE = profile_table
-                USE_SUPABASE = True
-                st.sidebar.info("Supabase forced via config.")
+            supabase_client = create_client(sup_url, sup_key)
+            supabase_table_name = sup_table
+            supabase_row_id = sup_row
+            USE_SUPABASE = True
+            st.sidebar.info("Supabase forced via config.")
     except Exception:
         pass
 
@@ -6538,98 +4495,6 @@ def _data_editor_has_pending_edits(editor_key: str) -> bool:
         return False
 
 
-def _get_meta_save_version(meta: dict | None) -> int | None:
-    if not isinstance(meta, dict):
-        return None
-    try:
-        val = meta.get("save_version")
-        if val is None or str(val).strip() == "":
-            return None
-        return int(float(val))
-    except Exception:
-        return None
-
-
-def _meta_for_hash(meta: dict | None) -> dict:
-    if not isinstance(meta, dict):
-        return {}
-    skip = {"time_blocks_updated_at", "saved_at", "save_version"}
-    return {k: v for k, v in meta.items() if k not in skip}
-
-
-def _compute_save_hash(df_any: pd.DataFrame, meta: dict | None) -> str:
-    try:
-        data_hash = hashlib.md5(pd.util.hash_pandas_object(df_any, index=True).values.tobytes()).hexdigest()
-    except Exception:
-        data_hash = hashlib.md5(str(df_any).encode("utf-8")).hexdigest()
-    try:
-        meta_hash = hashlib.md5(
-            json.dumps(_meta_for_hash(meta), sort_keys=True, default=str).encode("utf-8")
-        ).hexdigest()
-    except Exception:
-        meta_hash = ""
-    return hashlib.md5(f"{data_hash}|{meta_hash}".encode("utf-8")).hexdigest()
-
-
-def _fetch_remote_save_version() -> int | None:
-    try:
-        if USE_SUPABASE:
-            sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
-            client = _get_supabase_client(sup_url, sup_key)
-            if client is None:
-                return None
-            resp = client.table(sup_table).select("payload").eq("id", sup_row).limit(1).execute()
-            data = getattr(resp, "data", None)
-            if not data:
-                return None
-            payload = data[0].get("payload") if isinstance(data, list) else None
-            meta = payload.get("meta") if isinstance(payload, dict) else None
-            return _get_meta_save_version(meta)
-        if USE_GOOGLE_SHEETS and gsheet_worksheet is not None:
-            try:
-                load_meta_from_gsheets.clear()
-            except Exception:
-                pass
-            meta = load_meta_from_gsheets(gsheet_worksheet)
-            return _get_meta_save_version(meta)
-    except Exception:
-        return None
-    return None
-
-
-def _get_editor_changed_rows(editor_key: str) -> tuple[list[int], bool]:
-    try:
-        state = st.session_state.get(editor_key)
-        if not isinstance(state, dict):
-            return [], False
-        if state.get("added_rows"):
-            return [], True
-        edited = state.get("edited_rows") or {}
-        return sorted(int(k) for k in edited.keys()), False
-    except Exception:
-        return [], False
-
-
-def _norm_cell(val) -> str:
-    if val is None:
-        return ""
-    if isinstance(val, float) and pd.isna(val):
-        return ""
-    s = str(val).strip()
-    if s.lower() in {"nan", "none"}:
-        return ""
-    return s
-
-
-def _row_has_changes(edited_row, base_row, compare_cols: list[str]) -> bool:
-    for col in compare_cols:
-        if col not in edited_row.index or col not in base_row.index:
-            continue
-        if _norm_cell(edited_row.get(col)) != _norm_cell(base_row.get(col)):
-            return True
-    return False
-
-
 # ================ Load Data ================
 df_raw = None
 
@@ -6648,17 +4513,6 @@ elif USE_GOOGLE_SHEETS:
 else:
     st.error("Excel backend disabled. Configure Supabase (recommended) or Google Sheets in secrets.")
     st.stop()
-
-# Track base save version/hash from storage unless we have local pending edits.
-loaded_meta = _get_meta_from_df(df_raw)
-if st.session_state.get("unsaved_df") is None:
-    loaded_version = _get_meta_save_version(loaded_meta)
-    if loaded_version is not None:
-        st.session_state.loaded_save_version = loaded_version
-        st.session_state.loaded_save_at = loaded_meta.get("saved_at")
-        st.session_state.last_saved_hash = _compute_save_hash(df_raw, loaded_meta)
-    elif st.session_state.get("last_saved_hash") is None:
-        st.session_state.last_saved_hash = _compute_save_hash(df_raw, loaded_meta)
 
 # Prefer in-session pending changes when auto-save is off
 if st.session_state.get("unsaved_df") is not None:
@@ -6737,17 +4591,30 @@ def _collect_unique_upper(df_any: pd.DataFrame, col_name: str) -> list[str]:
 
 # Dropdown options: keep configured lists + include any existing values from data
 _extra_doctors = _collect_unique_upper(df_raw, "DR.")
-DOCTOR_OPTIONS = _unique_preserve_order(_get_all_doctors() + _extra_doctors)
+DOCTOR_OPTIONS = _unique_preserve_order(ALL_DOCTORS + _extra_doctors)
 
 _extra_assistants: list[str] = []
 for _c in ["FIRST", "SECOND", "Third", "CASE PAPER"]:
     _extra_assistants.extend(_collect_unique_upper(df_raw, _c))
-ASSISTANT_OPTIONS = _unique_preserve_order(_get_all_assistants() + _extra_assistants)
+ASSISTANT_OPTIONS = _unique_preserve_order(ALL_ASSISTANTS + _extra_assistants)
 
 # Status options: configured set + any existing values in data
 _extra_statuses = _collect_unique_upper(df_raw, "STATUS")
 STATUS_OPTIONS = _unique_preserve_order(STATUS_BASE_OPTIONS + _extra_statuses)
 
+
+# Process data
+df = df_raw.copy()
+# Don't force numeric conversion yet - handle both formats
+df["In Time"] = df["In Time"]
+df["Out Time"] = df["Out Time"]
+
+df["In Time Str"] = df["In Time"].apply(dec_to_time)
+df["Out Time Str"] = df["Out Time"].apply(dec_to_time)
+
+# Create time objects for picker
+df["In Time Obj"] = df["In Time Str"].apply(safe_str_to_time_obj)
+df["Out Time Obj"] = df["Out Time Str"].apply(safe_str_to_time_obj)
 
 # Convert checkbox columns (SUCTION, CLEANING) - checkmark or content to boolean
 def str_to_checkbox(val: Any) -> bool:
@@ -6781,67 +4648,21 @@ def str_to_checkbox(val: Any) -> bool:
     # Any other non-empty content is treated as checked (legacy behavior)
     return True
 
-def _schedule_cache_key() -> tuple:
-    if st.session_state.get("unsaved_df") is not None:
-        return ("unsaved", st.session_state.get("unsaved_df_version", 0))
-    return (
-        "saved",
-        st.session_state.get("loaded_save_version"),
-        st.session_state.get("last_saved_hash"),
-    )
+# Convert existing checkbox data
+if "SUCTION" in df.columns:
+    df["SUCTION"] = df["SUCTION"].apply(str_to_checkbox)
+if "CLEANING" in df.columns:
+    df["CLEANING"] = df["CLEANING"].apply(str_to_checkbox)
 
-def _schedule_change_key() -> tuple:
-    return _schedule_cache_key()
+# Convert time values to minutes since midnight for comparison (function defined earlier)
+df["In_min"] = df["In Time"].apply(time_to_minutes).astype('Int64')
+df["Out_min"] = df["Out Time"].apply(time_to_minutes).astype('Int64')
 
-def _get_cached_schedule_hash(df_any: pd.DataFrame) -> str:
-    cache_key = _schedule_change_key()
-    cached_key = st.session_state.get("schedule_hash_key")
-    cached_hash = st.session_state.get("schedule_hash")
-    if cached_hash and cached_key == cache_key:
-        return cached_hash
-    meta = None
-    try:
-        meta = df_any.attrs.get("meta")
-    except Exception:
-        meta = None
-    new_hash = _compute_save_hash(df_any, meta)
-    st.session_state.schedule_hash_key = cache_key
-    st.session_state.schedule_hash = new_hash
-    return new_hash
+# Handle possible overnight cases
+df.loc[df["Out_min"] < df["In_min"], "Out_min"] += 1440
 
-def _notification_tick_key(schedule_hash: str) -> tuple:
-    return (schedule_hash, int(time_module.time() // 60))
-
-
-def _prepare_schedule_df_static(df_any: pd.DataFrame) -> pd.DataFrame:
-    df_local = df_any.copy()
-    df_local["In Time Str"] = df_local["In Time"].apply(dec_to_time)
-    df_local["Out Time Str"] = df_local["Out Time"].apply(dec_to_time)
-    df_local["In Time Obj"] = df_local["In Time Str"].apply(safe_str_to_time_obj)
-    df_local["Out Time Obj"] = df_local["Out Time Str"].apply(safe_str_to_time_obj)
-    if "SUCTION" in df_local.columns:
-        df_local["SUCTION"] = df_local["SUCTION"].apply(str_to_checkbox)
-    if "CLEANING" in df_local.columns:
-        df_local["CLEANING"] = df_local["CLEANING"].apply(str_to_checkbox)
-    df_local["In_min"] = df_local["In Time"].apply(time_to_minutes).astype("Int64")
-    df_local["Out_min"] = df_local["Out Time"].apply(time_to_minutes).astype("Int64")
-    df_local.loc[df_local["Out_min"] < df_local["In_min"], "Out_min"] += 1440
-    return df_local
-
-
-def _get_processed_schedule_df(df_any: pd.DataFrame) -> pd.DataFrame:
-    cache_key = _schedule_cache_key()
-    cached_key = st.session_state.get("schedule_df_cache_key")
-    cached_df = st.session_state.get("schedule_df_cache")
-    if cached_df is not None and cached_key == cache_key:
-        try:
-            return cached_df.copy(deep=False)
-        except Exception:
-            return cached_df
-    df_local = _prepare_schedule_df_static(df_any)
-    st.session_state.schedule_df_cache_key = cache_key
-    st.session_state.schedule_df_cache = df_local
-    return df_local
+# Current time in minutes (same day)
+current_min = now.hour * 60 + now.minute
 
 # ================ Reminder Persistence Setup ================
 # Add stable row IDs and reminder columns if they don't exist
@@ -6871,73 +4692,55 @@ if 'REMINDER_DISMISSED' not in df_raw.columns:
     df_raw['REMINDER_DISMISSED'] = False
 
 # Refresh df with new columns
-df = _get_processed_schedule_df(df_raw)
+df = df_raw.copy()
 
-# Current time in minutes (same day)
-current_min = now.hour * 60 + now.minute
+# Re-process time columns after df reassignment
+df["In Time Str"] = df["In Time"].apply(dec_to_time)
+df["Out Time Str"] = df["Out Time"].apply(dec_to_time)
+df["In Time Obj"] = df["In Time Str"].apply(safe_str_to_time_obj)
+df["Out Time Obj"] = df["Out Time Str"].apply(safe_str_to_time_obj)
+
+# Re-convert checkbox columns
+if "SUCTION" in df.columns:
+    df["SUCTION"] = df["SUCTION"].apply(str_to_checkbox)
+if "CLEANING" in df.columns:
+    df["CLEANING"] = df["CLEANING"].apply(str_to_checkbox)
+
+# Ensure In_min/Out_min exist
+df["In_min"] = df["In Time"].apply(time_to_minutes).astype('Int64')
+df["Out_min"] = df["Out Time"].apply(time_to_minutes).astype('Int64')
+# Handle possible overnight cases
+df.loc[df["Out_min"] < df["In_min"], "Out_min"] += 1440
 
 # Mark ongoing
 df["Is_Ongoing"] = (df["In_min"] <= current_min) & (current_min <= df["Out_min"])
 
 # ================ Unified Save Function ================
-def save_data(dataframe, show_toast=True, message="Data saved!", *, ignore_conflict=False):
-    """Save dataframe to Google Sheets or Excel based on configuration."""
-    if st.session_state.get("is_saving"):
-        return False
-    st.session_state.is_saving = True
+def save_data(dataframe, show_toast=True, message="Data saved!"):
+    """Save dataframe to Google Sheets or Excel based on configuration"""
     try:
+        # Ensure metadata is updated with current time blocks before saving
         if not hasattr(dataframe, 'attrs'):
             dataframe.attrs = {}
         meta = _get_meta_from_df(dataframe)
         meta = _apply_time_blocks_to_meta(meta)
-
-        loaded_version = st.session_state.get("loaded_save_version")
-        local_version = _get_meta_save_version(meta)
-        if local_version is None and loaded_version is not None:
-            local_version = _safe_int(loaded_version, 0)
-
-        remote_version = None
-        if (
-            st.session_state.get("enable_conflict_checks", True)
-            and not ignore_conflict
-            and (USE_SUPABASE or USE_GOOGLE_SHEETS)
-        ):
-            remote_version = _fetch_remote_save_version()
-            if remote_version is not None and loaded_version is not None:
-                if _safe_int(remote_version, -1) != _safe_int(loaded_version, -1):
-                    st.session_state.save_conflict = {
-                        "local_version": loaded_version,
-                        "remote_version": remote_version,
-                        "detected_at": now_ist().isoformat(),
-                    }
-                    st.error("Save blocked: newer data detected in storage.")
-                    return False
-
-        save_hash = _compute_save_hash(dataframe, meta)
-        if save_hash == st.session_state.get("last_saved_hash"):
-            return True
-
-        base_version = max(
-            _safe_int(loaded_version, 0),
-            _safe_int(remote_version, 0),
-            _safe_int(local_version, 0),
-        )
-        meta["save_version"] = int(base_version) + 1
-        meta["saved_at"] = now_ist().isoformat()
         dataframe.attrs["meta"] = meta
-
+        
         if USE_SUPABASE:
             sup_url, sup_key, sup_table, sup_row, _ = _get_supabase_config_from_secrets_or_env()
             success = save_data_to_supabase(sup_url, sup_key, sup_table, sup_row, dataframe)
             if success and show_toast:
-                st.toast(message, icon="✅")
+                st.toast(f"🗄️ {message}", icon="✅")
+            return success
         elif USE_GOOGLE_SHEETS:
             success = save_data_to_gsheets(gsheet_worksheet, dataframe)
             if success and show_toast:
-                st.toast(message, icon="✅")
+                st.toast(f"☁️ {message}", icon="✅")
+            return success
         else:
             with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
                 dataframe.to_excel(writer, sheet_name='Sheet1', index=False)
+                # Persist metadata (time blocks) into a separate sheet
                 try:
                     meta = _apply_time_blocks_to_meta(_get_meta_from_df(dataframe))
                     meta_rows = []
@@ -6949,79 +4752,36 @@ def save_data(dataframe, show_toast=True, message="Data saved!", *, ignore_confl
                     pd.DataFrame(meta_rows).to_excel(writer, sheet_name='Meta', index=False)
                 except Exception:
                     pass
-            success = True
             if show_toast:
-                st.toast(message, icon="✅")
-
-        if success:
-            st.session_state.last_saved_hash = save_hash
-            st.session_state.loaded_save_version = meta.get("save_version")
-            st.session_state.loaded_save_at = meta.get("saved_at")
-            st.session_state.save_conflict = None
-            st.session_state.last_save_at = time_module.time()
-        return success
+                st.toast(f"💾 {message}", icon="✅")
+            return True
     except Exception as e:
         st.error(f"Error saving data: {e}")
         return False
-    finally:
-        st.session_state.is_saving = False
 
 
 def _queue_unsaved_df(df_pending: pd.DataFrame, reason: str = "") -> None:
-    """Keep changes in memory when auto-save is disabled or delayed."""
+    """Keep changes in memory when auto-save is disabled."""
     try:
-        st.session_state.unsaved_df = df_pending.copy(deep=False)
+        st.session_state.unsaved_df = df_pending.copy()
     except Exception:
         st.session_state.unsaved_df = df_pending
-    try:
-        st.session_state.unsaved_df_version = int(st.session_state.get("unsaved_df_version", 0)) + 1
-    except Exception:
-        st.session_state.unsaved_df_version = 1
     st.session_state.pending_changes = True
     st.session_state.pending_changes_reason = reason
 
 
-def _maybe_save(dataframe, show_toast=True, message="Data saved!", force=False, ignore_conflict=False):
-    """Respect auto-save toggle; queue changes if disabled or debounced."""
-    if st.session_state.get("is_saving"):
-        _queue_unsaved_df(dataframe, reason=message)
-        return True
-
-    if force:
-        result = save_data(dataframe, show_toast=show_toast, message=message, ignore_conflict=ignore_conflict)
-        if result:
-            st.session_state.unsaved_df = None
-            st.session_state.pending_changes = False
-            st.session_state.pending_changes_reason = ""
-        else:
-            _queue_unsaved_df(dataframe, reason=message)
-        return result
-
+def _maybe_save(dataframe, show_toast=True, message="Data saved!"):
+    """Respect auto-save toggle; queue changes if disabled."""
     if st.session_state.get("auto_save_enabled", False):
-        debounce_s = st.session_state.get("save_debounce_seconds", 0)
-        try:
-            debounce_s = float(debounce_s or 0)
-        except Exception:
-            debounce_s = 0.0
-        if debounce_s > 0:
-            now_ts = time_module.time()
-            last_at = float(st.session_state.get("last_save_at", 0.0) or 0.0)
-            if (now_ts - last_at) < debounce_s:
-                _queue_unsaved_df(dataframe, reason=message)
-                return True
-
-        result = save_data(dataframe, show_toast=show_toast, message=message, ignore_conflict=ignore_conflict)
-        if result:
-            st.session_state.unsaved_df = None
-            st.session_state.pending_changes = False
-            st.session_state.pending_changes_reason = ""
-        else:
-            _queue_unsaved_df(dataframe, reason=message)
+        result = save_data(dataframe, show_toast=show_toast, message=message)
+        st.session_state.unsaved_df = None
+        st.session_state.pending_changes = False
+        st.session_state.pending_changes_reason = ""
         return result
 
     _queue_unsaved_df(dataframe, reason=message)
     if show_toast:
-        st.toast("Auto-save disabled. Click 'Save Changes' to persist.", icon="⚠")
+        st.toast("⏸ Auto-save disabled. Click 'Save Changes' to persist.", icon="⏸")
     return True
 
 
@@ -7048,18 +4808,6 @@ def _build_schedule_backups(df_any: pd.DataFrame) -> tuple[bytes, bytes]:
     return csv_bytes, xlsx_bytes
 
 
-def _get_cached_schedule_backups(df_any: pd.DataFrame) -> tuple[bytes, bytes]:
-    cache_key = _schedule_cache_key()
-    cached_key = st.session_state.get("schedule_backup_key")
-    cached_bytes = st.session_state.get("schedule_backup_cache")
-    if cached_bytes is not None and cached_key == cache_key:
-        return cached_bytes
-    csv_bytes, xlsx_bytes = _build_schedule_backups(df_any)
-    st.session_state.schedule_backup_key = cache_key
-    st.session_state.schedule_backup_cache = (csv_bytes, xlsx_bytes)
-    return csv_bytes, xlsx_bytes
-
-
 def _make_cleared_schedule(df_existing: pd.DataFrame) -> pd.DataFrame:
     """Create an empty schedule dataframe while preserving metadata (e.g., time blocks)."""
     cols = list(df_existing.columns)
@@ -7080,76 +4828,9 @@ with st.sidebar:
         value=st.session_state.get("auto_save_enabled", False),
         help="When off, changes stay in session until you click 'Save Changes'."
     )
-    save_now_disabled = bool(st.session_state.get("is_saving")) or bool(st.session_state.get("save_conflict"))
-    if st.button("Save Now", key="save_now_btn", use_container_width=True, disabled=save_now_disabled):
-        df_to_save = st.session_state.get("unsaved_df")
-        if df_to_save is None:
-            df_to_save = df_raw if "df_raw" in locals() else None
-        if df_to_save is not None:
-            _maybe_save(df_to_save, message="Saved", force=True)
-        else:
-            st.warning("Nothing to save yet.")
-
-    debounce_options = [0, 1, 2, 3, 5, 10]
-    try:
-        debounce_index = debounce_options.index(int(st.session_state.get("save_debounce_seconds", 2)))
-    except Exception:
-        debounce_index = 2
-    st.session_state.save_debounce_seconds = st.selectbox(
-        "Auto-save debounce (seconds)",
-        options=debounce_options,
-        index=debounce_index,
-        help="Delay auto-save slightly to merge quick edits.",
-    )
-    st.session_state.enable_conflict_checks = st.checkbox(
-        "Block saves on external changes",
-        value=st.session_state.get("enable_conflict_checks", True),
-        help="Prevents overwriting if storage changed since you loaded.",
-    )
-    if st.session_state.get("loaded_save_at"):
-        st.caption(f"Last saved: {st.session_state.loaded_save_at}")
-    if st.session_state.get("is_saving"):
-        st.caption("Saving...")
-
-    if st.session_state.get("save_conflict"):
-        st.error("Save conflict: storage changed since you loaded.")
-        col_conflict_a, col_conflict_b = st.columns(2)
-        with col_conflict_a:
-            if st.button("Reload from storage", key="reload_storage_btn"):
-                st.session_state.unsaved_df = None
-                st.session_state.pending_changes = False
-                st.session_state.pending_changes_reason = ""
-                st.session_state.save_conflict = None
-                try:
-                    load_data_from_supabase.clear()
-                except Exception:
-                    pass
-                try:
-                    load_data_from_gsheets.clear()
-                except Exception:
-                    pass
-                st.rerun()
-        with col_conflict_b:
-            if st.button("Force Save", key="force_save_btn"):
-                df_to_save = st.session_state.get("unsaved_df")
-                if df_to_save is None:
-                    df_to_save = df_raw
-                _maybe_save(
-                    df_to_save,
-                    message="Force saved (conflict override)",
-                    force=True,
-                    ignore_conflict=True,
-                )
-                st.session_state.save_conflict = None
-                st.rerun()
-
     if st.session_state.get("pending_changes"):
         st.caption("Pending changes not yet saved. Click 'Save Changes'.")
-        if (
-            st.session_state.auto_save_enabled
-            and st.session_state.get("unsaved_df") is not None
-            and not st.session_state.get("save_conflict")
-        ):
+        if st.session_state.auto_save_enabled and st.session_state.get("unsaved_df") is not None:
             _maybe_save(
                 st.session_state.unsaved_df,
                 show_toast=False,
@@ -7163,7 +4844,7 @@ with st.sidebar:
     with st.expander("➕ Add Time Block", expanded=False):
         block_assistant = st.selectbox(
             "Assistant",
-            options=[""] + _get_all_assistants(),
+            options=[""] + ALL_ASSISTANTS,
             key="block_assistant_select",
         )
 
@@ -7190,7 +4871,7 @@ with st.sidebar:
                 st.warning("Please select an assistant")
             else:
                 add_time_block(block_assistant, block_start, block_end, block_reason)
-                _maybe_save(df_raw, show_toast=False, message="Time block saved")
+                save_data(df_raw, show_toast=True, message="Time block saved")
                 st.success(
                     f"✅ Blocked {block_assistant} from {block_start.strftime('%H:%M')} to {block_end.strftime('%H:%M')}"
                 )
@@ -7213,7 +4894,7 @@ with st.sidebar:
                     try:
                         actual_idx = st.session_state.time_blocks.index(block)
                         remove_time_block(actual_idx)
-                        _maybe_save(df_raw, show_toast=False, message="Time block removed")
+                        save_data(df_raw, show_toast=True, message="Time block removed")
                         st.success("Time block removed.")
                         st.rerun()
                     except Exception:
@@ -7242,7 +4923,7 @@ with st.sidebar:
 
     backup_name_base = f"tdb_allotment_backup_{now.strftime('%Y%m%d_%H%M')}"
     try:
-        csv_bytes, xlsx_bytes = _get_cached_schedule_backups(df_raw)
+        csv_bytes, xlsx_bytes = _build_schedule_backups(df_raw)
         st.download_button(
             "⬇️ Download backup (CSV)",
             data=csv_bytes,
@@ -7288,7 +4969,7 @@ with st.sidebar:
         else:
             try:
                 df_cleared = _make_cleared_schedule(df_raw)
-                success = _maybe_save(df_cleared, message="Schedule cleared")
+                success = save_data(df_cleared, message="Schedule cleared")
                 if success:
                     # Clear local notification/reminder state so we don't toast old rows.
                     st.session_state.prev_hash = None
@@ -7297,8 +4978,6 @@ with st.sidebar:
                     st.session_state.prev_raw = pd.DataFrame()
                     st.session_state.reminder_sent = set()
                     st.session_state.snoozed = {}
-                    st.session_state.reminder_state_key = None
-                    st.session_state.notification_tick_key = None
                     st.session_state.delete_row_id = ""
                     st.toast("🧹 Schedule cleared", icon="✅")
                     st.rerun()
@@ -7325,7 +5004,7 @@ def _persist_reminder_to_storage(row_id, until, dismissed):
         df_raw.at[ix, 'REMINDER_SNOOZE_UNTIL'] = int(until) if until is not None else pd.NA
         df_raw.at[ix, 'REMINDER_DISMISSED'] = bool(dismissed)
         if st.session_state.get("auto_save_enabled", False):
-            return _maybe_save(df_raw, show_toast=False, message="Reminder updates pending")
+            return save_data(df_raw, show_toast=False)
         _queue_unsaved_df(df_raw, reason="Reminder updates pending")
         return True
     except Exception as e:
@@ -7345,255 +5024,244 @@ if 'prev_hash' not in st.session_state:
     st.session_state.reminder_sent = set()  # Track reminders by row ID
     st.session_state.snoozed = {}  # Map row_id -> snooze_until_epoch_seconds
 
-active_category = st.session_state.get("nav_category", "Scheduling")
-run_alerts = st.session_state.get("alerts_background", False) or active_category == "Scheduling"
+# Load persisted reminders from storage
+for idx, row in df_raw.iterrows():
+    try:
+        row_id = row.get('REMINDER_ROW_ID')
+        if pd.notna(row_id):
+            until_raw = row.get('REMINDER_SNOOZE_UNTIL')
+            until_epoch = None
+            if pd.notna(until_raw) and until_raw != "":
+                try:
+                    # Normalize numeric strings
+                    if isinstance(until_raw, str) and until_raw.strip().isdigit():
+                        until_raw = int(until_raw.strip())
 
-if run_alerts:
-    enable_reminders = st.session_state.get("enable_reminders", True)
-    schedule_key = _schedule_change_key()
-    current_hash = _get_cached_schedule_hash(df_raw)
-
-    if st.session_state.prev_hash != current_hash:
-        st.toast("📊 ALLOTMENT UPDATED", icon="🔄")
-        # Reset tracked sets on file change
-        st.session_state.prev_ongoing = set()
-        st.session_state.prev_upcoming = set()
-        st.session_state.reminder_sent = set()
-        st.session_state.snoozed = {}
-        st.session_state.reminder_state_key = None
-        st.session_state.notification_tick_key = None
-
-    st.session_state.prev_hash = current_hash
-
-    if enable_reminders and st.session_state.get("reminder_state_key") != schedule_key:
-        st.session_state.reminder_sent = set()
-        st.session_state.snoozed = {}
-        # Load persisted reminders from storage
-        for idx, row in df_raw.iterrows():
-            try:
-                row_id = row.get('REMINDER_ROW_ID')
-                if pd.notna(row_id):
-                    until_raw = row.get('REMINDER_SNOOZE_UNTIL')
+                    if isinstance(until_raw, (int, float)):
+                        val = int(until_raw)
+                        # Legacy values were stored as minutes since midnight (small numbers)
+                        if val < 100000:
+                            midnight_ist = datetime(now.year, now.month, now.day, tzinfo=IST)
+                            until_epoch = int(midnight_ist.timestamp()) + (val * 60)
+                        else:
+                            until_epoch = val
+                    elif isinstance(until_raw, str):
+                        s = until_raw.strip().replace("Z", "+00:00")
+                        dt = datetime.fromisoformat(s)
+                        until_epoch = int(dt.timestamp())
+                except Exception:
                     until_epoch = None
-                    if pd.notna(until_raw) and until_raw != "":
-                        try:
-                            # Normalize numeric strings
-                            if isinstance(until_raw, str) and until_raw.strip().isdigit():
-                                until_raw = int(until_raw.strip())
 
-                            if isinstance(until_raw, (int, float)):
-                                val = int(until_raw)
-                                # Legacy values were stored as minutes since midnight (small numbers)
-                                if val < 100000:
-                                    midnight_ist = datetime(now.year, now.month, now.day, tzinfo=IST)
-                                    until_epoch = int(midnight_ist.timestamp()) + (val * 60)
-                                else:
-                                    until_epoch = val
-                            elif isinstance(until_raw, str):
-                                s = until_raw.strip().replace("Z", "+00:00")
-                                dt = datetime.fromisoformat(s)
-                                until_epoch = int(dt.timestamp())
-                        except Exception:
-                            until_epoch = None
+            if until_epoch is not None and until_epoch > now_epoch:
+                st.session_state.snoozed[row_id] = until_epoch
+            dismissed = row.get('REMINDER_DISMISSED')
+            if str(dismissed).strip().upper() in ['TRUE','1','T','YES']:
+                st.session_state.reminder_sent.add(row_id)
+    except Exception:
+        continue
 
-                    if until_epoch is not None and until_epoch > now_epoch:
-                        st.session_state.snoozed[row_id] = until_epoch
-                    dismissed = row.get('REMINDER_DISMISSED')
-                    if str(dismissed).strip().upper() in ['TRUE','1','T','YES']:
-                        st.session_state.reminder_sent.add(row_id)
-            except Exception:
-                continue
-        st.session_state.reminder_state_key = schedule_key
+# Compute hash to detect file changes
+current_hash = hashlib.md5(pd.util.hash_pandas_object(df_raw).values.tobytes()).hexdigest()
 
-    tick_key = _notification_tick_key(current_hash)
-    if st.session_state.get("notification_tick_key") != tick_key:
-        # Ensure Is_Ongoing column exists before using it
-        if "Is_Ongoing" not in df.columns:
-            df["Is_Ongoing"] = (df["In_min"] <= current_min) & (current_min <= df["Out_min"])
+if st.session_state.prev_hash != current_hash:
+    st.toast("📊 ALLOTMENT UPDATED", icon="🔄")
+    # Reset tracked sets on file change
+    st.session_state.prev_ongoing = set()
+    st.session_state.prev_upcoming = set()
+    st.session_state.reminder_sent = set()
+    st.session_state.snoozed = {}
 
-        # Currently Ongoing (filtered)
-        ongoing_df = df[
-            df["Is_Ongoing"] &
-            ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED|SHIFTED", na=True)
-        ]
+st.session_state.prev_hash = current_hash
 
-        current_ongoing = set(ongoing_df["Patient Name"].dropna())
+# Ensure Is_Ongoing column exists before using it
+if "Is_Ongoing" not in df.columns:
+    df["Is_Ongoing"] = (df["In_min"] <= current_min) & (current_min <= df["Out_min"])
 
-        # New ongoing (either from time passing or manual status update)
-        new_ongoing = current_ongoing - st.session_state.prev_ongoing
-        for patient in new_ongoing:
-            row = ongoing_df[ongoing_df["Patient Name"] == patient].iloc[0]
-            st.toast(f"🚨 NOW ONGOING: {patient} – {row['Procedure']} with {row['DR.']} (Chair {row['OP']})", icon="🟢")
+# Currently Ongoing (filtered)
+ongoing_df = df[
+    df["Is_Ongoing"] &
+    ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED|SHIFTED", na=True)
+]
 
-        # Upcoming in next 15 minutes
-        upcoming_min = current_min + 15
-        upcoming_df = df[
-            (df["In_min"] > current_min) &
-            (df["In_min"] <= upcoming_min) &
-            ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED|SHIFTED", na=True)
-        ]
+current_ongoing = set(ongoing_df["Patient Name"].dropna())
 
-        current_upcoming = set(upcoming_df["Patient Name"].dropna())
+# New ongoing (either from time passing or manual status update)
+new_ongoing = current_ongoing - st.session_state.prev_ongoing
+for patient in new_ongoing:
+    row = ongoing_df[ongoing_df["Patient Name"] == patient].iloc[0]
+    st.toast(f"🚨 NOW ONGOING: {patient} – {row['Procedure']} with {row['DR.']} (Chair {row['OP']})", icon="🟢")
 
-        # New upcoming (just entered the 15-minute window)
-        new_upcoming = current_upcoming - st.session_state.prev_upcoming
-        for patient in new_upcoming:
-            row = upcoming_df[upcoming_df["Patient Name"] == patient].iloc[0]
-            mins_left = row["In_min"] - current_min
-            st.toast(f"⏰ Upcoming in ~{mins_left} min: {patient} – {row['Procedure']} with {row['DR.']}", icon="⚠️")
-        # New arrivals (manual status change in Excel)
-        current_arrived = set(df_raw[df_raw["STATUS"].astype(str).str.upper() == "ARRIVED"]["Patient Name"].dropna())
-        if ("STATUS" in st.session_state.prev_raw.columns) and ("Patient Name" in st.session_state.prev_raw.columns):
-            prev_arrived = set(
-                st.session_state.prev_raw[
-                    st.session_state.prev_raw["STATUS"].astype(str).str.upper() == "ARRIVED"
-                ]["Patient Name"].dropna()
-            )
-        else:
-            prev_arrived = set()
-        new_arrived = current_arrived - prev_arrived
-        for patient in new_arrived:
-            row = df[df["Patient Name"] == patient].iloc[0]
-            st.toast(f"👤 Patient ARRIVED: {patient} – {row['Procedure']}", icon="🟡")
-        # Update session state for next run
-        st.session_state.prev_ongoing = current_ongoing
-        st.session_state.prev_upcoming = current_upcoming
-        st.session_state.prev_raw = df_raw.copy()
-        st.session_state.notification_tick_key = tick_key
+# Upcoming in next 15 minutes
+upcoming_min = current_min + 15
+upcoming_df = df[
+    (df["In_min"] > current_min) &
+    (df["In_min"] <= upcoming_min) &
+    ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED|SHIFTED", na=True)
+]
 
-    # ================ 15-Minute Reminder System ================
-    if enable_reminders:
-        # Clean up expired snoozes
-        expired = [rid for rid, until in list(st.session_state.snoozed.items()) if until <= now_epoch]
-        for rid in expired:
-            del st.session_state.snoozed[rid]
-            # Don't persist clears on natural expiry; we'll overwrite when re-snoozing.
+current_upcoming = set(upcoming_df["Patient Name"].dropna())
 
-        # Find patients needing reminders (0-15 min before In Time)
-        reminder_df = df[
-            (df["In_min"].notna()) &
-            (df["In_min"] - current_min > 0) &
-            (df["In_min"] - current_min <= 15) &
-            ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED|SHIFTED|ARRIVED|ARRIVING|ON GOING|ONGOING", na=True)
-        ].copy()
+# New upcoming (just entered the 15-minute window)
+new_upcoming = current_upcoming - st.session_state.prev_upcoming
+for patient in new_upcoming:
+    row = upcoming_df[upcoming_df["Patient Name"] == patient].iloc[0]
+    mins_left = row["In_min"] - current_min
+    st.toast(f"⏰ Upcoming in ~{mins_left} min: {patient} – {row['Procedure']} with {row['DR.']}", icon="⚠️")
 
-        # Show toast for new reminders (not snoozed, not dismissed)
-        for idx, row in reminder_df.iterrows():
-            row_id = row.get('REMINDER_ROW_ID')
-            if pd.isna(row_id):
-                continue
-            patient = row.get("Patient Name", "Unknown")
-            mins_left = int(row["In_min"] - current_min)
+# ================ 15-Minute Reminder System ================
+if st.session_state.get("enable_reminders", True):
+    # Clean up expired snoozes
+    expired = [rid for rid, until in list(st.session_state.snoozed.items()) if until <= now_epoch]
+    for rid in expired:
+        del st.session_state.snoozed[rid]
+        # Don't persist clears on natural expiry; we'll overwrite when re-snoozing.
+    
+    # Find patients needing reminders (0-15 min before In Time)
+    reminder_df = df[
+        (df["In_min"].notna()) &
+        (df["In_min"] - current_min > 0) &
+        (df["In_min"] - current_min <= 15) &
+        ~df["STATUS"].astype(str).str.upper().str.contains("CANCELLED|DONE|COMPLETED|SHIFTED|ARRIVED|ARRIVING|ON GOING|ONGOING", na=True)
+    ].copy()
+    
+    # Show toast for new reminders (not snoozed, not dismissed)
+    for idx, row in reminder_df.iterrows():
+        row_id = row.get('REMINDER_ROW_ID')
+        if pd.isna(row_id):
+            continue
+        patient = row.get("Patient Name", "Unknown")
+        mins_left = int(row["In_min"] - current_min)
+        
+        # Skip if snoozed (still active) or dismissed
+        snooze_until = st.session_state.snoozed.get(row_id)
+        if (snooze_until is not None and snooze_until > now_epoch) or (row_id in st.session_state.reminder_sent):
+            continue
 
-            # Skip if snoozed (still active) or dismissed
-            snooze_until = st.session_state.snoozed.get(row_id)
-            if (snooze_until is not None and snooze_until > now_epoch) or (row_id in st.session_state.reminder_sent):
-                continue
-
-            assistants = ", ".join(
-                [
-                    a
-                    for a in [
-                        str(row.get("FIRST", "")).strip(),
-                        str(row.get("SECOND", "")).strip(),
-                        str(row.get("Third", "")).strip(),
-                    ]
-                    if a and a.lower() not in {"nan", "none"}
+        assistants = ", ".join(
+            [
+                a
+                for a in [
+                    str(row.get("FIRST", "")).strip(),
+                    str(row.get("SECOND", "")).strip(),
+                    str(row.get("Third", "")).strip(),
                 ]
-            )
-            assistants_text = f" | Assist: {assistants}" if assistants else ""
+                if a and a.lower() not in {"nan", "none"}
+            ]
+        )
+        assistants_text = f" | Assist: {assistants}" if assistants else ""
+        
+        st.toast(
+            f"🔔 Reminder: {patient} in ~{mins_left} min at {row['In Time Str']} with {row.get('DR.','')} (OP {row.get('OP','')}){assistants_text}",
+            icon="🔔",
+        )
 
-            st.toast(
-                f"🔔 Reminder: {patient} in ~{mins_left} min at {row['In Time Str']} with {row.get('DR.','')} (OP {row.get('OP','')}){assistants_text}",
-                icon="🔔",
-            )
+        # Auto-snooze for 30 seconds, and re-alert until status changes.
+        next_until = now_epoch + 30
+        st.session_state.snoozed[row_id] = next_until
+        _persist_reminder_to_storage(row_id, next_until, False)
+    
+    # Reminder management UI
+    def _safe_key(s):
+        return re.sub(r"\W+", "_", str(s))
+    
+    with st.expander("🔔 Manage Reminders", expanded=False):
+        if reminder_df.empty:
+            st.caption("No upcoming appointments in the next 15 minutes.")
+        else:
+            for idx, row in reminder_df.iterrows():
+                row_id = row.get('REMINDER_ROW_ID')
+                if pd.isna(row_id):
+                    continue
+                patient = row.get('Patient Name', 'Unknown')
+                mins_left = int(row["In_min"] - current_min)
 
-            # Auto-snooze for 30 seconds, and re-alert until status changes.
-            next_until = now_epoch + 30
-            st.session_state.snoozed[row_id] = next_until
-            _persist_reminder_to_storage(row_id, next_until, False)
-
-        # Reminder management UI
-        def _safe_key(s):
-            return re.sub(r"\W+", "_", str(s))
-
-        with st.expander("🔔 Manage Reminders", expanded=False):
-            if reminder_df.empty:
-                st.caption("No upcoming appointments in the next 15 minutes.")
-            else:
-                for idx, row in reminder_df.iterrows():
-                    row_id = row.get('REMINDER_ROW_ID')
-                    if pd.isna(row_id):
-                        continue
-                    patient = row.get('Patient Name', 'Unknown')
-                    mins_left = int(row["In_min"] - current_min)
-
-                    assistants = ", ".join(
-                        [
-                            a
-                            for a in [
-                                str(row.get("FIRST", "")).strip(),
-                                str(row.get("SECOND", "")).strip(),
-                                str(row.get("Third", "")).strip(),
-                            ]
-                            if a and a.lower() not in {"nan", "none"}
+                assistants = ", ".join(
+                    [
+                        a
+                        for a in [
+                            str(row.get("FIRST", "")).strip(),
+                            str(row.get("SECOND", "")).strip(),
+                            str(row.get("Third", "")).strip(),
                         ]
-                    )
-                    assistants_text = f" — Assist: {assistants}" if assistants else ""
+                        if a and a.lower() not in {"nan", "none"}
+                    ]
+                )
+                assistants_text = f" — Assist: {assistants}" if assistants else ""
+                
+                col1, col2, col3, col4, col5 = st.columns([4,1,1,1,1])
+                col1.markdown(
+                    f"**{patient}** — {row.get('Procedure','')} (in ~{mins_left} min at {row.get('In Time Str','')}){assistants_text}"
+                )  
+                
+                default_snooze_seconds = int(st.session_state.get("default_snooze_seconds", 30))
+                if col2.button(f"💤 {default_snooze_seconds}s", key=f"snooze_{_safe_key(row_id)}_default"):
+                    until = now_epoch + default_snooze_seconds
+                    st.session_state.snoozed[row_id] = until
+                    st.session_state.reminder_sent.discard(row_id)
+                    _persist_reminder_to_storage(row_id, until, False)
+                    st.toast(f"😴 Snoozed {patient} for {default_snooze_seconds} sec", icon="💤")
+                    st.rerun()
+                    
+                if col3.button("💤 30s", key=f"snooze_{_safe_key(row_id)}_30s"):
+                    until = now_epoch + 30
+                    st.session_state.snoozed[row_id] = until
+                    st.session_state.reminder_sent.discard(row_id)
+                    _persist_reminder_to_storage(row_id, until, False)
+                    st.toast(f"😴 Snoozed {patient} for 30 sec", icon="💤")
+                    st.rerun()
+                    
+                if col4.button("💤 60s", key=f"snooze_{_safe_key(row_id)}_60s"):
+                    until = now_epoch + 60
+                    st.session_state.snoozed[row_id] = until
+                    st.session_state.reminder_sent.discard(row_id)
+                    _persist_reminder_to_storage(row_id, until, False)
+                    st.toast(f"😴 Snoozed {patient} for 60 sec", icon="💤")
+                    st.rerun()
+                    
+                if col5.button("🗑️", key=f"dismiss_{_safe_key(row_id)}"):
+                    st.session_state.reminder_sent.add(row_id)
+                    _persist_reminder_to_storage(row_id, None, True)
+                    st.toast(f"✅ Dismissed reminder for {patient}", icon="✅")
+                    st.rerun()
+            
+            # Show snoozed reminders
+            if st.session_state.snoozed:
+                st.markdown("---")
+                st.markdown("**Snoozed Reminders**")
+                for row_id, until in list(st.session_state.snoozed.items()):
+                    remaining_sec = int(until - now_epoch)
+                    if remaining_sec > 0:
+                        match_row = df[df.get('REMINDER_ROW_ID') == row_id]
+                        if not match_row.empty:
+                            name = match_row.iloc[0].get('Patient Name', row_id)
+                            c1, c2 = st.columns([4,1])
+                            c1.write(f"🕐 {name} — {remaining_sec} sec remaining")
+                            if c2.button("Cancel", key=f"cancel_{_safe_key(row_id)}"):
+                                del st.session_state.snoozed[row_id]
+                                _persist_reminder_to_storage(row_id, None, False)
+                                st.toast(f"✅ Cancelled snooze for {name}", icon="✅")
+                                st.rerun()
 
-                    col1, col2, col3, col4, col5 = st.columns([4,1,1,1,1])
-                    col1.markdown(
-                        f"**{patient}** — {row.get('Procedure','')} (in ~{mins_left} min at {row.get('In Time Str','')}){assistants_text}"
-                    )  
+# New arrivals (manual status change in Excel)
+current_arrived = set(df_raw[df_raw["STATUS"].astype(str).str.upper() == "ARRIVED"]["Patient Name"].dropna())
+if ("STATUS" in st.session_state.prev_raw.columns) and ("Patient Name" in st.session_state.prev_raw.columns):
+    prev_arrived = set(
+        st.session_state.prev_raw[
+            st.session_state.prev_raw["STATUS"].astype(str).str.upper() == "ARRIVED"
+        ]["Patient Name"].dropna()
+    )
+else:
+    prev_arrived = set()
+new_arrived = current_arrived - prev_arrived
+for patient in new_arrived:
+    row = df[df["Patient Name"] == patient].iloc[0]
+    st.toast(f"👤 Patient ARRIVED: {patient} – {row['Procedure']}", icon="🟡")
 
-                    default_snooze_seconds = int(st.session_state.get("default_snooze_seconds", 30))
-                    if col2.button(f"💤 {default_snooze_seconds}s", key=f"snooze_{_safe_key(row_id)}_default"):
-                        until = now_epoch + default_snooze_seconds
-                        st.session_state.snoozed[row_id] = until
-                        st.session_state.reminder_sent.discard(row_id)
-                        _persist_reminder_to_storage(row_id, until, False)
-                        st.toast(f"😴 Snoozed {patient} for {default_snooze_seconds} sec", icon="💤")
-                        st.rerun()
+# Update session state for next run
+st.session_state.prev_ongoing = current_ongoing
+st.session_state.prev_upcoming = current_upcoming
+st.session_state.prev_raw = df_raw.copy()
 
-                    if col3.button("💤 30s", key=f"snooze_{_safe_key(row_id)}_30s"):
-                        until = now_epoch + 30
-                        st.session_state.snoozed[row_id] = until
-                        st.session_state.reminder_sent.discard(row_id)
-                        _persist_reminder_to_storage(row_id, until, False)
-                        st.toast(f"😴 Snoozed {patient} for 30 sec", icon="💤")
-                        st.rerun()
-
-                    if col4.button("💤 60s", key=f"snooze_{_safe_key(row_id)}_60s"):
-                        until = now_epoch + 60
-                        st.session_state.snoozed[row_id] = until
-                        st.session_state.reminder_sent.discard(row_id)
-                        _persist_reminder_to_storage(row_id, until, False)
-                        st.toast(f"😴 Snoozed {patient} for 60 sec", icon="💤")
-                        st.rerun()
-
-                    if col5.button("🗑️", key=f"dismiss_{_safe_key(row_id)}"):
-                        st.session_state.reminder_sent.add(row_id)
-                        _persist_reminder_to_storage(row_id, None, True)
-                        st.toast(f"✅ Dismissed reminder for {patient}", icon="✅")
-                        st.rerun()
-
-                # Show snoozed reminders
-                if st.session_state.snoozed:
-                    st.markdown("---")
-                    st.markdown("**Snoozed Reminders**")
-                    for row_id, until in list(st.session_state.snoozed.items()):
-                        remaining_sec = int(until - now_epoch)
-                        if remaining_sec > 0:
-                            match_row = df[df.get('REMINDER_ROW_ID') == row_id]
-                            if not match_row.empty:
-                                name = match_row.iloc[0].get('Patient Name', row_id)
-                                c1, c2 = st.columns([4,1])
-                                c1.write(f"🕐 {name} — {remaining_sec} sec remaining")
-                                if c2.button("Cancel", key=f"cancel_{_safe_key(row_id)}"):
-                                    del st.session_state.snoozed[row_id]
-                                    _persist_reminder_to_storage(row_id, None, False)
-                                    st.toast(f"✅ Cancelled snooze for {name}", icon="✅")
-                                    st.rerun()
 # Sidebar header + attendance punch widget
 with st.sidebar:
     st.markdown('<div class="sidebar-title">🦷 TDB Dashboard</div>', unsafe_allow_html=True)
@@ -7627,8 +5295,8 @@ sched_view = assist_view = doctor_view = admin_view = None
 if category == "Scheduling":
     sched_view = st.sidebar.radio(
         "Scheduling",
-        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming"],
-        index=0,
+        ["Full Schedule", "Schedule by OP", "Ongoing", "Upcoming", "Compact Dashboard"],
+        index=4,
         key="nav_sched",
     )
 elif category == "Assistants":
@@ -7722,6 +5390,12 @@ if category == "Doctors" and doctor_view == "Overview":
     render_doctor_overview()
 
 if category == "Scheduling":
+    if sched_view == "Compact Dashboard":
+        try:
+            render_compact_dashboard(df if "df" in locals() else pd.DataFrame())
+        except Exception as e:
+            st.error(f"Unable to render compact dashboard: {e}")
+        st.stop()
     # ================ Status Colors ================
     def get_status_background(status):
         # Return subtle styling without bright backgrounds
@@ -7828,19 +5502,13 @@ if category == "Scheduling":
             # Append to the original dataframe
             new_row_df = pd.DataFrame([new_row])
             df_raw_with_new = pd.concat([df_raw, new_row_df], ignore_index=True)
-            # Persist or queue the new patient row based on save mode
-            _maybe_save(df_raw_with_new, show_toast=False, message="New patient row added!")
+            # Always save immediately when adding a new patient
+            save_data(df_raw_with_new, message="New patient row added!")
             st.success("New patient row added!")
     
     with col_save:
         # Save button for the data editor
-        if st.button(
-            "?? Save Changes",
-            key="manual_save_full",
-            use_container_width=True,
-            type="primary",
-            disabled=bool(st.session_state.get("is_saving")) or bool(st.session_state.get("save_conflict")),
-        ):
+        if st.button("💾 Save Changes", key="manual_save_full", use_container_width=True, type="primary"):
             st.session_state.manual_save_triggered = True
     
     with col_del_pick:
@@ -8014,24 +5682,6 @@ if category == "Scheduling":
         else:
             st.caption("🔍 Patient search (Supabase only)")
     
-    view_cols = st.columns([0.2, 0.8], gap="small")
-    with view_cols[0]:
-        view_mode = st.radio(
-            "View",
-            ["Cards", "Table"],
-            horizontal=True,
-            key="full_schedule_view_mode",
-            label_visibility="collapsed",
-        )
-    with view_cols[1]:
-        card_search = st.text_input(
-            "Search schedule",
-            value="",
-            key="full_schedule_card_search",
-            placeholder="Search schedule...",
-            label_visibility="collapsed",
-        )
-
     display_all = all_sorted[[
         "Patient Name",
         "In Time Obj",
@@ -8045,7 +5695,6 @@ if category == "Scheduling":
         "OP",
         "SUCTION",
         "CLEANING",
-        "REMINDER_ROW_ID",
         "STATUS",
         "STATUS_CHANGED_AT",
         "ACTUAL_START_AT",
@@ -8081,677 +5730,61 @@ if category == "Scheduling":
     
     display_all["Overtime (min)"] = all_sorted.apply(_compute_overtime_min, axis=1)
     
-    
-
-    st.markdown(
-        """
-        <style>
-        .full-schedule-cards {margin-top: 8px;}
-        .schedule-card {background:#f3f3f4; border:1px solid #d9c5b2; border-radius:18px; padding:14px; box-shadow:0 10px 20px rgba(20,17,15,0.08); display:flex; flex-direction:column; gap:10px; min-height:220px;}
-        .card-shell-marker {display:none;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) {background:#fbf8f4; border:1px solid #e7d7c6; border-radius:20px; box-shadow:0 14px 32px rgba(26,22,18,0.14); overflow:hidden;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) > div {padding:0 18px 18px 18px; display:flex; flex-direction:column; gap:12px; min-height:240px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stHorizontalBlock"] {gap: 0.5rem; align-items:center; justify-content:flex-start;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stButton"] > button,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] {height: 30px !important; border-radius: 10px !important; font-weight: 700; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; min-width: 84px; padding: 0 10px !important; font-size: 11px; line-height: 1; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stButton>button *,
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind] * {white-space: nowrap;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: wrap; row-gap: 0.5rem;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) > div {min-width: 84px; flex: 1 1 84px;}
-        @media (min-width: 1100px) {
-            div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) {flex-wrap: nowrap;}
-            div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) div[data-testid="stHorizontalBlock"]:has(.card-action-marker) > div {min-width: 100px; flex: 0 0 auto;}
-        }
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox {margin-top: 2px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) .stCheckbox label {font-size: 12px; font-weight: 600; color:#3b322a; white-space: nowrap;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="primary"] {background:#2f63e8 !important; border:1px solid #2f63e8 !important; color:#fefefe !important; box-shadow:0 8px 18px rgba(47,99,232,0.28) !important;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) button[kind="secondary"] {background:#ffffff !important; border:1px solid #d8c9b8 !important; color:#3a3129 !important;}
-        div[data-testid="stVerticalBlock"]:has(.card-action-cancel) button {border-color:#e0b1b1 !important; color:#a94a4a !important; background:#fff7f7 !important;}
-        .card-action-marker {display:none;}
-        .card-status-banner {display:flex; align-items:center; gap:8px; padding:10px 18px; border-radius:18px 18px 12px 12px; font-weight:800; font-size:12px; letter-spacing:0.6px; text-transform:uppercase; margin:0 -18px 12px -18px;}
-        .card-status-banner.waiting {background:linear-gradient(90deg, #f7e6b7, #fff2d6); color:#6d5a44;}
-        .card-status-banner.ongoing {background:linear-gradient(90deg, #d5e2ff, #eef3ff); color:#2d4d86;}
-        .card-status-banner.arrived {background:linear-gradient(90deg, #e0e0e0, #f2f2f2); color:#4e4e4e;}
-        .card-status-banner.completed {background:linear-gradient(90deg, #cfead6, #e7f6ec); color:#2f5b3a;}
-        .card-status-banner.cancelled {background:linear-gradient(90deg, #f5d1d1, #fde8e8); color:#8a3e3e;}
-        .status-dot {width:10px; height:10px; border-radius:50%;}
-        .card-status-banner.waiting .status-dot {background:#f1b400; box-shadow:0 0 0 3px rgba(241,180,0,0.2);}
-        .card-status-banner.ongoing .status-dot {background:#3b6fd8; box-shadow:0 0 0 3px rgba(59,111,216,0.2);}
-        .card-status-banner.arrived .status-dot {background:#6f6f6f; box-shadow:0 0 0 3px rgba(111,111,111,0.2);}
-        .card-status-banner.completed .status-dot {background:#4caf6b; box-shadow:0 0 0 3px rgba(76,175,107,0.2);}
-        .card-status-banner.cancelled .status-dot {background:#d45c5c; box-shadow:0 0 0 3px rgba(212,92,92,0.2);}
-        .card-head {display:flex; align-items:center; gap:12px;}
-        .card-title {display:flex; flex-direction:column; gap:2px;}
-        .card-avatar {width:48px; height:48px; border-radius:50%; background:#e9dcc8; color:#3b2f22; font-weight:700; display:flex; align-items:center; justify-content:center; font-size:14px;}
-        .card-name {font-size:17px; font-weight:800; color:#1f1a15; letter-spacing:0.2px;}
-        .card-time {font-size:12px; color:#7a7168;}
-        .card-info {display:flex; flex-direction:column; gap:6px;}
-        .info-row {display:flex; align-items:center; gap:8px;}
-        .info-icon {width:22px; height:22px; border-radius:50%; background:#f0e5d7; color:#6b5a47; font-size:14px; font-weight:600; display:flex; align-items:center; justify-content:center;}
-        .info-text {font-size:13px; color:#514840; font-weight:600;}
-        .card-subdivider {height:1px; background:#efe4d8; margin: 6px 0 2px;}
-        .card-divider {height:1px; background:#eadfd3; margin: 8px 0;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) [data-testid="stExpander"] {border:1px solid #eadfd3; border-radius:12px; background:#f9f6f2; margin-top:6px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary {padding:10px 12px; font-weight:600; color:#5b5147; display:flex; align-items:center; gap:10px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::before {content:"›"; color:#8c8176; font-size:18px;}
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.card-shell-marker) summary::after {content:"..."; margin-left:auto; color:#8c8176; font-size:16px;}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    def _clean_text(val) -> str:
-        if val is None or (isinstance(val, float) and pd.isna(val)):
-            return ""
-        text = str(val).strip()
-        if text.lower() in {"nan", "none"}:
-            return ""
-        return text
-
-    def _truthy(val) -> bool:
-        if isinstance(val, bool):
-            return val
-        text = _clean_text(val).lower()
-        return text in {"yes", "y", "true", "1", "done", "checked"}
-
-    def _initials(name: str) -> str:
-        parts = [p for p in name.strip().split() if p]
-        if not parts:
-            return "--"
-        if len(parts) == 1:
-            return parts[0][:2].upper()
-        return (parts[0][0] + parts[-1][0]).upper()
-
-    def _status_class(status: str) -> str:
-        status_up = status.upper()
-        if "WAIT" in status_up:
-            return "waiting"
-        if "ONGOING" in status_up or "ON GOING" in status_up:
-            return "ongoing"
-        if "ARRIVED" in status_up:
-            return "arrived"
-        if "DONE" in status_up or "COMPLETED" in status_up:
-            return "completed"
-        if "CANCEL" in status_up or "SHIFT" in status_up:
-            return "cancelled"
-        return "waiting"
-
-    def _open_full_edit_dialog(context: dict[str, Any]) -> None:
-        st.session_state["full_edit_context"] = context
-        st.session_state["full_edit_open"] = True
-        row_key = str(context.get("row_key", "")).strip()
-        if not row_key:
-            return
-        in_time_value = str(context.get("in_time", "") or "").strip()
-        out_time_value = str(context.get("out_time", "") or "").strip()
-        if in_time_value.upper() in {"N/A", "NONE", "NAT"}:
-            in_time_value = ""
-        if out_time_value.upper() in {"N/A", "NONE", "NAT"}:
-            out_time_value = ""
-        st.session_state[f"full_popup_patient_{row_key}"] = str(context.get("patient", "") or "")
-        in_hour, in_minute, in_ampm = _time_to_picker_parts(in_time_value)
-        out_hour, out_minute, out_ampm = _time_to_picker_parts(out_time_value)
-        st.session_state[f"full_popup_in_hour_{row_key}"] = in_hour
-        st.session_state[f"full_popup_in_min_{row_key}"] = in_minute
-        st.session_state[f"full_popup_in_ampm_{row_key}"] = in_ampm
-        st.session_state[f"full_popup_out_hour_{row_key}"] = out_hour
-        st.session_state[f"full_popup_out_min_{row_key}"] = out_minute
-        st.session_state[f"full_popup_out_ampm_{row_key}"] = out_ampm
-        st.session_state[f"full_popup_status_{row_key}"] = str(context.get("status", "") or "")
-        st.session_state[f"full_popup_doctor_{row_key}"] = str(context.get("doctor", "") or "")
-        st.session_state[f"full_popup_procedure_{row_key}"] = str(context.get("procedure", "") or "")
-        st.session_state[f"full_popup_op_{row_key}"] = str(context.get("op", "") or "")
-        st.session_state[f"full_popup_first_{row_key}"] = str(context.get("staff_first", "") or "")
-        st.session_state[f"full_popup_second_{row_key}"] = str(context.get("staff_second", "") or "")
-        st.session_state[f"full_popup_third_{row_key}"] = str(context.get("staff_third", "") or "")
-        st.session_state[f"full_popup_case_{row_key}"] = bool(context.get("case_paper", False))
-        st.session_state[f"full_popup_suction_{row_key}"] = bool(context.get("suction", False))
-        st.session_state[f"full_popup_cleaning_{row_key}"] = bool(context.get("cleaning", False))
-
-    def _close_full_edit_dialog() -> None:
-        st.session_state["full_edit_open"] = False
-        st.session_state["full_edit_context"] = {}
-
-    def _full_normalize_time_input(raw_value: str) -> tuple[str, str | None]:
-        text = str(raw_value or "").strip()
-        if not text:
-            return "", None
-        t = _coerce_to_time_obj(text)
-        if t is None:
-            return "", "Invalid time format. Use HH:MM or 09:30 AM."
-        return f"{t.hour:02d}:{t.minute:02d}", None
-
-    def _full_build_select_options(options: list[str], current_value: str) -> tuple[list[str], int]:
-        current = str(current_value or "").strip()
-        opts = [opt for opt in options if str(opt).strip()]
-        if current and current not in opts:
-            opts = [current] + opts
-        opts = [""] + opts
-        index = opts.index(current) if current in opts else 0
-        return opts, index
-
-    def _apply_full_card_edit(row_id, patient_name, in_time_val, updates: dict[str, Any]) -> bool:
-        df_source = df_raw if "df_raw" in globals() else df
-        if df_source is None or df_source.empty:
-            st.warning("No schedule data to update.")
-            return False
-        df_updated = df_source.copy()
-        idx = None
-        if row_id and "REMINDER_ROW_ID" in df_updated.columns:
-            matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
-            if matches.any():
-                idx = matches.idxmax()
-        if idx is None and "Patient Name" in df_updated.columns and patient_name:
-            name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
-            if in_time_val and "In Time" in df_updated.columns:
-                time_mask = df_updated["In Time"].astype(str) == str(in_time_val)
-                match = df_updated[name_mask & time_mask]
-            else:
-                match = df_updated[name_mask]
-            if not match.empty:
-                idx = match.index[0]
-        if idx is None:
-            st.warning("Unable to locate row for update.")
-            return False
-
-        status_col = "STATUS" if "STATUS" in df_updated.columns else "Status" if "Status" in df_updated.columns else ""
-        old_status_norm = str(df_updated.at[idx, status_col]).strip().upper() if status_col else ""
-
-        for col, val in updates.items():
-            if col in df_updated.columns:
-                df_updated.at[idx, col] = val
-
-        if status_col:
-            new_status_norm = str(df_updated.at[idx, status_col]).strip().upper()
-            if new_status_norm and new_status_norm != old_status_norm:
-                ts = _now_iso()
-                if "STATUS_CHANGED_AT" in df_updated.columns:
-                    df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
-                if ("ONGOING" in new_status_norm or "ON GOING" in new_status_norm) and "ACTUAL_START_AT" in df_updated.columns:
-                    if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
-                        df_updated.at[idx, "ACTUAL_START_AT"] = ts
-                if ("DONE" in new_status_norm or "COMPLETED" in new_status_norm) and "ACTUAL_END_AT" in df_updated.columns:
-                    if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
-                        df_updated.at[idx, "ACTUAL_END_AT"] = ts
-                if "STATUS_LOG" in df_updated.columns:
-                    existing_log = str(df_updated.at[idx, "STATUS_LOG"])
-                    try:
-                        df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
-                            existing_log,
-                            {"at": ts, "from": old_status_norm, "to": new_status_norm},
-                        )
-                    except Exception:
-                        df_updated.at[idx, "STATUS_LOG"] = existing_log
-
-        if bool(st.session_state.get("auto_assign_assistants", True)):
-            only_empty = bool(st.session_state.get("auto_assign_only_empty", True))
-            _auto_fill_assistants_for_row(df_updated, int(idx), only_fill_empty=only_empty)
-
-        _maybe_save(df_updated, show_toast=False, message=f"Updated {patient_name or 'patient'}")
-        if st.session_state.get("auto_save_enabled", False):
-            st.toast("Changes saved.", icon="✅")
-        else:
-            st.toast("Changes queued. Click 'Save Changes'.", icon="📝")
-        return True
-
-    def _render_full_edit_dialog_body() -> None:
-        context = st.session_state.get("full_edit_context") or {}
-        if not context:
-            _close_full_edit_dialog()
-            return
-        row_key = str(context.get("row_key", "")).strip()
-        if not row_key:
-            _close_full_edit_dialog()
-            return
-
-        lookup_patient = str(context.get("lookup_patient", "") or "")
-        lookup_in_time = str(context.get("lookup_in_time", "") or "")
-        row_id = str(context.get("row_id", "") or "")
-
-        with st.form(key=f"full_popup_form_{row_key}"):
-            patient_input = st.text_input(
-                "Patient Name",
-                key=f"full_popup_patient_{row_key}",
+    edited_all = st.data_editor(
+        display_all, 
+        width="stretch", 
+        key="full_schedule_editor", 
+        hide_index=True,
+        disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
+        column_config={
+            "_orig_idx": None,  # Hide the original index column
+            "Patient Name": st.column_config.TextColumn(label="Patient Name"),
+            "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
+            "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
+            "Procedure": st.column_config.TextColumn(label="Procedure"),
+            "DR.": st.column_config.SelectboxColumn(
+                label="DR.",
+                options=DOCTOR_OPTIONS,
+                required=False
+            ),
+            "OP": st.column_config.SelectboxColumn(
+                label="OP",
+                options=["OP 1", "OP 2", "OP 3", "OP 4"],
+                required=False
+            ),
+            "FIRST": st.column_config.SelectboxColumn(
+                label="FIRST",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "SECOND": st.column_config.SelectboxColumn(
+                label="SECOND",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "Third": st.column_config.SelectboxColumn(
+                label="Third",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "CASE PAPER": st.column_config.SelectboxColumn(
+                label="CASE PAPER",
+                options=ASSISTANT_OPTIONS,
+                required=False
+            ),
+            "SUCTION": st.column_config.CheckboxColumn(label="✨ SUCTION"),
+            "CLEANING": st.column_config.CheckboxColumn(label="🧹 CLEANING"),
+            "STATUS_CHANGED_AT": None,
+            "ACTUAL_START_AT": None,
+            "ACTUAL_END_AT": None,
+            "Overtime (min)": None,
+            "STATUS": st.column_config.SelectboxColumn(
+                label="STATUS",
+                options=STATUS_OPTIONS,
+                required=False
             )
-            time_cols = st.columns(2, gap="small")
-            with time_cols[0]:
-                st.markdown("In Time")
-                in_time_cols = st.columns(3, gap="small")
-                with in_time_cols[0]:
-                    in_hour = st.selectbox(
-                        "Hour",
-                        options=TIME_PICKER_HOURS,
-                        key=f"full_popup_in_hour_{row_key}",
-                    )
-                with in_time_cols[1]:
-                    in_minute = st.selectbox(
-                        "Minute",
-                        options=TIME_PICKER_MINUTES,
-                        key=f"full_popup_in_min_{row_key}",
-                    )
-                with in_time_cols[2]:
-                    in_ampm = st.selectbox(
-                        "AM/PM",
-                        options=TIME_PICKER_AMPM,
-                        key=f"full_popup_in_ampm_{row_key}",
-                    )
-            with time_cols[1]:
-                st.markdown("Out Time")
-                out_time_cols = st.columns(3, gap="small")
-                with out_time_cols[0]:
-                    out_hour = st.selectbox(
-                        "Hour",
-                        options=TIME_PICKER_HOURS,
-                        key=f"full_popup_out_hour_{row_key}",
-                    )
-                with out_time_cols[1]:
-                    out_minute = st.selectbox(
-                        "Minute",
-                        options=TIME_PICKER_MINUTES,
-                        key=f"full_popup_out_min_{row_key}",
-                    )
-                with out_time_cols[2]:
-                    out_ampm = st.selectbox(
-                        "AM/PM",
-                        options=TIME_PICKER_AMPM,
-                        key=f"full_popup_out_ampm_{row_key}",
-                    )
-
-            top_cols = st.columns(2, gap="small")
-            with top_cols[0]:
-                doctor_current = st.session_state.get(f"full_popup_doctor_{row_key}", "")
-                doctor_options, doctor_index = _full_build_select_options(DOCTOR_OPTIONS, doctor_current)
-                doctor_input = st.selectbox(
-                    "Doctor",
-                    options=doctor_options,
-                    index=doctor_index,
-                    key=f"full_popup_doctor_{row_key}",
-                )
-            with top_cols[1]:
-                procedure_input = st.text_input(
-                    "Procedure",
-                    key=f"full_popup_procedure_{row_key}",
-                )
-
-            mid_cols = st.columns(2, gap="small")
-            with mid_cols[0]:
-                op_input = st.text_input(
-                    "OP",
-                    key=f"full_popup_op_{row_key}",
-                )
-            with mid_cols[1]:
-                status_current = st.session_state.get(f"full_popup_status_{row_key}", "")
-                status_options, status_index = _full_build_select_options(STATUS_OPTIONS, status_current)
-                status_input = st.selectbox(
-                    "Status",
-                    options=status_options,
-                    index=status_index,
-                    key=f"full_popup_status_{row_key}",
-                )
-
-            staff_cols = st.columns(3, gap="small")
-            with staff_cols[0]:
-                first_current = st.session_state.get(f"full_popup_first_{row_key}", "")
-                first_options, first_index = _full_build_select_options(ASSISTANT_OPTIONS, first_current)
-                first_input = st.selectbox(
-                    "First",
-                    options=first_options,
-                    index=first_index,
-                    key=f"full_popup_first_{row_key}",
-                )
-            with staff_cols[1]:
-                second_current = st.session_state.get(f"full_popup_second_{row_key}", "")
-                second_options, second_index = _full_build_select_options(ASSISTANT_OPTIONS, second_current)
-                second_input = st.selectbox(
-                    "Second",
-                    options=second_options,
-                    index=second_index,
-                    key=f"full_popup_second_{row_key}",
-                )
-            with staff_cols[2]:
-                third_current = st.session_state.get(f"full_popup_third_{row_key}", "")
-                third_options, third_index = _full_build_select_options(ASSISTANT_OPTIONS, third_current)
-                third_input = st.selectbox(
-                    "Third",
-                    options=third_options,
-                    index=third_index,
-                    key=f"full_popup_third_{row_key}",
-                )
-
-            flag_cols = st.columns(3, gap="small")
-            with flag_cols[0]:
-                case_paper_input = st.checkbox(
-                    "QTRAQ",
-                    key=f"full_popup_case_{row_key}",
-                )
-            with flag_cols[1]:
-                suction_input = st.checkbox(
-                    "Suction",
-                    key=f"full_popup_suction_{row_key}",
-                )
-            with flag_cols[2]:
-                cleaning_input = st.checkbox(
-                    "Cleaning",
-                    key=f"full_popup_cleaning_{row_key}",
-                )
-
-            form_actions = st.columns(2, gap="small")
-            with form_actions[0]:
-                save_clicked = st.form_submit_button("Save", use_container_width=True)
-            with form_actions[1]:
-                cancel_clicked = st.form_submit_button("Cancel", use_container_width=True)
-
-        if cancel_clicked:
-            _close_full_edit_dialog()
-            st.rerun()
-        if save_clicked:
-            in_norm, in_err = _time_from_picker_parts(in_hour, in_minute, in_ampm)
-            out_norm, out_err = _time_from_picker_parts(out_hour, out_minute, out_ampm)
-            if in_err or out_err:
-                if in_err:
-                    st.error(in_err)
-                if out_err:
-                    st.error(out_err)
-            else:
-                updates = {
-                    "Patient Name": str(patient_input or "").strip(),
-                    "In Time": in_norm,
-                    "Out Time": out_norm,
-                    "Procedure": str(procedure_input or "").strip(),
-                    "DR.": str(doctor_input or "").strip(),
-                    "Doctor": str(doctor_input or "").strip(),
-                    "OP": str(op_input or "").strip(),
-                    "FIRST": str(first_input or "").strip(),
-                    "SECOND": str(second_input or "").strip(),
-                    "Third": str(third_input or "").strip(),
-                    "THIRD": str(third_input or "").strip(),
-                    "CASE PAPER": "Yes" if case_paper_input else "",
-                    "SUCTION": bool(suction_input),
-                    "CLEANING": bool(cleaning_input),
-                    "STATUS": str(status_input or "").strip(),
-                    "Status": str(status_input or "").strip(),
-                }
-                if _apply_full_card_edit(row_id, lookup_patient, lookup_in_time, updates):
-                    _close_full_edit_dialog()
-                    st.rerun()
-
-    _dialog_decorator = getattr(st, "dialog", None) or getattr(st, "experimental_dialog", None)
-    if _dialog_decorator:
-        @_dialog_decorator("Edit appointment")
-        def _render_full_edit_dialog() -> None:
-            _render_full_edit_dialog_body()
-    else:
-        def _render_full_edit_dialog() -> None:
-            st.warning("Popup editing requires a newer Streamlit version.")
-            _render_full_edit_dialog_body()
-
-    def _fmt_time(val) -> str:
-        if isinstance(val, time_type):
-            return val.strftime("%I:%M %p").lstrip("0")
-        return _clean_text(val)
-
-    def _update_row_status(row_id, patient_name, in_time_val, new_status):
-        df_source = df_raw if "df_raw" in globals() else df
-        if df_source is None or df_source.empty:
-            st.warning("No schedule data to update.")
-            return
-        df_updated = df_source.copy()
-        idx = None
-        if row_id and "REMINDER_ROW_ID" in df_updated.columns:
-            matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
-            if matches.any():
-                idx = matches.idxmax()
-        if idx is None and "Patient Name" in df_updated.columns and patient_name:
-            name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
-            if in_time_val and "In Time" in df_updated.columns:
-                time_mask = df_updated["In Time"].astype(str) == str(in_time_val)
-                match = df_updated[name_mask & time_mask]
-            else:
-                match = df_updated[name_mask]
-            if not match.empty:
-                idx = match.index[0]
-        if idx is None:
-            st.warning("Unable to locate row for update.")
-            return
-
-        old_status_norm = ""
-        if "STATUS" in df_updated.columns:
-            old_status_norm = str(df_updated.at[idx, "STATUS"]).strip().upper()
-            df_updated.at[idx, "STATUS"] = new_status
-        if "Status" in df_updated.columns:
-            if not old_status_norm:
-                old_status_norm = str(df_updated.at[idx, "Status"]).strip().upper()
-            df_updated.at[idx, "Status"] = new_status
-
-        ts = _now_iso()
-        if "STATUS_CHANGED_AT" in df_updated.columns:
-            df_updated.at[idx, "STATUS_CHANGED_AT"] = ts
-        if ("ONGOING" in new_status or "ON GOING" in new_status) and "ACTUAL_START_AT" in df_updated.columns:
-            if not str(df_updated.at[idx, "ACTUAL_START_AT"]).strip():
-                df_updated.at[idx, "ACTUAL_START_AT"] = ts
-        if ("DONE" in new_status or "COMPLETED" in new_status) and "ACTUAL_END_AT" in df_updated.columns:
-            if not str(df_updated.at[idx, "ACTUAL_END_AT"]).strip():
-                df_updated.at[idx, "ACTUAL_END_AT"] = ts
-        if "STATUS_LOG" in df_updated.columns:
-            existing_log = str(df_updated.at[idx, "STATUS_LOG"])
-            try:
-                df_updated.at[idx, "STATUS_LOG"] = _append_status_log(
-                    existing_log,
-                    {"at": ts, "from": old_status_norm, "to": new_status},
-                )
-            except Exception:
-                df_updated.at[idx, "STATUS_LOG"] = existing_log
-
-        _maybe_save(df_updated, message=f"Status set to {new_status} for {patient_name}")
-        st.toast(f"{patient_name} marked {new_status}", icon="✅")
-        st.rerun()
-
-    def _update_row_case_paper(row_id, patient_name, in_time_val, case_checked: bool):
-        df_source = df_raw if "df_raw" in globals() else df
-        if df_source is None or df_source.empty:
-            st.warning("No schedule data to update.")
-            return
-        df_updated = df_source.copy()
-        idx = None
-        if row_id and "REMINDER_ROW_ID" in df_updated.columns:
-            matches = df_updated["REMINDER_ROW_ID"].astype(str) == str(row_id)
-            if matches.any():
-                idx = matches.idxmax()
-        if idx is None and "Patient Name" in df_updated.columns and patient_name:
-            name_mask = df_updated["Patient Name"].astype(str).str.upper() == str(patient_name).upper()
-            if in_time_val and "In Time" in df_updated.columns:
-                time_mask = df_updated["In Time"].astype(str) == str(in_time_val)
-                match = df_updated[name_mask & time_mask]
-            else:
-                match = df_updated[name_mask]
-            if not match.empty:
-                idx = match.index[0]
-        if idx is None:
-            st.warning("Unable to locate row for update.")
-            return
-        if "CASE PAPER" not in df_updated.columns:
-            st.warning("No QTRAQ column to update.")
-            return
-        df_updated.at[idx, "CASE PAPER"] = "Yes" if case_checked else ""
-
-        _maybe_save(df_updated, message=f"Case paper updated for {patient_name}")
-        st.toast(f"{patient_name} case paper updated")
-        st.rerun()
-
-    edited_all = None
-    if view_mode == "Table":
-        edited_all = st.data_editor(
-            display_all,
-            width="stretch",
-            key="full_schedule_editor",
-            hide_index=True,
-            disabled=["STATUS_CHANGED_AT", "ACTUAL_START_AT", "ACTUAL_END_AT", "Overtime (min)"],
-            column_config={
-                "_orig_idx": None,  # Hide the original index column
-                "REMINDER_ROW_ID": None,
-                "Patient Name": st.column_config.TextColumn(label="Patient Name"),
-                "In Time": st.column_config.TimeColumn(label="In Time", format="hh:mm A"),
-                "Out Time": st.column_config.TimeColumn(label="Out Time", format="hh:mm A"),
-                "Procedure": st.column_config.TextColumn(label="Procedure"),
-                "DR.": st.column_config.SelectboxColumn(
-                    label="DR.",
-                    options=DOCTOR_OPTIONS,
-                    required=False,
-                ),
-                "OP": st.column_config.SelectboxColumn(
-                    label="OP",
-                    options=["OP 1", "OP 2", "OP 3", "OP 4"],
-                    required=False,
-                ),
-                "FIRST": st.column_config.SelectboxColumn(
-                    label="FIRST",
-                    options=ASSISTANT_OPTIONS,
-                    required=False,
-                ),
-                "SECOND": st.column_config.SelectboxColumn(
-                    label="SECOND",
-                    options=ASSISTANT_OPTIONS,
-                    required=False,
-                ),
-                "Third": st.column_config.SelectboxColumn(
-                    label="Third",
-                    options=ASSISTANT_OPTIONS,
-                    required=False,
-                ),
-                "CASE PAPER": st.column_config.SelectboxColumn(
-                    label="QTRAQ",
-                    options=ASSISTANT_OPTIONS,
-                    required=False,
-                ),
-                "SUCTION": st.column_config.CheckboxColumn(label="SUCTION"),
-                "CLEANING": st.column_config.CheckboxColumn(label="CLEANING"),
-                "STATUS_CHANGED_AT": None,
-                "ACTUAL_START_AT": None,
-                "ACTUAL_END_AT": None,
-                "Overtime (min)": None,
-                "STATUS": st.column_config.SelectboxColumn(
-                    label="STATUS",
-                    options=STATUS_OPTIONS,
-                    required=False,
-                ),
-            },
-        )
-    else:
-        df_cards = display_all.copy()
-        if card_search:
-            query = card_search.lower().strip()
-            mask = pd.Series(False, index=df_cards.index)
-            for col in ["Patient Name", "Procedure", "DR.", "FIRST", "SECOND", "Third", "STATUS"]:
-                if col in df_cards.columns:
-                    mask = mask | df_cards[col].astype(str).str.lower().str.contains(query, na=False)
-            df_cards = df_cards[mask]
-
-        show_case = "CASE PAPER" in df_cards.columns
-        if df_cards.empty:
-            st.info("No patients found.")
-        else:
-            cards_per_row = 3
-            for start in range(0, len(df_cards), cards_per_row):
-                row_chunk = df_cards.iloc[start:start + cards_per_row]
-                cols = st.columns(len(row_chunk), gap="small")
-                for col, (row_index, row) in zip(cols, row_chunk.iterrows()):
-                    patient = _clean_text(row.get("Patient Name"))
-                    doctor = _clean_text(row.get("DR."))
-                    procedure = _clean_text(row.get("Procedure"))
-                    in_time = row.get("In Time")
-                    out_time = row.get("Out Time")
-                    status = _clean_text(row.get("STATUS") or row.get("Status") or "WAITING")
-                    row_id = _clean_text(row.get("REMINDER_ROW_ID"))
-                    staff = [
-                        _clean_text(row.get("FIRST")),
-                        _clean_text(row.get("SECOND")),
-                        _clean_text(row.get("Third")),
-                    ]
-                    staff = [name for name in staff if name]
-                    time_parts = [t for t in [_fmt_time(in_time), _fmt_time(out_time)] if t]
-                    time_text = " - ".join(time_parts)
-                    status_text = (status or "WAITING").strip().upper()
-                    if not status_text:
-                        status_text = "WAITING"
-                    status_class = _status_class(status_text)
-                    staff_html = " &bull; ".join(html.escape(name) for name in staff) if staff else "Unassigned"
-                    doctor_line = (
-                        f"<div class='info-row'><span class='info-icon'>👩‍⚕️</span><span class='info-text'>{html.escape(doctor)}</span></div>"
-                        if doctor
-                        else ""
-                    )
-                    staff_line = f"<div class='info-row'><span class='info-icon'>👥</span><span class='info-text'>{staff_html}</span></div>"
-                    row_key = row_id if row_id else f"full_{start}_{row_index}"
-
-                    with col:
-                        with st.container(border=True):
-                            st.markdown("<div class='card-shell-marker'></div>", unsafe_allow_html=True)
-                            st.markdown(
-                                _normalize_html(
-                                    f"""
-                                    <div class="card-status-banner {status_class}">
-                                        <span class="status-dot"></span>
-                                        <span class="status-text">{html.escape(status_text)}</span>
-                                    </div>
-                                    <div class="card-head">
-                                        <div class="card-avatar">{html.escape(_initials(patient))}</div>
-                                        <div class="card-title">
-                                            <div class="card-name">{html.escape(patient) if patient else "Unknown"}</div>
-                                            <div class="card-time">{html.escape(time_text) if time_text else "--"}</div>
-                                        </div>
-                                    </div>
-                                    <div class="card-subdivider"></div>
-                                    <div class="card-info">
-                                        {doctor_line}
-                                        {staff_line}
-                                    </div>
-                                    """
-                                ),
-                                unsafe_allow_html=True,
-                            )
-                            st.markdown("<div class='card-divider'></div>", unsafe_allow_html=True)
-                            if show_case:
-                                row_cols = st.columns([1, 1.15, 1.15, 1.15], gap="small")
-                                with row_cols[0]:
-                                    case_active = _truthy(row.get("CASE PAPER"))
-                                    case_checked = st.checkbox("QTRAQ", value=case_active, key=f"full_card_case_{row_key}_{start}")
-                                    if case_checked != case_active:
-                                        _update_row_case_paper(row_id, patient, in_time, case_checked)
-                                with row_cols[1]:
-                                    st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                    if st.button("✓ Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
-                                        _update_row_status(row_id, patient, in_time, "DONE")
-                                with row_cols[2]:
-                                    st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
-                                    st.button("✎ Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))},), use_container_width=True, type="secondary")
-                                with row_cols[3]:
-                                    st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                    if st.button("✕ Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
-                                        _update_row_status(row_id, patient, in_time, "CANCELLED")
-                            else:
-                                action_cols = st.columns([1.15, 1.15, 1.15], gap="small")
-                                with action_cols[0]:
-                                    st.markdown("<div class='card-action-marker card-action-done'></div>", unsafe_allow_html=True)
-                                    if st.button("✓ Done", key=f"full_card_done_{row_key}_{start}", use_container_width=True, type="primary"):
-                                        _update_row_status(row_id, patient, in_time, "DONE")
-                                with action_cols[1]:
-                                    st.markdown("<div class='card-action-marker card-action-edit'></div>", unsafe_allow_html=True)
-                                    st.button("✎ Edit", key=f"full_card_edit_{row_key}_{start}", on_click=_open_full_edit_dialog, args=({"row_key": row_key, "row_id": row_id, "lookup_patient": patient, "lookup_in_time": _fmt_time(in_time), "patient": patient, "in_time": _fmt_time(in_time), "out_time": _fmt_time(out_time), "doctor": doctor, "procedure": procedure, "status": status, "op": _clean_text(row.get("OP")), "staff_first": _clean_text(row.get("FIRST")), "staff_second": _clean_text(row.get("SECOND")), "staff_third": _clean_text(row.get("Third")), "case_paper": _truthy(row.get("CASE PAPER")), "suction": _truthy(row.get("SUCTION")), "cleaning": _truthy(row.get("CLEANING"))},), use_container_width=True, type="secondary")
-                                with action_cols[2]:
-                                    st.markdown("<div class='card-action-marker card-action-cancel'></div>", unsafe_allow_html=True)
-                                    if st.button("✕ Cancel", key=f"full_card_cancel_{row_key}_{start}", use_container_width=True, type="secondary"):
-                                        _update_row_status(row_id, patient, in_time, "CANCELLED")
-                            with st.expander("View Details", expanded=False):
-                                st.markdown(f"**Doctor:** {doctor or '--'}")
-                                st.markdown(f"**Procedure:** {procedure or '--'}")
-                                st.markdown(f"**Staff:** {', '.join(staff) if staff else 'Unassigned'}")
-                                st.markdown(f"**Status:** {status}")
-                                if show_case:
-                                    st.markdown(f"**QTRAQ:** {'Yes' if _truthy(row.get('CASE PAPER')) else 'No'}")
-            if st.session_state.get("full_edit_open"):
-                _render_full_edit_dialog()
-    # ================ Manual save
+        }
+    )
     
     # ================ Manual save: process edits only when user clicks save button ================
     if st.session_state.get("manual_save_triggered"):
@@ -8759,42 +5792,34 @@ if category == "Scheduling":
         pending_df = st.session_state.get("unsaved_df")
         if pending_df is not None:
             pending_msg = st.session_state.get("pending_changes_reason") or "Pending changes saved!"
-            if _maybe_save(pending_df, message=pending_msg, force=True):
+            if save_data(pending_df, message=pending_msg):
                 st.session_state.unsaved_df = None
                 st.session_state.pending_changes = False
                 st.session_state.pending_changes_reason = ""
             st.session_state.manual_save_triggered = False
+            st.rerun()
     
         if edited_all is not None:
-            editor_key = "full_schedule_editor"
-            changed_rows, has_additions = _get_editor_changed_rows(editor_key)
-            compare_cols = [
-                "Patient Name",
-                "In Time",
-                "Out Time",
-                "Procedure",
-                "DR.",
-                "FIRST",
-                "SECOND",
-                "Third",
-                "CASE PAPER",
-                "OP",
-                "SUCTION",
-                "CLEANING",
-                "STATUS",
-            ]
-            if has_additions:
-                changed_rows = list(edited_all.index)
-            else:
-                filtered_rows = []
-                for row_idx in changed_rows:
-                    if row_idx not in edited_all.index or row_idx not in display_all.index:
-                        continue
-                    if _row_has_changes(edited_all.loc[row_idx], display_all.loc[row_idx], compare_cols):
-                        filtered_rows.append(row_idx)
-                changed_rows = filtered_rows
-
-            if changed_rows:
+            # Compare non-time columns to detect changes (time columns need special handling due to object type)
+            has_changes = False
+            if not edited_all.equals(display_all):
+                # Check actual value differences (skip _orig_idx which is for internal tracking)
+                for col in edited_all.columns:
+                    if col not in ["In Time", "Out Time", "_orig_idx"]:
+                        if not (edited_all[col] == display_all[col]).all():
+                            has_changes = True
+                            break
+                # For time columns, compare the string representation
+                if not has_changes:
+                    for col in ["In Time", "Out Time"]:
+                        if col in edited_all.columns:
+                            edited_times = edited_all[col].astype(str)
+                            display_times = display_all[col].astype(str)
+                            if not (edited_times == display_times).all():
+                                has_changes = True
+                                break
+            
+            if has_changes:
                 try:
                     # Create a copy of the raw data to update
                     df_updated = df_raw.copy()
@@ -8803,8 +5828,7 @@ if category == "Scheduling":
                     allocation_candidates: set[int] = set()
                     
                     # Process edited data and convert back to original format
-                    for idx in changed_rows:
-                        row = edited_all.loc[idx]
+                    for idx, row in edited_all.iterrows():
                         # Use the preserved original index to map back to df_raw; append when new
                         orig_idx_raw = row.get("_orig_idx", idx)
                         if pd.isna(orig_idx_raw):
@@ -8943,12 +5967,12 @@ if category == "Scheduling":
                             _auto_fill_assistants_for_row(df_updated, ix, only_fill_empty=only_empty)
                     
                     # Write back to storage (manual save always persists)
-                    save_ok = _maybe_save(df_updated, message="Schedule updated!", force=True)
+                    save_data(df_updated, message="Schedule updated!")
                     st.session_state.manual_save_triggered = False
-                    if save_ok:
-                        st.session_state.unsaved_df = None
-                        st.session_state.pending_changes = False
-                        st.session_state.pending_changes_reason = ""
+                    st.session_state.unsaved_df = None
+                    st.session_state.pending_changes = False
+                    st.session_state.pending_changes_reason = ""
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Error saving: {e}")
                     st.session_state.manual_save_triggered = False
@@ -9051,7 +6075,7 @@ if category == "Scheduling":
                                 required=False
                             ),
                             "CASE PAPER": st.column_config.SelectboxColumn(
-                                label="QTRAQ",
+                                label="CASE PAPER",
                                 options=ASSISTANT_OPTIONS,
                                 required=False
                             ),
@@ -9069,41 +6093,27 @@ if category == "Scheduling":
         
                     # Persist edits from OP tabs
                     if edited_op is not None:
-                        editor_key = f"op_{str(op).replace(' ', '_')}_editor"
-                        changed_rows, has_additions = _get_editor_changed_rows(editor_key)
-                        compare_cols = [
-                            "Patient ID",
-                            "Patient Name",
-                            "In Time",
-                            "Out Time",
-                            "Procedure",
-                            "DR.",
-                            "OP",
-                            "FIRST",
-                            "SECOND",
-                            "Third",
-                            "CASE PAPER",
-                            "SUCTION",
-                            "CLEANING",
-                            "STATUS",
-                        ]
-                        if has_additions:
-                            changed_rows = list(edited_op.index)
-                        else:
-                            filtered_rows = []
-                            for row_idx in changed_rows:
-                                if row_idx not in edited_op.index or row_idx not in display_op.index:
-                                    continue
-                                if _row_has_changes(edited_op.loc[row_idx], display_op.loc[row_idx], compare_cols):
-                                    filtered_rows.append(row_idx)
-                            changed_rows = filtered_rows
-
-                        if changed_rows:
+                        op_has_changes = False
+                        if not edited_op.equals(display_op):
+                            for col in edited_op.columns:
+                                if col not in ["In Time", "Out Time", "_orig_idx"]:
+                                    if not (edited_op[col] == display_op[col]).all():
+                                        op_has_changes = True
+                                        break
+                            if not op_has_changes:
+                                for col in ["In Time", "Out Time"]:
+                                    if col in edited_op.columns:
+                                        edited_times = edited_op[col].astype(str)
+                                        display_times = display_op[col].astype(str)
+                                        if not (edited_times == display_times).all():
+                                            op_has_changes = True
+                                            break
+        
+                        if op_has_changes:
                             try:
                                 df_updated = df_raw.copy()
                                 allocation_candidates: set[int] = set()
-                                for idx in changed_rows:
-                                    row = edited_op.loc[idx]
+                                for _, row in edited_op.iterrows():
                                     orig_idx_raw = row.get("_orig_idx")
                                     if pd.isna(orig_idx_raw):
                                         orig_idx_raw = len(df_updated)
@@ -9251,17 +6261,8 @@ if category == "Assistants" and assist_view == "Availability":
     st.markdown("### 👥 Assistant Availability Dashboard")
     st.markdown("---")
     
-    availability_df = df if 'df' in locals() else df_raw if 'df_raw' in locals() else pd.DataFrame()
-    assistants_for_view = get_assistants_list(availability_df)
-    if not assistants_for_view:
-        assistants_for_view = _get_all_assistants()
-    punch_map = _get_today_punch_map()
     # Get current status of all assistants
-    assistant_status = get_current_assistant_status(
-        availability_df,
-        assistants=assistants_for_view,
-        punch_map=punch_map,
-    )
+    assistant_status = get_current_assistant_status(df)
     
     def _norm_status_value(value: Any) -> str:
         try:
@@ -9271,7 +6272,7 @@ if category == "Assistants" and assist_view == "Availability":
         return s if s else "UNKNOWN"
     
     assistant_entries: list[dict] = []
-    for assistant in assistants_for_view:
+    for assistant in ALL_ASSISTANTS:
         raw_name = assistant.strip().upper()
         info = dict(assistant_status.get(raw_name, {}))
         if not info:
@@ -9309,26 +6310,26 @@ if category == "Assistants" and assist_view == "Availability":
     
         st.markdown(f"""
         <div style='display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1.2rem;'>
-            <div style='background: var(--glass-bg, #f3f3f4); border: 1.5px solid var(--glass-border, #d9c5b2); border-radius: 1.2rem; padding: 1.2rem 2.2rem; box-shadow: 0 2px 8px rgba(20, 17, 15, 0.04); min-width: 220px;'>
-                <div style='font-size: 2.2rem; font-weight: 700; color: var(--text-primary, #14110f); margin-bottom: 0.2rem;'>Overview</div>
-                <div style='font-size: 1.1rem; color: var(--text-secondary, #7e7f83);'>Current Assistant Status</div>
+            <div style='background: var(--glass-bg, #f5f5f5); border: 1.5px solid var(--glass-border, #c9bbb0); border-radius: 1.2rem; padding: 1.2rem 2.2rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04); min-width: 220px;'>
+                <div style='font-size: 2.2rem; font-weight: 700; color: var(--text-primary, #111b26); margin-bottom: 0.2rem;'>Overview</div>
+                <div style='font-size: 1.1rem; color: var(--text-secondary, #99582f);'>Current Assistant Status</div>
             </div>
             <div style='display: flex; gap: 1.2rem;'>
-                <div style='background: rgba(52, 49, 45, 0.15); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #34312d;'>{free_count}</div>
-                    <div style='font-size: 1rem; color: #34312d;'>🟢 Free</div>
+                <div style='background: #10b98122; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #10b981;'>{free_count}</div>
+                    <div style='font-size: 1rem; color: #10b981;'>🟢 Free</div>
                 </div>
-                <div style='background: rgba(126, 127, 131, 0.18); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #7e7f83;'>{busy_count}</div>
-                    <div style='font-size: 1rem; color: #7e7f83;'>🔴 Busy</div>
+                <div style='background: #ef444422; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #ef4444;'>{busy_count}</div>
+                    <div style='font-size: 1rem; color: #ef4444;'>🔴 Busy</div>
                 </div>
-                <div style='background: rgba(20, 17, 15, 0.12); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #14110f;'>{blocked_count}</div>
-                    <div style='font-size: 1rem; color: #14110f;'>🚫 Blocked</div>
+                <div style='background: #f59e0b22; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #f59e0b;'>{blocked_count}</div>
+                    <div style='font-size: 1rem; color: #f59e0b;'>🚫 Blocked</div>
                 </div>
-                <div style='background: rgba(217, 197, 178, 0.35); border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
-                    <div style='font-size: 1.6rem; font-weight: 600; color: #34312d;'>{total_count}</div>
-                    <div style='font-size: 1rem; color: #34312d;'>Total</div>
+                <div style='background: #c9bbb022; border-radius: 0.8rem; padding: 0.8rem 1.4rem; text-align: center;'>
+                    <div style='font-size: 1.6rem; font-weight: 600; color: #99582f;'>{total_count}</div>
+                    <div style='font-size: 1rem; color: #99582f;'>Total</div>
                 </div>
             </div>
         </div>
@@ -9371,7 +6372,7 @@ if category == "Assistants" and assist_view == "Availability":
     with dept_tabs[1]:
         st.markdown("#### PROSTHO Department Assistants")
         prostho_entries: list[dict] = []
-        for assistant in get_assistants_for_department("PROSTHO"):
+        for assistant in DEPARTMENTS["PROSTHO"]["assistants"]:
             entry = assistant_lookup.get(assistant.upper())
             if entry is None:
                 fallback_info = {
@@ -9400,7 +6401,7 @@ if category == "Assistants" and assist_view == "Availability":
     with dept_tabs[2]:
         st.markdown("#### ENDO Department Assistants")
         endo_entries: list[dict] = []
-        for assistant in get_assistants_for_department("ENDO"):
+        for assistant in DEPARTMENTS["ENDO"]["assistants"]:
             entry = assistant_lookup.get(assistant.upper())
             if entry is None:
                 fallback_info = {
@@ -9435,7 +6436,7 @@ if category == "Assistants" and assist_view == "Auto Allocation":
         with col_doc:
             alloc_doctor = st.selectbox(
                 "Select Doctor",
-                options=[""] + _get_all_doctors(),
+                options=[""] + ALL_DOCTORS,
                 key="alloc_doctor_select"
             )
         
@@ -9450,15 +6451,7 @@ if category == "Assistants" and assist_view == "Auto Allocation":
             st.info(f"Department: **{dept}**")
             
             # Get available assistants
-            free_now_set, free_status_map = _get_dashboard_free_set(df, _get_all_assistants())
-            available = get_available_assistants(
-                dept,
-                alloc_in_time,
-                alloc_out_time,
-                df,
-                free_now_set=free_now_set,
-                free_status_map=free_status_map,
-            )
+            available = get_available_assistants(dept, alloc_in_time, alloc_out_time, df)
             
             st.markdown("**Assistant Availability:**")
             for a in available:
@@ -9490,7 +6483,7 @@ if category == "Assistants" and assist_view == "Workload":
     
     # Count appointments per assistant
     assistant_workload = {}
-    for assistant in _get_all_assistants():
+    for assistant in ALL_ASSISTANTS:
         schedule = get_assistant_schedule(assistant.upper(), df)
         assistant_workload[assistant] = len(schedule)
     
@@ -9511,109 +6504,6 @@ if category == "Assistants" and assist_view == "Attendance":
     # ================ ASSISTANTS ATTENDANCE (EXPERIMENTAL) ================
     if USE_SUPABASE:
         st.info("Attendance editor (sheet-based) is disabled in Supabase mode. Use the sidebar Punch widget instead.")
-        if supabase_client is None:
-            st.warning("Supabase is not configured. Configure Supabase to view attendance reports.")
-        else:
-            with st.expander("Monthly Attendance Report", expanded=True):
-                month_base = datetime.now(IST).date().replace(day=1)
-                month_options = []
-                for i in range(0, 12):
-                    idx = (month_base.year * 12 + (month_base.month - 1)) - i
-                    year = idx // 12
-                    month = idx % 12 + 1
-                    month_options.append(datetime(year, month, 1).date())
-
-                selected_month = st.selectbox(
-                    "Report month",
-                    options=month_options,
-                    index=0,
-                    format_func=lambda d: d.strftime("%Y-%m"),
-                    key="attendance_report_month",
-                )
-                next_idx = (selected_month.year * 12 + (selected_month.month - 1)) + 1
-                next_year = next_idx // 12
-                next_month = next_idx % 12 + 1
-                start_date = selected_month.isoformat()
-                end_date = (datetime(next_year, next_month, 1).date() - timedelta(days=1)).isoformat()
-                st.caption(f"Range: {start_date} to {end_date}")
-
-                records = _load_attendance_range_supabase(supabase_client, start_date, end_date)
-                if not records:
-                    st.info("No attendance records for selected month.")
-                else:
-                    df_att = pd.DataFrame(records)
-                    for col in ["date", "assistant", "punch_in", "punch_out"]:
-                        if col not in df_att.columns:
-                            df_att[col] = ""
-                    df_att["date"] = df_att["date"].astype(str)
-                    df_att["assistant"] = df_att["assistant"].astype(str).str.strip().str.upper()
-                    df_att["punch_in"] = df_att["punch_in"].astype(str).str.strip()
-                    df_att["punch_out"] = df_att["punch_out"].astype(str).str.strip()
-                    df_att["STATUS"] = df_att.apply(
-                        lambda row: _attendance_status(row["punch_in"], row["punch_out"]),
-                        axis=1,
-                    )
-                    df_att["WORKED MINS"] = df_att.apply(
-                        lambda row: _calc_worked_minutes(row["punch_in"], row["punch_out"]),
-                        axis=1,
-                    )
-                    df_att["WORKED HH:MM"] = df_att["WORKED MINS"].apply(mins_to_hhmm)
-
-                    assistant_options = ["All"] + sorted(
-                        [a for a in df_att["assistant"].unique().tolist() if a]
-                    )
-                    selected_assistant = st.selectbox(
-                        "Assistant filter",
-                        options=assistant_options,
-                        index=0,
-                        key="attendance_report_assistant",
-                    )
-                    if selected_assistant != "All":
-                        df_att = df_att[df_att["assistant"] == selected_assistant]
-
-                    if df_att.empty:
-                        st.info("No attendance records for this assistant in the selected month.")
-                    else:
-                        df_summary = df_att.copy()
-                        df_summary["WORKED MINS FILLED"] = df_summary["WORKED MINS"].fillna(0).astype(int)
-                        summary = (
-                            df_summary.groupby("assistant", dropna=False)
-                            .agg(
-                                Days=("date", "nunique"),
-                                Completed=("STATUS", lambda s: (s == "COMPLETE").sum()),
-                                In_Progress=("STATUS", lambda s: (s == "IN PROGRESS").sum()),
-                                Worked_Minutes=("WORKED MINS FILLED", "sum"),
-                            )
-                            .reset_index()
-                        )
-                        summary["Worked HH:MM"] = summary["Worked_Minutes"].apply(mins_to_hhmm)
-                        summary_display = summary.rename(columns={"assistant": "ASSISTANT"})
-                        summary_display = summary_display.sort_values("ASSISTANT")
-
-                        st.markdown("**Summary**")
-                        st.dataframe(summary_display, use_container_width=True, hide_index=True)
-
-                        details = df_att[
-                            ["date", "assistant", "punch_in", "punch_out", "STATUS", "WORKED MINS", "WORKED HH:MM"]
-                        ].copy()
-                        details = details.rename(
-                            columns={
-                                "date": "DATE",
-                                "assistant": "ASSISTANT",
-                                "punch_in": "PUNCH IN",
-                                "punch_out": "PUNCH OUT",
-                            }
-                        )
-                        details = details.sort_values(["DATE", "ASSISTANT"])
-                        st.markdown("**Details**")
-                        st.dataframe(details, use_container_width=True, hide_index=True)
-                        csv = details.to_csv(index=False)
-                        st.download_button(
-                            "Download CSV",
-                            data=csv,
-                            file_name=f"attendance_{selected_month.strftime('%Y_%m')}.csv",
-                            mime="text/csv",
-                        )
     else:
         with st.expander("🕒 Assistants Attendance", expanded=False):
             try:
@@ -9636,5 +6526,3 @@ if category == "Admin/Settings":
         st.write(f"Using Supabase: {USE_SUPABASE}")
         st.write(f"Using Google Sheets: {USE_GOOGLE_SHEETS}")
         st.write(f"Excel path: {file_path}")
-
-
